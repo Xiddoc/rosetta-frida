@@ -1,0 +1,23 @@
+# Node deps
+node_modules/
+
+# TypeScript build output (if/when we add TS)
+dist/
+build/
+*.tsbuildinfo
+
+# Frida-compile output that we don't want to track during early dev
+# (revisit once we have a stable bundle convention)
+*.bundle.js
+
+# Editor + OS
+.claude/
+.workspace
+.DS_Store
+.idea/
+.vscode/
+
+# Python (if we end up with helper scripts)
+__pycache__/
+*.py[cod]
+.venv/
