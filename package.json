@@ -41,6 +41,7 @@
         "cli": "tsx cli/index.ts"
     },
     "dependencies": {
+        "yaml": "^2.9.0",
         "zod": "^3.23.0"
     },
     "devDependencies": {
