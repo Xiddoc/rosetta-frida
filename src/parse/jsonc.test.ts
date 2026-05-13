@@ -176,6 +176,33 @@ describe('parseJsonc — errors', () => {
         expect(() => parseJsonc('{"a": notvalid}')).toThrow(JsoncParseError);
     });
 
+    it('computes line/column from a "position N" hint past a newline (Node-version-stable)', () => {
+        // Real-Node `JSON.parse` error messages changed format between
+        // major versions — Node 18 emits `position N`, Node 22+ uses a
+        // different shape. To keep the newline branch in
+        // `positionToLineCol` covered regardless of Node version, force
+        // a deterministic "position N" via a monkey-patched JSON.parse.
+        const realParse = JSON.parse.bind(JSON);
+        const spy = (text: string) => {
+            void text;
+            // Source `'a\nbcde'` has a newline at index 1. Position 5
+            // lands on the last char, past the newline — exercises
+            // both the newline branch (line +=1; column = 1) AND the
+            // post-newline column increments in `positionToLineCol`.
+            throw new SyntaxError('Unexpected token x at position 5');
+        };
+        (JSON as { parse: typeof JSON.parse }).parse = spy as typeof JSON.parse;
+        try {
+            const err = expectThrows(() => parseJsonc('a\nbcde'));
+            expect(err).toBeInstanceOf(JsoncParseError);
+            const je = err as JsoncParseError;
+            expect(je.line).toBe(2);
+            expect(je.column).toBe(4);
+        } finally {
+            (JSON as { parse: typeof JSON.parse }).parse = realParse;
+        }
+    });
+
     it('reports approximate line/column for malformed JSON', () => {
         try {
             parseJsonc('{\n  "a": ?\n}');
