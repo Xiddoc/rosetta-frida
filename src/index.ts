@@ -53,7 +53,12 @@ export {
 } from './session/index.js';
 
 // Proxy layer (Wave 2E)
-export { makeClassProxy, makeMethodHandle, makeFieldAccessor, makeInstanceProxy } from './proxy/index.js';
+export {
+    makeClassProxy,
+    makeMethodHandle,
+    makeFieldAccessor,
+    makeInstanceProxy,
+} from './proxy/index.js';
 
 // User-facing API: tier 1 / tier 2 / tier 3 (Wave 2 E/F/G)
 export {
@@ -66,6 +71,10 @@ export {
     createMapApi,
     createEventsApi,
 } from './api/index.js';
+
+// The canonical user-facing namespace — composes tier 1 / 2 / 3 with
+// an ambient session set via `rosetta.session(...)`.
+export { rosetta } from './api/rosetta.js';
 export type {
     UseOptions,
     TypeOptions,
