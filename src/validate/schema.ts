@@ -48,7 +48,7 @@ export const classKindSchema: z.ZodType<ClassKind> = z.union([
 ]);
 
 export const mapSourceSchema: z.ZodType<MapSource> = z.object({
-    tool: z.string(),
+    tool: z.string().min(1),
     config: z.string().optional(),
     classes: z.number().int().optional(),
     notes: z.string().optional(),
@@ -56,8 +56,8 @@ export const mapSourceSchema: z.ZodType<MapSource> = z.object({
 });
 
 export const methodEntrySchema: z.ZodType<MethodEntry> = z.object({
-    obfuscated: z.string(),
-    signature: z.string(),
+    obfuscated: z.string().min(1),
+    signature: z.string().min(1),
     aidl_txn: z.number().int().optional(),
     static: z.boolean().optional(),
     synthetic: z.boolean().optional(),
@@ -65,18 +65,20 @@ export const methodEntrySchema: z.ZodType<MethodEntry> = z.object({
 });
 
 export const fieldEntrySchema: z.ZodType<FieldEntry> = z.object({
-    obfuscated: z.string(),
-    type: z.string(),
+    obfuscated: z.string().min(1),
+    type: z.string().min(1),
     static: z.boolean().optional(),
 });
 
 /**
  * A method-map value is either a single MethodEntry or an array of them
- * (the multi-overload form). Both forms are accepted on input.
+ * (the multi-overload form). Both forms are accepted on input. The
+ * array form requires at least one overload — an empty overload list
+ * is semantically meaningless.
  */
 export const methodMapValueSchema: z.ZodType<MethodEntry | MethodEntry[]> = z.union([
     methodEntrySchema,
-    z.array(methodEntrySchema),
+    z.array(methodEntrySchema).min(1),
 ]);
 
 export const methodMapSchema = z.record(z.string(), methodMapValueSchema);
@@ -84,7 +86,7 @@ export const methodMapSchema = z.record(z.string(), methodMapValueSchema);
 export const fieldMapSchema = z.record(z.string(), fieldEntrySchema);
 
 export const classEntrySchema: z.ZodType<ClassEntry> = z.object({
-    obfuscated: z.string(),
+    obfuscated: z.string().min(1),
     extends: z.string().optional(),
     kind: classKindSchema.optional(),
     dex: z.string().optional(),
@@ -104,8 +106,8 @@ export const classMapSchema = z.record(z.string(), classEntrySchema);
 
 export const rosettaMapSchema: z.ZodType<RosettaMap> = z.object({
     schema_version: z.literal(1),
-    app: z.string(),
-    version: z.string(),
+    app: z.string().min(1),
+    version: z.string().min(1),
     captured_at: z.string().optional(),
     apk_sha256: z.string().optional(),
     frida_min_version: z.string().optional(),
