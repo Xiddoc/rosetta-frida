@@ -175,18 +175,36 @@ describe('runPatch', () => {
         expect(captured.stderr[0]).toMatch(/cannot read map/);
     });
 
-    it('exits 1 when map JSON is malformed', async () => {
+    it('exits 1 when map source is malformed JSONC', async () => {
         const fs = makeFakeFs({
             'b.js': emitMarkerBlock(map()),
-            'bad.json': '{ this is not JSON',
+            'bad.jsonc': '{ this is not JSON',
         });
         const captured = makeCaptured();
-        const code = await runPatch(['b.js', '--map', 'bad.json'], makeIo(fs, captured));
+        const code = await runPatch(['b.js', '--map', 'bad.jsonc'], makeIo(fs, captured));
         expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/map JSON is malformed/);
+        expect(captured.stderr[0]).toMatch(/map is malformed/);
     });
 
-    it('exits 1 when map JSON is not an object', async () => {
+    it('accepts a JSONC map (comments tolerated)', async () => {
+        const fs = makeFakeFs({
+            'b.js': emitMarkerBlock(map()),
+            'm.jsonc':
+                '// canonical map with comments\n' +
+                '{\n' +
+                '    /* schema header */\n' +
+                '    "schema_version": 1,\n' +
+                '    "app": "com.example.app",\n' +
+                '    "version": "3.5.0",\n' +
+                '    "classes": {}\n' +
+                '}\n',
+        });
+        const captured = makeCaptured();
+        const code = await runPatch(['b.js', '--map', 'm.jsonc'], makeIo(fs, captured));
+        expect(code).toBe(0);
+    });
+
+    it('exits 1 when map is not an object', async () => {
         const fs = makeFakeFs({
             'b.js': emitMarkerBlock(map()),
             'arr.json': '[1, 2, 3]',
@@ -199,7 +217,7 @@ describe('runPatch', () => {
         expect(captured.stderr[0]).toMatch(/neither a RosettaMap.*nor a registry/);
     });
 
-    it('exits 1 when map JSON is a primitive at top level', async () => {
+    it('exits 1 when map is a primitive at top level', async () => {
         const fs = makeFakeFs({
             'b.js': emitMarkerBlock(map()),
             'num.json': '42',
@@ -210,7 +228,7 @@ describe('runPatch', () => {
         expect(captured.stderr[0]).toMatch(/must be an object at top level/);
     });
 
-    it('exits 1 when map JSON is null at top level', async () => {
+    it('exits 1 when map is null at top level', async () => {
         const fs = makeFakeFs({
             'b.js': emitMarkerBlock(map()),
             'null.json': 'null',

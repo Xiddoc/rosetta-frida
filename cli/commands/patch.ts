@@ -1,23 +1,25 @@
 /**
- * `rosetta patch <bundle.js> --map <new.json>` — replace the embedded
+ * `rosetta patch <bundle.js> --map <new.jsonc>` — replace the embedded
  * map in a compiled bundle with a freshly emitted block sourced from
- * `<new.json>`.
+ * `<new.jsonc>`.
  *
  * Optional `-o <out.js>` redirects the output to a new path. The
  * default is in-place: the bundle is read, patched, and written back
  * to its original path. (For CI / scripting users who want
  * "compile once, swap maps per environment" workflows.)
  *
- * The new map is parsed as JSON (not JSONC) for V1. Once Agent A's
- * `loadMap` lands, this command should delegate to it so JSONC source
- * with comments and schema validation is also honored. The TODO below
- * marks that integration point.
+ * The new map is parsed via `parseJsonc` so both JSONC (with comments)
+ * and strict JSON are accepted. Top-level shape is detected
+ * heuristically: presence of a numeric `schema_version` means a single
+ * `RosettaMap`; otherwise the value is treated as a `RosettaMapRegistry`
+ * keyed by version.
  *
  * If the bundle has no existing marker block, `patchMarkerBlock` (in
  * src/marker/patch.ts) throws a `MarkerBlockError` which surfaces as
  * an exit-code-1 stderr line here.
  */
 
+import { parseJsonc } from '../../src/parse/jsonc.js';
 import { patchMarkerBlock } from '../../src/marker/patch.js';
 import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import type { CommandIo } from './io.js';
@@ -27,7 +29,7 @@ import { errorMessage } from './io.js';
 export interface PatchArgs {
     /** Compiled bundle to patch. */
     bundle: string;
-    /** Path to the new map (JSON; JSONC support TBD via Agent A's loadMap). */
+    /** Path to the new map (JSON or JSONC; comments stripped on load). */
     map: string;
     /** Output path; defaults to the input bundle (in-place patch). */
     output: string;
@@ -78,25 +80,26 @@ export function parsePatchArgs(argv: readonly string[]): PatchArgs {
 }
 
 /**
- * Minimal V1 map loader: parses the file as JSON and asserts the
- * top-level shape is either a `RosettaMap` (single) or a registry
- * (record-of-strings whose values are maps).
+ * Parse a map file as JSONC (comments + trailing commas tolerated) and
+ * assert the top-level shape is either a `RosettaMap` (single) or a
+ * registry (record-of-strings whose values are maps).
  *
- * TODO(integration with Agent A): once `loadMap` lands in
- *   src/parse/, replace this with that import. The wider validation
- *   surface (schema check, JSONC comments, helpful error positions)
- *   lives there; this fallback exists only so wave-1C ships
- *   independent of wave-1A's merge.
+ * The full schema validator from `src/validate/` is intentionally NOT
+ * called here — `rosetta patch` just rewrites a map slot in a bundle,
+ * so a strict schema check is the user's responsibility upstream (e.g.
+ * via `rosetta validate <map>` before patching). This loader only
+ * enforces enough structure to pick the correct downstream emitter
+ * (single-map vs registry).
  */
-function loadMapFromJsonFallback(jsonText: string): RosettaMap | RosettaMapRegistry {
+function loadMapForPatch(jsoncText: string): RosettaMap | RosettaMapRegistry {
     let value: unknown;
     try {
-        value = JSON.parse(jsonText);
+        value = parseJsonc(jsoncText);
     } catch (err) {
-        throw new Error(`map JSON is malformed: ${errorMessage(err)}`);
+        throw new Error(`map is malformed: ${errorMessage(err)}`);
     }
     if (typeof value !== 'object' || value === null) {
-        throw new Error('map JSON must be an object at top level');
+        throw new Error('map must be an object at top level');
     }
     const obj = value as Record<string, unknown>;
     // Single-map heuristic: presence of a numeric `schema_version` at
@@ -112,7 +115,7 @@ function loadMapFromJsonFallback(jsonText: string): RosettaMap | RosettaMapRegis
             typeof (v as { schema_version?: unknown }).schema_version !== 'number'
         ) {
             throw new Error(
-                'map JSON is neither a RosettaMap (missing schema_version) ' +
+                'map is neither a RosettaMap (missing schema_version) ' +
                     'nor a registry (some value lacks schema_version)',
             );
         }
@@ -150,7 +153,7 @@ export async function runPatch(argv: readonly string[], io: CommandIo): Promise<
 
     let payload: RosettaMap | RosettaMapRegistry;
     try {
-        payload = loadMapFromJsonFallback(mapText);
+        payload = loadMapForPatch(mapText);
     } catch (err) {
         io.stderr(`patch: ${errorMessage(err)}`);
         return 1;
