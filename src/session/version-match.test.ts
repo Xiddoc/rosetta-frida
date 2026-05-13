@@ -1,0 +1,218 @@
+/**
+ * Tests for the registry pick + version-matching helpers.
+ */
+
+import { describe, it, expect } from 'vitest';
+import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
+import { isRegistry, pickMapForVersion } from './version-match.js';
+
+function buildMap(version: string, app = 'com.example.app'): RosettaMap {
+    return {
+        schema_version: 1,
+        app,
+        version,
+        classes: {},
+    };
+}
+
+describe('isRegistry', () => {
+    it('returns false for a single RosettaMap', () => {
+        expect(isRegistry(buildMap('1.0.0'))).toBe(false);
+    });
+
+    it('returns true for a registry record', () => {
+        const reg: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.1.0': buildMap('1.1.0'),
+        };
+        expect(isRegistry(reg)).toBe(true);
+    });
+
+    it('returns true for an empty registry (no schema_version present)', () => {
+        // An empty object has no `schema_version` so it's treated as a
+        // (degenerate) registry; the pick logic surfaces the emptiness.
+        expect(isRegistry({})).toBe(true);
+    });
+});
+
+describe('pickMapForVersion — single-map input', () => {
+    it('returns the single map unchanged regardless of version', () => {
+        const map = buildMap('1.2.3');
+        const picked = pickMapForVersion(map, { version: 'whatever' });
+        expect(picked.map).toBe(map);
+        expect(picked.fromRegistry).toBe(false);
+        expect(picked.fuzzy).toBe(false);
+        expect(picked.registryKey).toBeUndefined();
+    });
+});
+
+describe('pickMapForVersion — registry exact', () => {
+    const registry: RosettaMapRegistry = {
+        '1.0.0': buildMap('1.0.0'),
+        '1.1.0': buildMap('1.1.0'),
+        '2.0.0': buildMap('2.0.0'),
+    };
+
+    it('picks the exact match when present', () => {
+        const picked = pickMapForVersion(registry, { version: '1.1.0' });
+        expect(picked.map.version).toBe('1.1.0');
+        expect(picked.fromRegistry).toBe(true);
+        expect(picked.fuzzy).toBe(false);
+        expect(picked.registryKey).toBe('1.1.0');
+    });
+
+    it('throws if there is no exact match in default (exact) mode', () => {
+        expect(() => pickMapForVersion(registry, { version: '3.0.0' })).toThrow(
+            /no map for version '3\.0\.0'/,
+        );
+    });
+
+    it('throws if there is no exact match in explicit exact mode', () => {
+        expect(() =>
+            pickMapForVersion(registry, { version: '3.0.0', versionMatch: 'exact' }),
+        ).toThrow(/versionMatch: 'fuzzy'/);
+    });
+
+    it('throws on an empty registry', () => {
+        expect(() => pickMapForVersion({}, { version: '1.0.0' })).toThrow(/registry is empty/);
+    });
+});
+
+describe('pickMapForVersion — fuzzy', () => {
+    it('picks the closest version when no exact match exists', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.1.0': buildMap('1.1.0'),
+            '2.0.0': buildMap('2.0.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.1.1',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.fuzzy).toBe(true);
+        expect(picked.registryKey).toBe('1.1.0');
+    });
+
+    it('picks the lower version on a tie (deterministic tie-break)', () => {
+        // 1.0.0 is equidistant from 0.0.0 and 2.0.0 in the weighted distance
+        // metric (10000 either way) — the lower key wins.
+        const registry: RosettaMapRegistry = {
+            '0.0.0': buildMap('0.0.0'),
+            '2.0.0': buildMap('2.0.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.0.0',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('0.0.0');
+    });
+
+    it('tie-break compares minor components when major is equal', () => {
+        // 1.5.0 equidistant from 1.0.0 (500) and 1.10.0 (500) → picks 1.0.0.
+        const registry: RosettaMapRegistry = {
+            '1.10.0': buildMap('1.10.0'),
+            '1.0.0': buildMap('1.0.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.5.0',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('1.0.0');
+    });
+
+    it('tie-break compares patch components when major+minor are equal', () => {
+        // 1.0.5 equidistant from 1.0.0 (5) and 1.0.10 (5) → picks 1.0.0.
+        const registry: RosettaMapRegistry = {
+            '1.0.10': buildMap('1.0.10'),
+            '1.0.0': buildMap('1.0.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.0.5',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('1.0.0');
+    });
+
+    it('tie-break falls back to string compare when tuples are equal', () => {
+        // Both '1.0.0' and '1.0.0-rc1' parse to [1, 0, 0]; they have
+        // identical distance to any target. The string-compare fallback
+        // picks the lexicographically-smaller key ('1.0.0' before
+        // '1.0.0-rc1') so the result stays deterministic.
+        const registry: RosettaMapRegistry = {
+            '1.0.0-rc1': buildMap('1.0.0-rc1'),
+            '1.0.0': buildMap('1.0.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '2.0.0',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('1.0.0');
+    });
+
+    it('the string fallback also breaks ties in the reverse direction', () => {
+        // Mirror the above with keys swapped so we exercise the `a > b`
+        // branch of the string fallback. Insertion order is irrelevant
+        // (Object.keys order is preserved but the comparison is
+        // commutative for `pickMapForVersion`).
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.0.0-rc1': buildMap('1.0.0-rc1'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '2.0.0',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('1.0.0');
+    });
+
+    it('still prefers exact match in fuzzy mode when one is available', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.5.0': buildMap('1.5.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.5.0',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.fuzzy).toBe(false);
+        expect(picked.registryKey).toBe('1.5.0');
+    });
+
+    it('handles single-component versions', () => {
+        const registry: RosettaMapRegistry = {
+            '1': buildMap('1'),
+            '2': buildMap('2'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '3',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('2');
+    });
+
+    it('strips pre-release / build suffixes for comparison', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '2.0.0': buildMap('2.0.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.0.5-rc1+build9',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('1.0.0');
+    });
+
+    it('treats non-numeric components as 0', () => {
+        // 'foo.bar.baz' parses to [0, 0, 0] so the closest entry is whichever
+        // key parses closest to [0, 0, 0]: 1.0.0 (distance 10000) beats 2.0.0.
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '2.0.0': buildMap('2.0.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: 'foo.bar.baz',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('1.0.0');
+    });
+});
