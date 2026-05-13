@@ -240,7 +240,7 @@ describe('runValidate', () => {
             import.meta.dirname,
             '..',
             '..',
-            'maps/com.example.app/3.4.5.json',
+            'maps/com.example.app/3.4.5.jsonc',
         );
         const result = await runValidate([sample]);
         expect(result.ok).toBe(true);

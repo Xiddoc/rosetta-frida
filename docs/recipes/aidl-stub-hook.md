@@ -11,7 +11,7 @@ This recipe walks through the canonical example from
 
 ## The target
 
-In the sample map at `maps/com.example.app/3.4.5.json`:
+In the sample map at `maps/com.example.app/3.4.5.jsonc`:
 
 ```jsonc
 "com.example.app.IRemoteService$Stub": {

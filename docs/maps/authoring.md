@@ -28,7 +28,7 @@ do **not** try to enumerate the whole app's surface up front.
 npx rosetta init com.example.app 3.4.5
 ```
 
-This writes `maps/com.example.app/3.4.5.json` — a JSONC skeleton
+This writes `maps/com.example.app/3.4.5.jsonc` — a JSONC skeleton
 with header comments documenting each field, all top-level metadata
 filled in, an empty `classes: {}`, and a single commented-out example
 entry to copy-paste from.
@@ -146,19 +146,19 @@ the AIDL-descriptor check alone.
 ## 4. Validate
 
 ```sh
-npx rosetta validate maps/com.example.app/3.4.5.json
+npx rosetta validate maps/com.example.app/3.4.5.jsonc
 ```
 
 Success:
 
 ```text
-OK: maps/com.example.app/3.4.5.json — com.example.app@3.4.5, 15 class(es), schema_version=1
+OK: maps/com.example.app/3.4.5.jsonc — com.example.app@3.4.5, 15 class(es), schema_version=1
 ```
 
 Failure surfaces specific issues:
 
 ```text
-FAIL: maps/com.example.app/3.4.5.json — invalid map
+FAIL: maps/com.example.app/3.4.5.jsonc — invalid map
   at classes.com.example.app.Foo.obfuscated: required
   at classes.com.example.app.Bar.methods.baz.signature: must match /\(.*\)[^()]+/
 ```
@@ -235,7 +235,7 @@ and two synthetic Companions) were hand-authored.
 When the next release ships:
 
 1. Copy the previous version's map to a new file:
-   `cp maps/com.example.app/3.4.5.json maps/com.example.app/3.5.0.json`
+   `cp maps/com.example.app/3.4.5.jsonc maps/com.example.app/3.5.0.json`
 2. Update the top-level `version` field.
 3. Re-run sigmatcher to refresh class anchors.
 4. For classes sigmatcher couldn't find, jadx them by hand using the
@@ -252,10 +252,10 @@ column of the table.
 If JSONC isn't your preferred authoring environment:
 
 - **YAML** — write `maps/com.example.app/3.4.5.yaml`, then
-  `rosetta convert maps/com.example.app/3.4.5.yaml -o maps/com.example.app/3.4.5.json`.
+  `rosetta convert maps/com.example.app/3.4.5.yaml -o maps/com.example.app/3.4.5.jsonc`.
 - **TypeScript module** — write `maps/com.example.app/3.4.5.ts`
   with a default export of type `RosettaMap`, then
-  `rosetta convert maps/com.example.app/3.4.5.ts -o maps/com.example.app/3.4.5.json`.
+  `rosetta convert maps/com.example.app/3.4.5.ts -o maps/com.example.app/3.4.5.jsonc`.
 
 JSONC is the canonical on-disk format; YAML and TS are authoring
 conveniences. See [Conversion](conversion.md) for the full converter

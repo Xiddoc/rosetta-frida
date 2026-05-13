@@ -86,7 +86,7 @@ Convert to canonical JSONC:
 
 ```sh
 npx rosetta convert maps/com.example.app/3.4.5.yaml \
-    -o maps/com.example.app/3.4.5.json
+    -o maps/com.example.app/3.4.5.jsonc
 ```
 
 Programmatically:
@@ -152,7 +152,7 @@ Convert:
 
 ```sh
 npx rosetta convert maps/com.example.app/3.4.5.ts \
-    -o maps/com.example.app/3.4.5.json
+    -o maps/com.example.app/3.4.5.jsonc
 ```
 
 Programmatically:

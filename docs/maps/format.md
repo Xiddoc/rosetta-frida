@@ -6,7 +6,7 @@ the field-by-field reference. For the authoring workflow, see
 [Authoring](authoring.md); for the on-bundle embedding, see
 [Marker block](marker-block.md).
 
-The canonical example lives at `maps/com.example.app/3.4.5.json`
+The canonical example lives at `maps/com.example.app/3.4.5.jsonc`
 in the repo. It exercises every feature documented here at least
 once — 15 classes covering AIDL stubs, callback proxies, value
 objects, an enum, a synthetic Companion, an anonymous inner class.
@@ -317,7 +317,7 @@ for the full workflow.
 ```typescript
 import { loadMap } from 'rosetta-frida';
 
-const map = await loadMap('./maps/com.example.app/3.4.5.json');
+const map = await loadMap('./maps/com.example.app/3.4.5.jsonc');
 ```
 
 `loadMap` accepts:
@@ -342,7 +342,7 @@ Every map flows through a Zod schema. Authoring tools (the CLI,
 so format errors surface uniformly:
 
 ```text
-FAIL: maps/com.example.app/3.4.5.json — invalid map
+FAIL: maps/com.example.app/3.4.5.jsonc — invalid map
   at classes.com.example.app.IRemoteService$Stub.obfuscated: required
   at classes.com.example.app.Foo.methods.bar.signature: must match /\(.*\)[^()]+/
 ```

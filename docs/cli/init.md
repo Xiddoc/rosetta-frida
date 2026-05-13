@@ -42,7 +42,7 @@ A JSONC skeleton with:
 //   sources:        array   — provenance (which tool produced which entries).
 //   classes:        object  — keyed by real fully-qualified class name.
 //
-// See maps/com.example.app/3.4.5.json for a fully-worked example
+// See maps/com.example.app/3.4.5.jsonc for a fully-worked example
 // demonstrating every supported field.
 {
     "schema_version": 1,
@@ -76,7 +76,7 @@ A JSONC skeleton with:
 
 ```sh
 $ npx rosetta init com.example.app 3.4.5
-wrote maps/com.example.app/3.4.5.json
+wrote maps/com.example.app/3.4.5.jsonc
 ```
 
 ### Custom path
@@ -90,12 +90,12 @@ wrote vendor/maps/example.json
 
 ```sh
 $ npx rosetta init com.example.app 3.4.5
-error: refusing to overwrite existing file: maps/com.example.app/3.4.5.json (pass --force to overwrite)
+error: refusing to overwrite existing file: maps/com.example.app/3.4.5.jsonc (pass --force to overwrite)
 ```
 
 ```sh
 $ npx rosetta init com.example.app 3.4.5 --force
-wrote maps/com.example.app/3.4.5.json
+wrote maps/com.example.app/3.4.5.jsonc
 ```
 
 ## Behavior notes

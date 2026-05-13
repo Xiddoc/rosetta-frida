@@ -3,19 +3,21 @@
  *
  * This is the canonical "what does a real hook look like" example.
  * It targets the synthetic app `com.example.app` whose map ships at
- * `maps/com.example.app/3.4.5.json` (15 classes covering AIDL stubs,
+ * `maps/com.example.app/3.4.5.jsonc` (15 classes covering AIDL stubs,
  * callback proxies, value objects, etc.).
  *
  * The same source compiles unchanged for any app version that has a
  * matching map — that's the whole point of rosetta-frida.
  *
- * Build:
+ * Build (V1.0):
  *
+ *   # JSONC isn't natively importable by bundlers, so convert to JSON
+ *   # first. V1.5 ships a frida-compile plugin that handles .jsonc directly.
+ *   npx rosetta convert maps/com.example.app/3.4.5.jsonc -o /tmp/map.json
  *   npx frida-compile examples/sample-hook/hook.ts -o hook.bundle.js
  *
- *   (Add a build step that wraps the map import in a marker block if
- *   you want `rosetta inspect`/`extract`/`patch` to operate on the
- *   compiled bundle — see examples/sample-hook/build.ts.)
+ *   # For inspect/extract/patch to work on the bundle, wrap the map
+ *   # import in a marker block — see examples/sample-hook/README.md.
  *
  * Run:
  *
@@ -23,6 +25,13 @@
  *   # or via the Python/Node controller you already use
  */
 
+// Until the V1.5 frida-compile plugin lands, the bundle import points
+// at a tooling-generated `.json` sibling of the canonical `.jsonc`.
+// Run `npx rosetta convert maps/com.example.app/3.4.5.jsonc -o ...`
+// to produce it before bundling.
+// @ts-expect-error — the JSON sibling is generated at build time;
+// TypeScript will complain until you run the convert step. Suppressed
+// so the example still typechecks against the canonical .jsonc source.
 import sampleMap from '../../maps/com.example.app/3.4.5.json' with { type: 'json' };
 import { rosetta, type RosettaMap } from '../../src/index.js';
 

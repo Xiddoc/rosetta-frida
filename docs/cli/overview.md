@@ -72,8 +72,8 @@ named output file.
 ```json
 {
     "scripts": {
-        "build:hook": "frida-compile hook.ts -o hook.bundle.js && rosetta patch hook.bundle.js --map maps/com.example.app/3.4.5.json",
-        "validate:maps": "rosetta validate maps/com.example.app/3.4.5.json"
+        "build:hook": "frida-compile hook.ts -o hook.bundle.js && rosetta patch hook.bundle.js --map maps/com.example.app/3.4.5.jsonc",
+        "validate:maps": "rosetta validate maps/com.example.app/3.4.5.jsonc"
     }
 }
 ```

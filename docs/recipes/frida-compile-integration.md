@@ -75,7 +75,7 @@ npx frida-compile hook.ts -o hook.compiled.js
 ```sh
 node --input-type=module -e "
   import { emitMarkerBlock, loadMap } from 'rosetta-frida';
-  const map = await loadMap('maps/com.example.app/3.4.5.json');
+  const map = await loadMap('maps/com.example.app/3.4.5.jsonc');
   process.stdout.write(emitMarkerBlock(map) + '\n');
 " > marker.js
 ```
@@ -114,7 +114,7 @@ The marker is there. `extract` and `patch` work too.
 {
     "scripts": {
         "build:hook": "frida-compile hook.ts -o hook.compiled.js && npm run embed:marker && cat marker.js hook.compiled.js > hook.bundle.js && rm marker.js hook.compiled.js",
-        "embed:marker": "node --input-type=module -e \"import('rosetta-frida').then(async ({ emitMarkerBlock, loadMap }) => { const m = await loadMap('maps/com.example.app/3.4.5.json'); require('fs').writeFileSync('marker.js', emitMarkerBlock(m)); });\""
+        "embed:marker": "node --input-type=module -e \"import('rosetta-frida').then(async ({ emitMarkerBlock, loadMap }) => { const m = await loadMap('maps/com.example.app/3.4.5.jsonc'); require('fs').writeFileSync('marker.js', emitMarkerBlock(m)); });\""
     }
 }
 ```
@@ -132,7 +132,7 @@ import { execSync } from 'node:child_process';
 import { emitMarkerBlock, loadMap } from 'rosetta-frida';
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 
-const MAP_PATH = process.env.ROSETTA_MAP ?? 'maps/com.example.app/3.4.5.json';
+const MAP_PATH = process.env.ROSETTA_MAP ?? 'maps/com.example.app/3.4.5.jsonc';
 const HOOK_SRC = 'hook.ts';
 const OUT = 'hook.bundle.js';
 
@@ -159,7 +159,7 @@ For a multi-version bundle, swap `emitMarkerBlock(map)` for
 import { emitMarkerRegistry, loadMap } from 'rosetta-frida';
 
 const registry = {
-    '3.4.5': await loadMap('maps/com.example.app/3.4.5.json'),
+    '3.4.5': await loadMap('maps/com.example.app/3.4.5.jsonc'),
     '3.4.6': await loadMap('maps/com.example.app/3.4.6.json'),
     '3.5.0':  await loadMap('maps/com.example.app/3.5.0.json'),
 };

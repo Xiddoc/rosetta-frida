@@ -30,37 +30,37 @@ rosetta convert <in> -o <out> [--force]
 
 ```sh
 $ npx rosetta convert maps/com.example.app/3.4.5.yaml \
-    -o maps/com.example.app/3.4.5.json
-wrote maps/com.example.app/3.4.5.json
+    -o maps/com.example.app/3.4.5.jsonc
+wrote maps/com.example.app/3.4.5.jsonc
 ```
 
 ### TS module → JSONC
 
 ```sh
 $ npx rosetta convert maps/com.example.app/3.4.5.ts \
-    -o maps/com.example.app/3.4.5.json
-wrote maps/com.example.app/3.4.5.json
+    -o maps/com.example.app/3.4.5.jsonc
+wrote maps/com.example.app/3.4.5.jsonc
 ```
 
 ### Overwrite
 
 ```sh
-$ npx rosetta convert maps/in.yaml -o maps/out.json
-error: refusing to overwrite existing file: maps/out.json (pass --force to overwrite)
+$ npx rosetta convert maps/in.yaml -o maps/out.jsonc
+error: refusing to overwrite existing file: maps/out.jsonc (pass --force to overwrite)
 
-$ npx rosetta convert maps/in.yaml -o maps/out.json --force
-wrote maps/out.json
+$ npx rosetta convert maps/in.yaml -o maps/out.jsonc --force
+wrote maps/out.jsonc
 ```
 
 ### Wrong input
 
 ```sh
-$ npx rosetta convert maps/com.example.app/3.4.5.json -o maps/out.json
-error: input is already in canonical format (.json); nothing to convert
+$ npx rosetta convert maps/com.example.app/3.4.5.jsonc -o maps/out.jsonc
+error: input is already in canonical format (.jsonc); nothing to convert
 ```
 
 ```sh
-$ npx rosetta convert maps/com.example.app/3.4.5.toml -o maps/out.json
+$ npx rosetta convert maps/com.example.app/3.4.5.toml -o maps/out.jsonc
 error: unsupported input format: .toml (path: maps/com.example.app/3.4.5.toml)
 ```
 

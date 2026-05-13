@@ -79,9 +79,10 @@ with `rosetta init`) or — eventually — pull from the community
 [maps repo](#status).
 
 ```sh
-npx rosetta init com.example.app 3.4.5 -o maps/com.example.app/3.4.5.json
+npx rosetta init com.example.app 3.4.5
+# → wrote maps/com.example.app/3.4.5.jsonc  (JSONC = JSON with comments)
 # edit the scaffold to fill in your real → obfuscated mappings
-npx rosetta validate maps/com.example.app/3.4.5.json
+npx rosetta validate maps/com.example.app/3.4.5.jsonc
 # → OK: ...@3.4.5, 1 class(es), schema_version=1
 ```
 
@@ -90,6 +91,8 @@ npx rosetta validate maps/com.example.app/3.4.5.json
 ```typescript
 import { rosetta } from 'rosetta-frida';
 import map from './maps/com.example.app/3.4.5.json' with { type: 'json' };
+// (Author maps in .jsonc with comments; convert to .json for bundling
+// until the V1.5 frida-compile plugin handles .jsonc natively.)
 
 Java.perform(() => {
     rosetta.session({ map, failurePolicy: 'warn' });

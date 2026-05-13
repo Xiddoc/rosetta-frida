@@ -87,7 +87,7 @@ called out is implemented and tested.
 - **Single-map and registry forms** — `RosettaMap` and
   `RosettaMapRegistry`.
 - **15-class anonymized sample map** at
-  `maps/com.example.app/3.4.5.json` covering AIDL stubs,
+  `maps/com.example.app/3.4.5.jsonc` covering AIDL stubs,
   callbacks, overloads, fields, constructors, enums, synthetic
   Companions, anonymous inner classes.
 

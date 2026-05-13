@@ -25,15 +25,12 @@ import { _resetCurrentSession } from '../../src/api/rosetta.js';
 import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/index.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SAMPLE_MAP_PATH = join(HERE, '..', '..', 'maps', 'com.example.app', '3.4.5.json');
+const SAMPLE_MAP_PATH = join(HERE, '..', '..', 'maps', 'com.example.app', '3.4.5.jsonc');
 
 function loadSampleMap(): RosettaMap {
-    // The on-disk file is JSONC with comments — strip them lazily for
-    // this test by importing JSON-with-comments-tolerant parser via
-    // the public surface.
+    // The on-disk file is JSONC with comments; use the library's
+    // own parser to handle them correctly.
     const raw = readFileSync(SAMPLE_MAP_PATH, 'utf8');
-    // The sample map happens to be valid JSON after comment stripping;
-    // for testing, a quick JSONC strip suffices.
     const stripped = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
     return JSON.parse(stripped) as RosettaMap;
 }

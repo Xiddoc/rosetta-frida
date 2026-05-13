@@ -75,7 +75,7 @@ export function renderSkeleton(app: string, version: string): string {
 //   sources:        array   — provenance (which tool produced which entries).
 //   classes:        object  — keyed by real fully-qualified class name.
 //
-// See maps/com.example.app/3.4.5.json for a fully-worked example
+// See maps/com.example.app/3.4.5.jsonc for a fully-worked example
 // demonstrating every supported field.
 {
     "schema_version": 1,
@@ -115,9 +115,9 @@ export function renderSkeleton(app: string, version: string): string {
 `;
 }
 
-/** Resolve the default output path: `maps/<app>/<version>.json`. */
+/** Resolve the default output path: `maps/<app>/<version>.jsonc`. */
 export function defaultOutputPath(app: string, version: string): string {
-    return path.join('maps', app, `${version}.json`);
+    return path.join('maps', app, `${version}.jsonc`);
 }
 
 /**

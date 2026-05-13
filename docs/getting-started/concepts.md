@@ -104,7 +104,7 @@ A **map** is a single JSONC file describing the real → obfuscated
 translation for one `(app, version)` pair. The on-disk format:
 
 ```jsonc
-// rosetta-frida/maps/com.example.app/3.4.5.json
+// rosetta-frida/maps/com.example.app/3.4.5.jsonc
 {
     "schema_version": 1,
     "app": "com.example.app",

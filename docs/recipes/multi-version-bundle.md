@@ -108,7 +108,7 @@ it to a registry without re-running `frida-compile`:
     ```sh
     cat <<EOF > registry.json
     {
-        "3.4.5": $(cat maps/com.example.app/3.4.5.json),
+        "3.4.5": $(cat maps/com.example.app/3.4.5.jsonc),
         "3.4.6": $(cat maps/com.example.app/3.4.6.json),
         "3.5.0":  $(cat maps/com.example.app/3.5.0.json)
     }
@@ -194,7 +194,7 @@ V1.5 will ship a one-shot CLI:
 
 ```sh
 npx rosetta merge-bundle hook.bundle.js \
-    maps/com.example.app/3.4.5.json \
+    maps/com.example.app/3.4.5.jsonc \
     maps/com.example.app/3.4.6.json \
     maps/com.example.app/3.5.0.json \
     -o hook.multi.bundle.js

@@ -110,9 +110,9 @@ describe('renderSkeleton', () => {
 });
 
 describe('defaultOutputPath', () => {
-    it('builds maps/<app>/<version>.json', () => {
+    it('builds maps/<app>/<version>.jsonc', () => {
         expect(defaultOutputPath('com.example.app', '1.2.3')).toMatch(
-            /maps[\\/]com\.example\.app[\\/]1\.2\.3\.json$/,
+            /maps[\\/]com\.example\.app[\\/]1\.2\.3\.jsonc$/,
         );
     });
 });
@@ -121,7 +121,7 @@ describe('runInit', () => {
     it('writes to the default path when none is provided', async () => {
         const { fs, files } = makeFs();
         const out = await runInit(['com.example.app', '1.2.3'], fs);
-        expect(out).toMatch(/com\.example\.app[\\/]1\.2\.3\.json$/);
+        expect(out).toMatch(/com\.example\.app[\\/]1\.2\.3\.jsonc$/);
         expect(files.has(out)).toBe(true);
         expect(files.get(out)).toContain('"app": "com.example.app"');
     });

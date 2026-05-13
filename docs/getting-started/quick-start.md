@@ -11,7 +11,7 @@ you will have:
 
 The example uses the canonical anonymized sample app
 `com.example.app` whose map ships in this repo at
-`maps/com.example.app/3.4.5.json` (a 15-class example covering
+`maps/com.example.app/3.4.5.jsonc` (a 15-class example covering
 every feature of the schema).
 
 ## 1. Scaffold or import the map
@@ -20,11 +20,11 @@ For real work, start with `rosetta init` and fill in entries:
 
 ```sh
 npx rosetta init com.example.app 3.4.5
-# wrote maps/com.example.app/3.4.5.json
+# wrote maps/com.example.app/3.4.5.jsonc
 ```
 
 For this tutorial, use the ready-made sample map at
-`maps/com.example.app/3.4.5.json`. It contains:
+`maps/com.example.app/3.4.5.jsonc`. It contains:
 
 ```json
 {
@@ -99,8 +99,9 @@ npx frida-compile hook.ts -o hook.bundle.js
 ```
 
 The resulting `hook.bundle.js` is a single self-contained script. The
-imported `3.4.5.json` is inlined by `frida-compile` as a JavaScript
-object literal — no filesystem dependency at hook-execution time.
+imported `.json` sibling (produced from `.jsonc` via `rosetta convert`)
+is inlined by `frida-compile` as a JavaScript object literal — no
+filesystem dependency at hook-execution time.
 
 !!! warning "Marker block is not embedded automatically yet"
     `rosetta inspect`, `extract`, and `patch` operate on a marker
