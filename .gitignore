@@ -25,3 +25,6 @@ coverage/
 __pycache__/
 *.py[cod]
 .venv/
+
+# mkdocs-material site output
+site/
