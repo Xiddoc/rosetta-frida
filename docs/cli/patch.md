@@ -6,7 +6,7 @@ block sourced from a new map. In-place by default.
 ## Synopsis
 
 ```sh
-rosetta patch <bundle.js> --map <new.json> [-o <out.js>]
+rosetta patch <bundle.js> --map <new.jsonc> [-o <out.js>]
 ```
 
 ## Arguments
@@ -14,19 +14,21 @@ rosetta patch <bundle.js> --map <new.json> [-o <out.js>]
 | Argument | Required | Description |
 |---|---|---|
 | `<bundle.js>` | Yes | Compiled `.js` bundle containing a marker block to replace. |
-| `--map <path>` | Yes | Path to the new map (JSON). Single-map or registry. |
+| `--map <path>` | Yes | Path to the new map (JSONC or JSON). Single-map or registry. |
 | `-o`, `--output <path>` | No | Output path. Defaults to in-place (the input bundle is rewritten). |
 
-The new map is parsed as JSON (not JSONC) in V1.0; once the wider
-[`loadMap`](../maps/format.md#loading-maps-loadmap) integration
-lands, JSONC source with comments will be supported here too.
+The new map is parsed via `parseJsonc`, so both JSONC source (comments
++ trailing commas) and strict JSON are accepted. For full schema
+validation, run [`rosetta validate`](validate.md) on the map first —
+`patch` only checks enough structure to pick single-map vs registry
+emission.
 
 ## Behavior
 
 1. Read `<bundle.js>` from disk.
-2. Read `<new.json>` and parse it as JSON. Heuristically detect
-   single-map vs registry by presence of `schema_version` at the top
-   level.
+2. Read `<new.jsonc>` and parse it via `parseJsonc`. Heuristically
+   detect single-map vs registry by presence of `schema_version` at
+   the top level.
 3. Call [`patchMarkerBlock(bundle, payload)`](../maps/marker-block.md#patchmarkerblockbundlesrc-newpayload)
    to splice in a fresh marker block.
 4. Write the result to the output path (in-place by default).
@@ -42,7 +44,7 @@ The default — useful in CI where you compile once and patch per
 environment:
 
 ```sh
-$ npx rosetta patch hook.bundle.js --map maps/com.example.app/3.5.0.json
+$ npx rosetta patch hook.bundle.js --map maps/com.example.app/3.5.0.jsonc
 patch: wrote hook.bundle.js (in place)
 ```
 
@@ -52,7 +54,7 @@ Keep the original around, write the result somewhere else:
 
 ```sh
 $ npx rosetta patch hook.bundle.js \
-    --map maps/com.example.app/3.5.0.json \
+    --map maps/com.example.app/3.5.0.jsonc \
     -o hook-3.5.0.bundle.js
 patch: wrote hook-3.5.0.bundle.js
 ```
@@ -64,14 +66,14 @@ registry block (and the runtime picks the right entry by detected
 version):
 
 ```sh
-$ npx rosetta patch hook.bundle.js --map maps/com.example.app/registry.json
+$ npx rosetta patch hook.bundle.js --map maps/com.example.app/registry.jsonc
 patch: wrote hook.bundle.js (in place)
 ```
 
 ### Bundle has no marker block
 
 ```sh
-$ npx rosetta patch raw-bundle.js --map maps/com.example.app/3.5.0.json
+$ npx rosetta patch raw-bundle.js --map maps/com.example.app/3.5.0.jsonc
 patch: no rosetta-frida marker block found in bundle
 ```
 
@@ -90,7 +92,7 @@ npx frida-compile hook.ts -o hook.bundle.js
 # Deploy phase (per environment):
 for v in 3.4.5 3.4.6 3.5.0; do
     npx rosetta patch hook.bundle.js \
-        --map maps/com.example.app/$v.json \
+        --map maps/com.example.app/$v.jsonc \
         -o "dist/hook-$v.bundle.js"
 done
 ```
@@ -104,16 +106,16 @@ deploy time.
 | Code | Meaning |
 |---|---|
 | `0` | Patch succeeded. |
-| `1` | Bad arguments, IO error, missing marker block, or invalid map JSON. |
+| `1` | Bad arguments, IO error, missing marker block, or malformed map source. |
 
 ## Programmatic equivalent
 
 ```typescript
-import { patchMarkerBlock } from 'rosetta-frida';
+import { patchMarkerBlock, parseJsonc } from 'rosetta-frida';
 import { readFile, writeFile } from 'node:fs/promises';
 
 const bundle = await readFile('hook.bundle.js', 'utf8');
-const map = JSON.parse(await readFile('maps/com.example.app/3.5.0.json', 'utf8'));
+const map = parseJsonc(await readFile('maps/com.example.app/3.5.0.jsonc', 'utf8'));
 const patched = patchMarkerBlock(bundle, map);
 await writeFile('hook.bundle.js', patched, 'utf8');
 ```

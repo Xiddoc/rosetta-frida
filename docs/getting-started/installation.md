@@ -76,8 +76,8 @@ Commands:
   init <app> <version>                 Scaffold a new map skeleton
   validate <map>                       Schema + sanity check (auto-detect format)
   convert <in> -o <out>                Convert YAML/TS module to canonical JSONC
-  patch <bundle.js> --map <new.json>   Replace embedded map in bundle
-  extract <bundle.js> -o <out.json>    Pull embedded map out of bundle
+  patch <bundle.js> --map <new.jsonc>  Replace embedded map in bundle
+  extract <bundle.js> -o <out.json>    Pull embedded map out of bundle (JSON output)
   inspect <bundle.js>                  One-line summary of embedded map
 ```
 

@@ -49,7 +49,7 @@ script. Three CLI commands depend on the marker block to work:
 
 - `rosetta inspect <bundle.js>` — what does this bundle target?
 - `rosetta extract <bundle.js> -o out.json` — pull the map out.
-- `rosetta patch <bundle.js> --map new.json` — swap the map without
+- `rosetta patch <bundle.js> --map new.jsonc` — swap the map without
   recompiling.
 
 If you don't need those operations, skip the marker-block step.
@@ -160,8 +160,8 @@ import { emitMarkerRegistry, loadMap } from 'rosetta-frida';
 
 const registry = {
     '3.4.5': await loadMap('maps/com.example.app/3.4.5.jsonc'),
-    '3.4.6': await loadMap('maps/com.example.app/3.4.6.json'),
-    '3.5.0':  await loadMap('maps/com.example.app/3.5.0.json'),
+    '3.4.6': await loadMap('maps/com.example.app/3.4.6.jsonc'),
+    '3.5.0':  await loadMap('maps/com.example.app/3.5.0.jsonc'),
 };
 const marker = emitMarkerRegistry(registry);
 ```

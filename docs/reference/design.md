@@ -260,10 +260,14 @@ session-injection point moves.
 
 ### JSONC not YAML, plus YAML/TS converters
 
-JSONC is native to JS bundlers (`.json` imports just work) and is
-machine-round-trippable. It's the canonical on-disk and on-wire
-format. YAML and TS module support exist via converters for authors
-who prefer them, but the *runtime* only sees the canonical shape.
+JSONC (JSON with Comments) is the canonical on-disk format: comments
+preserve authoring intent, the data underneath round-trips
+machine-cleanly, and the on-disk shape matches the runtime shape
+exactly after a one-line comment strip. JS bundlers consume the
+comment-stripped `.json` sibling natively (V1.0 build step; V1.5 will
+ship a `frida-compile` plugin so `.jsonc` works directly). YAML and
+TS-module input exist via converters for authors who prefer them, but
+the *runtime* only sees the canonical shape.
 
 ### PEM-style marker block
 

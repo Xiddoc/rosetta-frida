@@ -82,7 +82,7 @@ schema before writing the output. Invalid inputs surface as
 [`MapValidationError`](../reference/errors.md#mapvalidationerror):
 
 ```text
-$ npx rosetta convert maps/broken.yaml -o maps/out.json
+$ npx rosetta convert maps/broken.yaml -o maps/out.jsonc
 error: invalid map
   at classes.com.example.app.Foo.obfuscated: required
 ```
@@ -99,11 +99,11 @@ import { readFile, writeFile } from 'node:fs/promises';
 // YAML
 const yamlSrc = await readFile('map.yaml', 'utf8');
 const yamlMap = yamlToMap(yamlSrc);
-await writeFile('map.json', renderJsonc(yamlMap), 'utf8');
+await writeFile('map.jsonc', renderJsonc(yamlMap), 'utf8');
 
 // TS module
 const tsMap = await tsModuleToMap('/abs/path/to/map.ts');
-await writeFile('map.json', renderJsonc(tsMap), 'utf8');
+await writeFile('map.jsonc', renderJsonc(tsMap), 'utf8');
 ```
 
 ## Round-trip note

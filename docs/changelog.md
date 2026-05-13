@@ -149,14 +149,14 @@ Nine error classes, all subclasses of [`RosettaError`](reference/errors.md#roset
 
 Not in V1.0; tracked for the next release:
 
-- `rosetta diff <a.json> <b.json>` — show rotation deltas between
+- `rosetta diff <a.jsonc> <b.jsonc>` — show rotation deltas between
   versions.
-- `rosetta merge <a.json> <b.json> [...]` — merge partial maps.
+- `rosetta merge <a.jsonc> <b.jsonc> [...]` — merge partial maps.
 - `rosetta merge-bundle <bundle.js> <maps...> -o <out>` —
   single-map → registry bundle.
-- `rosetta types <map.json> -o <out.d.ts>` — generate per-map TS
+- `rosetta types <map.jsonc> -o <out.d.ts>` — generate per-map TS
   declarations.
-- `rosetta migrate <map.json>` — schema migrators (for when v2 ships).
+- `rosetta migrate <map.jsonc>` — schema migrators (for when v2 ships).
 - `rosetta verify --device <id>` — live health check via
   `frida-server`.
 - `frida-compile` plugin for auto-marker-wrapping.

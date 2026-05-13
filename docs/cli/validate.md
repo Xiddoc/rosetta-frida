@@ -72,8 +72,8 @@ OK: maps/com.example.app/3.4.5.ts — com.example.app@3.4.5, 15 class(es), schem
 ### Invalid map
 
 ```sh
-$ npx rosetta validate maps/example/broken.json
-FAIL: maps/example/broken.json — invalid map
+$ npx rosetta validate maps/example/broken.jsonc
+FAIL: maps/example/broken.jsonc — invalid map
   at schema_version: must be 1
   at classes.com.example.app.Foo.methods: must be an object
 ```
@@ -116,8 +116,8 @@ Validate every map on every PR:
 - name: Validate every map
   run: |
     fail=0
-    for m in maps/**/*.json maps/**/*.yaml maps/**/*.yml; do
-      [ -e "$m" ] || continue
+    shopt -s globstar nullglob
+    for m in maps/**/*.jsonc maps/**/*.json maps/**/*.yaml maps/**/*.yml; do
       npx rosetta validate "$m" || fail=1
     done
     exit $fail

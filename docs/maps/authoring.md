@@ -33,11 +33,11 @@ with header comments documenting each field, all top-level metadata
 filled in, an empty `classes: {}`, and a single commented-out example
 entry to copy-paste from.
 
-By default the path is `maps/<app>/<version>.json`. Override with
+By default the path is `maps/<app>/<version>.jsonc`. Override with
 `-o <path>`:
 
 ```sh
-npx rosetta init com.example.app 3.4.5 -o vendor/maps/example-3.4.5.json
+npx rosetta init com.example.app 3.4.5 -o vendor/maps/example-3.4.5.jsonc
 ```
 
 Pass `--force` if the file already exists and you want to overwrite.
@@ -216,7 +216,7 @@ For each failed entry, recheck:
 ## 6. Commit
 
 One map per `(app, version)`. Commit the JSONC file under
-`maps/<app>/<version>.json`. The community maps repo (V2+) will
+`maps/<app>/<version>.jsonc`. The community maps repo (V2+) will
 PR-gate by schema validation; until then, your own repo is fine.
 
 Use a descriptive commit message:
@@ -235,7 +235,7 @@ and two synthetic Companions) were hand-authored.
 When the next release ships:
 
 1. Copy the previous version's map to a new file:
-   `cp maps/com.example.app/3.4.5.jsonc maps/com.example.app/3.5.0.json`
+   `cp maps/com.example.app/3.4.5.jsonc maps/com.example.app/3.5.0.jsonc`
 2. Update the top-level `version` field.
 3. Re-run sigmatcher to refresh class anchors.
 4. For classes sigmatcher couldn't find, jadx them by hand using the

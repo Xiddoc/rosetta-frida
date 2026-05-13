@@ -103,27 +103,28 @@ but emit `emitMarkerRegistry(registry)` instead of
 If you already have a working single-map bundle and want to convert
 it to a registry without re-running `frida-compile`:
 
-1. Build a registry JSON file on disk:
+1. Build a registry JSONC file on disk:
 
     ```sh
-    cat <<EOF > registry.json
+    cat <<EOF > registry.jsonc
     {
         "3.4.5": $(cat maps/com.example.app/3.4.5.jsonc),
-        "3.4.6": $(cat maps/com.example.app/3.4.6.json),
-        "3.5.0":  $(cat maps/com.example.app/3.5.0.json)
+        "3.4.6": $(cat maps/com.example.app/3.4.6.jsonc),
+        "3.5.0":  $(cat maps/com.example.app/3.5.0.jsonc)
     }
     EOF
     ```
 
     or use `jq -s` / a tiny Node script — anything that produces a
-    JSON record-of-RosettaMap.
+    record-of-RosettaMap. `rosetta patch` accepts JSONC (comments + the
+    constituent maps' authoring metadata both survive the concat).
 
 2. Patch the single-map bundle with the registry. The patch
    command's loader heuristic detects "no top-level
    `schema_version`" and treats the input as a registry:
 
     ```sh
-    npx rosetta patch hook.bundle.js --map registry.json -o hook.multi.bundle.js
+    npx rosetta patch hook.bundle.js --map registry.jsonc -o hook.multi.bundle.js
     ```
 
 3. Verify:
@@ -195,8 +196,8 @@ V1.5 will ship a one-shot CLI:
 ```sh
 npx rosetta merge-bundle hook.bundle.js \
     maps/com.example.app/3.4.5.jsonc \
-    maps/com.example.app/3.4.6.json \
-    maps/com.example.app/3.5.0.json \
+    maps/com.example.app/3.4.6.jsonc \
+    maps/com.example.app/3.5.0.jsonc \
     -o hook.multi.bundle.js
 ```
 

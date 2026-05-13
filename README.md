@@ -150,8 +150,8 @@ frida -U -l hook.bundle.js com.example.app
 rosetta init <app> <version>                  Scaffold a new map skeleton
 rosetta validate <map>                        Schema + sanity check (auto-detect format)
 rosetta convert <in> -o <out>                 Convert YAML / TS module to canonical JSONC
-rosetta patch <bundle.js> --map <new.json>    Replace embedded map in a compiled bundle
-rosetta extract <bundle.js> -o <out.json>     Pull embedded map out of a compiled bundle
+rosetta patch <bundle.js> --map <new.jsonc>   Replace embedded map in a compiled bundle
+rosetta extract <bundle.js> -o <out.json>     Pull embedded map out of a compiled bundle (JSON output)
 rosetta inspect <bundle.js>                   One-line summary of an embedded map
 ```
 
@@ -189,9 +189,7 @@ want to try it now.
 
 ## Documentation
 
-The full documentation lives at **https://xiddoc.github.io/rosetta-frida/**
-(once the docs workflow runs on a `master` push to a configured
-GitHub Pages source):
+The full documentation is hosted using GitHub pages.
 
 - [Getting started](https://xiddoc.github.io/rosetta-frida/getting-started/quick-start/)
 - [API reference](https://xiddoc.github.io/rosetta-frida/api/overview/) — every public surface
@@ -231,8 +229,3 @@ for the longer version.
 ## License
 
 [MIT](LICENSE)
-
----
-
-_The name comes from the Rosetta Stone — a translation key between
-languages you can read and languages you can't._

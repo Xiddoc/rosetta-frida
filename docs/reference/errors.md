@@ -144,7 +144,7 @@ with `issues`:
 
 **When fired:**
 
-- `loadMap('./x.json')` when the parsed object doesn't satisfy the
+- `loadMap('./x.jsonc')` when the parsed object doesn't satisfy the
   Zod schema.
 - `yamlToMap(...)` / `tsModuleToMap(...)` — the converters all run
   the same validator.
@@ -172,7 +172,7 @@ col 4: unexpected token`
 **When fired:**
 
 - `parseJsonc('...')` on syntactically invalid JSONC.
-- `loadMap('./x.json')` on a JSONC file that fails to parse.
+- `loadMap('./x.jsonc')` on a JSONC file that fails to parse.
 
 ## `MapVersionMismatchError`
 

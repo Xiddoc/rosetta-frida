@@ -149,7 +149,7 @@ com.example.app@3.4.5, schema_version 1, 15 classes
 And you can swap maps without recompiling:
 
 ```sh
-$ npx rosetta patch hook.bundle.js --map maps/com.example.app/3.5.0.json
+$ npx rosetta patch hook.bundle.js --map maps/com.example.app/3.5.0.jsonc
 patch: wrote hook.bundle.js (in place)
 
 $ npx rosetta inspect hook.bundle.js

@@ -97,7 +97,7 @@ import { yamlToMap, renderJsonc } from 'rosetta-frida';
 const yamlSrc = await readFile('map.yaml', 'utf8');
 const map = yamlToMap(yamlSrc);          // validated RosettaMap
 const jsonc = renderJsonc(map);           // canonical JSONC string
-await writeFile('map.json', jsonc, 'utf8');
+await writeFile('map.jsonc', jsonc, 'utf8');
 ```
 
 `yamlToMap` runs the same Zod schema validator as

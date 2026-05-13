@@ -14,7 +14,7 @@ rosetta init <app> <version> [-o <path>] [--force]
 |---|---|---|
 | `<app>` | Yes | Android package name, e.g. `com.example.app`. Becomes the top-level `"app"` field in the scaffolded map. |
 | `<version>` | Yes | App version, e.g. `3.4.5`. Becomes the `"version"` field. |
-| `-o`, `--output <path>` | No | Output path. Defaults to `maps/<app>/<version>.json`. |
+| `-o`, `--output <path>` | No | Output path. Defaults to `maps/<app>/<version>.jsonc`. |
 | `-f`, `--force` | No | Overwrite an existing file at the output path. |
 
 ## What it writes
