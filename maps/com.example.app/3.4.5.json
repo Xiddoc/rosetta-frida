@@ -1,0 +1,513 @@
+// rosetta-frida sample map — com.example.app @ 3.4.5
+//
+// This is the canonical example map. Every feature of the schema is
+// exercised at least once below. Read top-to-bottom for a tour of what
+// a real Android-AIDL-service obfuscation map looks like.
+//
+// All identifiers are synthetic:
+//   - Package:           com.example.app
+//   - Real class names:  CamelCase Java-style (IRemoteService$Stub etc.)
+//   - Obfuscated names:  aaaa, bbbb, cccc, ...  (4-letter pattern)
+//   - Method/field obf:  single letters a, b, c, d, e, f, ...
+//
+// Reading observation (per project README §0.2): METHOD names tend to
+// be more stable than CLASS names across minor releases. Notice how
+// the method letter `c` recurs across several unrelated classes
+// (IRemoteService$Stub.requestTicket → c, ResultPromise.then → c,
+// BlobCache.get → c). When the class anchors rotate in 3.4.6 those
+// inner letters will often survive — only the 4-letter class names
+// at the left side of the table change.
+{
+    "schema_version": 1,
+    "app": "com.example.app",
+    "version": "3.4.5",
+    "captured_at": "2026-05-13",
+    "apk_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "frida_min_version": "16.0.0",
+    "frida_max_version": "17.99.99",
+    "sources": [
+        {
+            "tool": "sigmatcher",
+            "config": "signatures/example.json",
+            "classes": 10,
+            "confidence": "high"
+        },
+        {
+            "tool": "hand-authored",
+            "classes": 5,
+            "notes": "verified via Frida runtime trace on emulator"
+        }
+    ],
+    "classes": {
+        // ──────────────────────────────────────────────────────────────
+        // The headline AIDL stub. This is the binder dispatch surface
+        // that user-mode clients invoke via IPC. The .Stub side runs
+        // inside the service process; the txn codes (`aidl_txn`) are
+        // assigned by aidl-compiler at build time and stay stable per
+        // descriptor. The `requestTicket` method has two overloads —
+        // the simpler 2-arg form (the common call path) and a 3-arg
+        // form that takes an opaque tag string.
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.IRemoteService$Stub": {
+            "obfuscated": "aaaa",
+            "extends": "android.os.Binder",
+            "kind": "aidl_stub",
+            "dex": "classes6.dex",
+            "aidl_descriptor": "com.example.app.IRemoteService",
+            "anchors": [
+                "com.example.app.IRemoteService",
+                "Transaction failed"
+            ],
+            "source": "sigmatcher",
+            "confidence": "high",
+            "methods": {
+                "requestTicket": [
+                    {
+                        "obfuscated": "c",
+                        "signature": "(Landroid/os/Bundle;Lbbbb;)V",
+                        "aidl_txn": 2
+                    },
+                    {
+                        "obfuscated": "d",
+                        "signature": "(Landroid/os/Bundle;Ljava/lang/String;Lbbbb;)V",
+                        "aidl_txn": 4
+                    }
+                ],
+                "requestPrompt": {
+                    "obfuscated": "f",
+                    "signature": "(Landroid/os/Bundle;Lcccc;)V",
+                    "aidl_txn": 3
+                },
+                "onTransact": {
+                    "obfuscated": "onTransact",
+                    "signature": "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z"
+                }
+            },
+            "fields": {
+                "DESCRIPTOR": {
+                    "obfuscated": "DESCRIPTOR",
+                    "type": "Ljava/lang/String;",
+                    "static": true
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // The async-response callback that the .Stub above invokes when
+        // the result is ready. Modeled as an AIDL callback interface;
+        // method `a` is `onResult`, taking a Bundle of result data.
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.IServiceCallback": {
+            "obfuscated": "bbbb",
+            "kind": "aidl_callback",
+            "aidl_descriptor": "com.example.app.IServiceCallback",
+            "source": "sigmatcher",
+            "methods": {
+                "onResult": {
+                    "obfuscated": "a",
+                    "signature": "(Landroid/os/Bundle;)V",
+                    "aidl_txn": 1
+                },
+                "onError": {
+                    "obfuscated": "b",
+                    "signature": "(ILjava/lang/String;)V",
+                    "aidl_txn": 2
+                }
+            }
+        },
+        // Second callback used by the dialog path of the stub.
+        "com.example.app.IDialogCallback": {
+            "obfuscated": "cccc",
+            "kind": "aidl_callback",
+            "aidl_descriptor": "com.example.app.IDialogCallback",
+            "source": "sigmatcher",
+            "methods": {
+                "onDismiss": {
+                    "obfuscated": "a",
+                    "signature": "(I)V",
+                    "aidl_txn": 1
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // Service-layer plumbing: the client wrapper invoked by app code.
+        // Note `extends: AbstractServiceClient` — that's a real-name ref
+        // into another mapped class below, demonstrating an extends chain
+        // that the runtime resolver can walk. The single-overload form
+        // is used for `requestTicket` (no ambiguity at this layer; the
+        // overloads get picked further down the stack at the .Stub).
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.RemoteServiceClient": {
+            "obfuscated": "dddd",
+            "extends": "com.example.app.AbstractServiceClient",
+            "kind": "class",
+            "source": "sigmatcher",
+            "methods": {
+                "requestTicket": {
+                    "obfuscated": "c",
+                    "signature": "(Landroid/os/Bundle;)Leeee;"
+                },
+                "requestPrompt": {
+                    "obfuscated": "e",
+                    "signature": "(Landroid/os/Bundle;)Leeee;"
+                }
+            },
+            "fields": {
+                "sessionId": {
+                    "obfuscated": "a",
+                    "type": "Ljava/lang/String;"
+                },
+                "flags": {
+                    "obfuscated": "b",
+                    "type": "I"
+                }
+            }
+        },
+        // The parent class of RemoteServiceClient. Holds shared state
+        // (connection, retry state) and a static class-counter field.
+        "com.example.app.AbstractServiceClient": {
+            "obfuscated": "ffff",
+            "extends": "java.lang.Object",
+            "kind": "class",
+            "source": "sigmatcher",
+            "methods": {
+                "connect": {
+                    "obfuscated": "a",
+                    "signature": "()V"
+                },
+                "disconnect": {
+                    "obfuscated": "b",
+                    "signature": "()V"
+                }
+            },
+            "fields": {
+                "INSTANCE_COUNT": {
+                    "obfuscated": "a",
+                    "type": "I",
+                    "static": true
+                },
+                "context": {
+                    "obfuscated": "b",
+                    "type": "Landroid/content/Context;"
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // Future-style result wrapper returned by RemoteServiceClient.
+        // The `.then(callback)` method's obfuscated name is also `c` —
+        // demonstrating method-name stability across unrelated classes
+        // (see header comment).
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.ResultPromise": {
+            "obfuscated": "eeee",
+            "kind": "class",
+            "source": "sigmatcher",
+            "methods": {
+                "then": {
+                    "obfuscated": "c",
+                    "signature": "(Lgggg;)Leeee;"
+                },
+                "catchError": {
+                    "obfuscated": "d",
+                    "signature": "(Lgggg;)Leeee;"
+                },
+                "isComplete": {
+                    "obfuscated": "e",
+                    "signature": "()Z"
+                }
+            },
+            "fields": {
+                "result": {
+                    "obfuscated": "a",
+                    "type": "Ljava/lang/Object;"
+                },
+                "completed": {
+                    "obfuscated": "b",
+                    "type": "Z"
+                }
+            }
+        },
+        // A simple functional-interface used by ResultPromise.then().
+        // Demonstrates `kind: interface` and a single SAM method.
+        "com.example.app.PromiseCallback": {
+            "obfuscated": "gggg",
+            "kind": "interface",
+            "source": "sigmatcher",
+            "methods": {
+                "apply": {
+                    "obfuscated": "a",
+                    "signature": "(Ljava/lang/Object;)Ljava/lang/Object;"
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // Cache layer — a generic key/value cache backing value reuse.
+        // Has multi-overload `put` (one accepting a TTL, one without).
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.BlobCache": {
+            "obfuscated": "hhhh",
+            "kind": "class",
+            "source": "hand-authored",
+            "anchors": [
+                "BlobCache:evict"
+            ],
+            "methods": {
+                "get": {
+                    "obfuscated": "c",
+                    "signature": "(Ljava/lang/String;)Ljava/lang/Object;"
+                },
+                "put": [
+                    {
+                        "obfuscated": "d",
+                        "signature": "(Ljava/lang/String;Ljava/lang/Object;)V"
+                    },
+                    {
+                        "obfuscated": "e",
+                        "signature": "(Ljava/lang/String;Ljava/lang/Object;J)V"
+                    }
+                ],
+                "evict": {
+                    "obfuscated": "f",
+                    "signature": "(Ljava/lang/String;)V"
+                },
+                "clear": {
+                    "obfuscated": "g",
+                    "signature": "()V"
+                }
+            },
+            "fields": {
+                "buffer": {
+                    "obfuscated": "a",
+                    "type": "Ljava/util/HashMap;"
+                },
+                "MAX_SIZE": {
+                    "obfuscated": "b",
+                    "type": "I",
+                    "static": true
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // Ticket model class — value object with a constructor overload
+        // and a static factory. Demonstrates `is_constructor: true`.
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.Ticket": {
+            "obfuscated": "iiii",
+            "kind": "class",
+            "source": "sigmatcher",
+            "methods": {
+                "<init>": [
+                    {
+                        "obfuscated": "<init>",
+                        "signature": "(Ljava/lang/String;)V",
+                        "is_constructor": true
+                    },
+                    {
+                        "obfuscated": "<init>",
+                        "signature": "(Ljava/lang/String;J)V",
+                        "is_constructor": true
+                    }
+                ],
+                "fromBytes": {
+                    "obfuscated": "a",
+                    "signature": "([B)Liiii;",
+                    "static": true
+                },
+                "getValue": {
+                    "obfuscated": "b",
+                    "signature": "()Ljava/lang/String;"
+                },
+                "getExpiry": {
+                    "obfuscated": "c",
+                    "signature": "()J"
+                }
+            },
+            "fields": {
+                "value": {
+                    "obfuscated": "a",
+                    "type": "Ljava/lang/String;"
+                },
+                "expiryMillis": {
+                    "obfuscated": "b",
+                    "type": "J"
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // Error reporting enum. `kind: enum` is rare but supported.
+        // Methods are autogenerated (`values()`, `valueOf(String)`).
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.ErrorCode": {
+            "obfuscated": "jjjj",
+            "kind": "enum",
+            "source": "sigmatcher",
+            "methods": {
+                "values": {
+                    "obfuscated": "values",
+                    "signature": "()[Ljjjj;",
+                    "static": true
+                },
+                "valueOf": {
+                    "obfuscated": "valueOf",
+                    "signature": "(Ljava/lang/String;)Ljjjj;",
+                    "static": true
+                },
+                "getCode": {
+                    "obfuscated": "a",
+                    "signature": "()I"
+                }
+            },
+            "fields": {
+                "SUCCESS": {
+                    "obfuscated": "a",
+                    "type": "Ljjjj;",
+                    "static": true
+                },
+                "TIMEOUT": {
+                    "obfuscated": "b",
+                    "type": "Ljjjj;",
+                    "static": true
+                },
+                "AUTH_FAILED": {
+                    "obfuscated": "c",
+                    "type": "Ljjjj;",
+                    "static": true
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // Synthetic compiler-generated class. The `Companion` pattern
+        // shows up when Kotlin objects get compiled; `kind: synthetic`
+        // flags it so adaptive-discovery strategies (V2+) skip it.
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.Ticket$Companion": {
+            "obfuscated": "kkkk",
+            "extends": "java.lang.Object",
+            "kind": "synthetic",
+            "source": "sigmatcher",
+            "methods": {
+                "create": {
+                    "obfuscated": "a",
+                    "signature": "(Ljava/lang/String;)Liiii;"
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // Anonymous inner class — the Runnable handed to the executor
+        // when an async retry is scheduled. Captures `outer` instance.
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.AbstractServiceClient$1": {
+            "obfuscated": "llll",
+            "kind": "anonymous",
+            "extends": "java.lang.Object",
+            "source": "hand-authored",
+            "methods": {
+                "run": {
+                    "obfuscated": "run",
+                    "signature": "()V"
+                }
+            },
+            "fields": {
+                "outer": {
+                    "obfuscated": "a",
+                    "type": "Lffff;"
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // Wire-format codec — used by RemoteServiceClient to marshal
+        // requests. Demonstrates a method-only class (no fields).
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.RequestCodec": {
+            "obfuscated": "mmmm",
+            "kind": "class",
+            "source": "hand-authored",
+            "methods": {
+                "encode": {
+                    "obfuscated": "a",
+                    "signature": "(Landroid/os/Bundle;)[B"
+                },
+                "decode": {
+                    "obfuscated": "b",
+                    "signature": "([B)Landroid/os/Bundle;"
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // Configuration holder — fields-only class (no methods on the
+        // user-facing surface). All flags are static — they're set once
+        // at process start and read by everyone else.
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.Config": {
+            "obfuscated": "nnnn",
+            "kind": "class",
+            "source": "hand-authored",
+            "fields": {
+                "ENABLE_TRACING": {
+                    "obfuscated": "a",
+                    "type": "Z",
+                    "static": true
+                },
+                "MAX_RETRIES": {
+                    "obfuscated": "b",
+                    "type": "I",
+                    "static": true
+                },
+                "TIMEOUT_MILLIS": {
+                    "obfuscated": "c",
+                    "type": "J",
+                    "static": true
+                },
+                "ENDPOINT_URL": {
+                    "obfuscated": "d",
+                    "type": "Ljava/lang/String;",
+                    "static": true
+                }
+            }
+        },
+        // ──────────────────────────────────────────────────────────────
+        // The session manager — the top-level entry that glues all of
+        // the above together. Holds a BlobCache, a RemoteServiceClient,
+        // and a Config reference. Provides the public API surface that
+        // app code calls (`startSession`, `endSession`).
+        // ──────────────────────────────────────────────────────────────
+        "com.example.app.SessionManager": {
+            "obfuscated": "oooo",
+            "extends": "java.lang.Object",
+            "kind": "class",
+            "source": "hand-authored",
+            "anchors": [
+                "SessionManager initialized"
+            ],
+            "methods": {
+                "startSession": {
+                    "obfuscated": "a",
+                    "signature": "(Landroid/content/Context;)Liiii;"
+                },
+                "endSession": {
+                    "obfuscated": "b",
+                    "signature": "(Liiii;)V"
+                },
+                "getActive": {
+                    "obfuscated": "c",
+                    "signature": "()Loooo;",
+                    "static": true
+                }
+            },
+            "fields": {
+                "client": {
+                    "obfuscated": "a",
+                    "type": "Ldddd;"
+                },
+                "cache": {
+                    "obfuscated": "b",
+                    "type": "Lhhhh;"
+                },
+                "INSTANCE": {
+                    "obfuscated": "c",
+                    "type": "Loooo;",
+                    "static": true
+                }
+            }
+        }
+    }
+}
