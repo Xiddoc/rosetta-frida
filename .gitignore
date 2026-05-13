@@ -1,10 +1,14 @@
 # Node deps
 node_modules/
 
-# TypeScript build output (if/when we add TS)
+# TypeScript build output
 dist/
 build/
 *.tsbuildinfo
+
+# Test + coverage output
+coverage/
+.nyc_output/
 
 # Frida-compile output that we don't want to track during early dev
 # (revisit once we have a stable bundle convention)

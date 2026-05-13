@@ -1,0 +1,67 @@
+{
+    "name": "rosetta-frida",
+    "version": "0.0.0-dev",
+    "description": "Translate real (unobfuscated) Java class/method/field names to per-version obfuscated names at Frida-attach time.",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./types": {
+            "types": "./dist/types/index.d.ts",
+            "import": "./dist/types/index.js"
+        }
+    },
+    "bin": {
+        "rosetta": "./dist/cli/index.js"
+    },
+    "files": [
+        "dist",
+        "maps",
+        "README.md"
+    ],
+    "engines": {
+        "node": ">=18.18.0"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "build:watch": "tsc -p tsconfig.json --watch",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage",
+        "cli": "tsx cli/index.ts"
+    },
+    "dependencies": {
+        "zod": "^3.23.0"
+    },
+    "devDependencies": {
+        "@types/frida-gum": "^18.7.0",
+        "@types/node": "^18.19.0",
+        "@typescript-eslint/eslint-plugin": "^8.0.0",
+        "@typescript-eslint/parser": "^8.0.0",
+        "@vitest/coverage-v8": "^2.0.0",
+        "eslint": "^9.0.0",
+        "prettier": "^3.3.0",
+        "tsx": "^4.16.0",
+        "typescript": "^5.5.0",
+        "typescript-eslint": "^8.0.0",
+        "vitest": "^2.0.0"
+    },
+    "keywords": [
+        "frida",
+        "obfuscation",
+        "android",
+        "reverse-engineering",
+        "instrumentation"
+    ],
+    "license": "MIT"
+}
