@@ -1,9 +1,8 @@
-# rosetta-frida pre-commit hook.
+# rosetta-frida pre-commit hook — the FAST half.
 #
-# Mirrors the GitHub Actions CI verify pipeline:
-#   typecheck → lint → format:check → test:coverage (100% gate)
+# Runs typecheck + lint + format:check. The full test suite + 100%
+# coverage gate runs in pre-push (and again in CI), so this hook only
+# blocks commits on the static-analysis checks.
 #
-# Bypass with `git commit --no-verify` if you genuinely need to commit
-# WIP work that doesn't pass these checks (rare; CI will catch it
-# eventually anyway).
-npm run verify
+# Bypass with `git commit --no-verify` if you need to commit WIP.
+npm run verify:fast

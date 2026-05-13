@@ -1,0 +1,10 @@
+# rosetta-frida pre-push hook — the SLOW half.
+#
+# Runs the full test suite + 100% coverage gate. Combined with the
+# pre-commit hook (typecheck + lint + format:check), this matches what
+# CI runs end-to-end. Catches coverage regressions before they reach
+# GitHub.
+#
+# Bypass with `git push --no-verify` if you need to push WIP and trust
+# CI to catch issues. Discouraged on the master branch.
+npm run test:coverage

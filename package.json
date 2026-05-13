@@ -38,6 +38,7 @@
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage",
+        "verify:fast": "npm run typecheck && npm run lint && npm run format:check",
         "cli": "tsx cli/index.ts",
         "prepare": "husky"
     },
