@@ -69,8 +69,25 @@ jobs:
 
             - run: npm ci
 
-            - name: rosetta validate (sample map)
-              run: npm run --silent cli -- validate maps/com.example.app/3.4.5.json
+            - name: rosetta validate (every .jsonc map in maps/)
+              # Validates every map under maps/. Once the maps repo splits
+              # off (V2+), this loop moves to that repo's CI; until then,
+              # we validate the canonical sample + any other authored maps
+              # that may live here. The glob keeps this future-proof.
+              run: |
+                  shopt -s globstar nullglob
+                  found=0
+                  for f in maps/**/*.jsonc; do
+                      echo "::group::$f"
+                      npm run --silent cli -- validate "$f"
+                      echo "::endgroup::"
+                      found=$((found + 1))
+                  done
+                  if [ "$found" = "0" ]; then
+                      echo "::error::no .jsonc maps found under maps/"
+                      exit 1
+                  fi
+                  echo "validated $found map(s)"
 
             - name: rosetta inspect + extract round-trip on a synthetic bundle
               run: |
