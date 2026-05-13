@@ -6,8 +6,8 @@
 >
 > Write once, hook many versions.
 
-[![CI](https://github.com/USER/rosetta-frida/actions/workflows/ci.yml/badge.svg)](https://github.com/USER/rosetta-frida/actions/workflows/ci.yml)
-[![Docs](https://github.com/USER/rosetta-frida/actions/workflows/docs.yml/badge.svg)](https://USER.github.io/rosetta-frida/)
+[![CI](https://github.com/Xiddoc/rosetta-frida/actions/workflows/ci.yml/badge.svg)](https://github.com/Xiddoc/rosetta-frida/actions/workflows/ci.yml)
+[![Docs](https://github.com/Xiddoc/rosetta-frida/actions/workflows/docs.yml/badge.svg)](https://Xiddoc.github.io/rosetta-frida/)
 [![Tests](https://img.shields.io/badge/tests-595%20passing-brightgreen)](#testing)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#testing)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -150,7 +150,7 @@ rosetta extract <bundle.js> -o <out.json>     Pull embedded map out of a compile
 rosetta inspect <bundle.js>                   One-line summary of an embedded map
 ```
 
-Full reference: see the [CLI docs](https://USER.github.io/rosetta-frida/cli/overview/).
+Full reference: see the [CLI docs](https://Xiddoc.github.io/rosetta-frida/cli/overview/).
 
 ## What rosetta-frida is _not_
 
@@ -184,16 +184,16 @@ want to try it now.
 
 ## Documentation
 
-The full documentation lives at **https://USER.github.io/rosetta-frida/**
+The full documentation lives at **https://Xiddoc.github.io/rosetta-frida/**
 (once the docs workflow runs on a `master` push to a configured
 GitHub Pages source):
 
-- [Getting started](https://USER.github.io/rosetta-frida/getting-started/quick-start/)
-- [API reference](https://USER.github.io/rosetta-frida/api/overview/) — every public surface
-- [Map authoring guide](https://USER.github.io/rosetta-frida/maps/authoring/)
-- [CLI reference](https://USER.github.io/rosetta-frida/cli/overview/)
-- [Recipes](https://USER.github.io/rosetta-frida/recipes/aidl-stub-hook/) — common patterns
-- [Design doc](https://USER.github.io/rosetta-frida/reference/design/) — architecture overview
+- [Getting started](https://Xiddoc.github.io/rosetta-frida/getting-started/quick-start/)
+- [API reference](https://Xiddoc.github.io/rosetta-frida/api/overview/) — every public surface
+- [Map authoring guide](https://Xiddoc.github.io/rosetta-frida/maps/authoring/)
+- [CLI reference](https://Xiddoc.github.io/rosetta-frida/cli/overview/)
+- [Recipes](https://Xiddoc.github.io/rosetta-frida/recipes/aidl-stub-hook/) — common patterns
+- [Design doc](https://Xiddoc.github.io/rosetta-frida/reference/design/) — architecture overview
 
 ## Testing
 
@@ -220,7 +220,7 @@ contracts in `src/types/`. To extend it:
 4. Run `npm run verify` before pushing. The 100% coverage gate is
    enforced in CI.
 
-See [CONTRIBUTING](https://USER.github.io/rosetta-frida/contributing/)
+See [CONTRIBUTING](https://Xiddoc.github.io/rosetta-frida/contributing/)
 for the longer version.
 
 ## License

@@ -4,9 +4,9 @@ site_description: >-
   per-version obfuscated names at Frida-attach time. Write hooks once,
   hook many versions.
 site_author: rosetta-frida contributors
-repo_url: https://github.com/rosetta-frida/rosetta-frida
-repo_name: rosetta-frida/rosetta-frida
-edit_uri: edit/main/docs/
+repo_url: https://github.com/Xiddoc/rosetta-frida
+repo_name: Xiddoc/rosetta-frida
+edit_uri: edit/master/docs/
 
 docs_dir: docs
 site_dir: site
