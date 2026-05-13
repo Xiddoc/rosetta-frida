@@ -1,14 +1,43 @@
 /**
  * Main entry point. Re-exports the public API.
  *
- * Wave 1 fills in: parse/load, resolver, marker.
- * Wave 2 fills in: session, proxy/use, hook, map, events.
- *
- * For Wave 0 this file is intentionally minimal — only type re-exports
- * and the error hierarchy are populated. The `rosetta` namespace itself
- * arrives once Wave 2 lands.
+ * Wave 1 (landed): parse/load, validate/schema, resolver, diagnostics, marker, convert.
+ * Wave 2 (pending): session lifecycle, proxy/use, hook, map, events surfaces.
  */
 
 export * from './errors.js';
 export * from './types/index.js';
-export { EventBus, formatEvent } from './log.js';
+
+// Diagnostics
+export { EventBus, formatEvent, createSilentBus } from './diagnostics/index.js';
+
+// Parse + validate
+export {
+    parseJsonc,
+    stripCommentsAndTrailingCommas,
+    loadMap,
+    looksLikeJsoncSource,
+} from './parse/index.js';
+export { validateMap, rosettaMapSchema } from './validate/index.js';
+
+// Resolver
+export { createResolver, ResolverImpl, makeSentinel, isSentinel } from './resolver/index.js';
+export type { CreateResolverOptions } from './resolver/index.js';
+
+// Marker block
+export {
+    BEGIN_MARKER,
+    BEGIN_REGISTRY,
+    END_MARKER,
+    END_REGISTRY,
+    MARKER_REGEX,
+    emitMarkerBlock,
+    emitMarkerRegistry,
+    parseMarkerBlock,
+    patchMarkerBlock,
+} from './marker/index.js';
+export type { ParsedMarker, ParsedSingle, ParsedRegistry } from './marker/index.js';
+
+// Converters
+export { yamlToMap, tsModuleToMap, convertToJsonc, renderJsonc } from './convert/index.js';
+export type { ConvertFormat } from './convert/index.js';

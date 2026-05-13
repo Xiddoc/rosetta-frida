@@ -7,3 +7,4 @@ coverage/
 CLAUDE.md
 package-lock.json
 maps/
+.claude/

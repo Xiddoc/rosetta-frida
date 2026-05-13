@@ -5,19 +5,28 @@
  * Wave 1C: implements `patch`, `extract`, `inspect`.
  * Wave 1D: implements `init`, `validate`, `convert`.
  *
- * Command bodies live in `cli/commands/<name>.ts` so they can be unit-
- * tested by directly invoking the exported `run*` functions with a
- * mock `CommandIo`. This file is the thin glue between `process.argv`
- * and those functions. It is excluded from coverage (`vitest.config.ts`)
- * because exercising it would require subprocess-spawning tests, and
- * the parsing/dispatch logic here is intentionally trivial.
+ * Command bodies live in `cli/commands/<name>.ts`. Two patterns coexist:
+ *   - Bundle-manipulation commands (patch/extract/inspect) take a
+ *     `CommandIo` for dependency-injected fs + stdout/stderr.
+ *   - Map-authoring commands (init/validate/convert) take an optional
+ *     `fsImpl` parameter and return their result value; the dispatch
+ *     layer here adapts that into an exit code + stdout/stderr writes.
+ *
+ * Both patterns are unit-tested via their own files; this dispatcher is
+ * excluded from coverage (vitest.config.ts) because exercising it would
+ * require subprocess-spawning tests and the logic here is intentionally
+ * trivial routing.
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
 
+import { RosettaError } from '../src/errors.js';
 import { runExtract } from './commands/extract.js';
 import { runInspect } from './commands/inspect.js';
 import { runPatch } from './commands/patch.js';
+import { runInit } from './commands/init.js';
+import { runValidate } from './commands/validate.js';
+import { runConvert } from './commands/convert.js';
 import type { CommandIo } from './commands/io.js';
 
 const COMMANDS = ['init', 'validate', 'convert', 'patch', 'extract', 'inspect'] as const;
@@ -32,11 +41,54 @@ function printUsage(stderr: (line: string) => void): void {
     stderr('');
     stderr('Commands:');
     stderr('  init <app> <version>                 Scaffold a new map skeleton');
-    stderr('  validate <map.json>                  Schema + sanity check');
-    stderr('  convert <in> -o <out>                Convert YAML/TS module to JSONC');
+    stderr('  validate <map>                       Schema + sanity check (auto-detect format)');
+    stderr('  convert <in> -o <out>                Convert YAML/TS module to canonical JSONC');
     stderr('  patch <bundle.js> --map <new.json>   Replace embedded map in bundle');
     stderr('  extract <bundle.js> -o <out.json>    Pull embedded map out of bundle');
     stderr('  inspect <bundle.js>                  One-line summary of embedded map');
+}
+
+async function dispatch(cmd: Command, args: readonly string[], io: CommandIo): Promise<number> {
+    // CommandIo pattern (Wave 1C): bundle-manipulation commands.
+    switch (cmd) {
+        case 'patch':
+            return runPatch(args, io);
+        case 'extract':
+            return runExtract(args, io);
+        case 'inspect':
+            return runInspect(args, io);
+        default:
+            break;
+    }
+
+    // Map-authoring pattern (Wave 1D): commands return values; we adapt.
+    try {
+        switch (cmd) {
+            case 'init': {
+                const out = await runInit(args);
+                io.stdout(`wrote ${out}`);
+                return 0;
+            }
+            case 'validate': {
+                const result = await runValidate(args);
+                const write = result.ok ? io.stdout : io.stderr;
+                for (const line of result.output) write(line);
+                return result.ok ? 0 : 1;
+            }
+            case 'convert': {
+                const out = await runConvert(args);
+                io.stdout(`wrote ${out}`);
+                return 0;
+            }
+        }
+    } catch (e) {
+        if (e instanceof RosettaError) {
+            io.stderr(`error: ${e.message}`);
+        } else {
+            io.stderr(`error: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        return 1;
+    }
 }
 
 async function main(): Promise<number> {
@@ -56,21 +108,7 @@ async function main(): Promise<number> {
         printUsage(io.stderr);
         return 1;
     }
-
-    const rest = process.argv.slice(3);
-    switch (cmd) {
-        case 'patch':
-            return runPatch(rest, io);
-        case 'extract':
-            return runExtract(rest, io);
-        case 'inspect':
-            return runInspect(rest, io);
-        case 'init':
-        case 'validate':
-        case 'convert':
-            io.stderr(`command '${cmd}' not yet implemented (waiting on Wave 1D)`);
-            return 1;
-    }
+    return dispatch(cmd, process.argv.slice(3), io);
 }
 
 main().then(

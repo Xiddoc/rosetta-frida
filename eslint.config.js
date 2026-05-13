@@ -11,6 +11,7 @@ export default tseslint.config(
             'eslint.config.js',
             'vitest.config.ts',
             'maps/**',
+            '.claude/**',
         ],
     },
     js.configs.recommended,
