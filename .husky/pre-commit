@@ -1,8 +1,11 @@
-# rosetta-frida pre-commit hook — the FAST half.
+# rosetta-frida pre-commit hook — fast, scoped.
 #
-# Runs typecheck + lint + format:check. The full test suite + 100%
-# coverage gate runs in pre-push (and again in CI), so this hook only
-# blocks commits on the static-analysis checks.
+# Runs `lint-staged` which fixes ESLint issues + Prettier formatting on
+# JUST the files you've staged. Typically completes in ~1-2 s.
 #
-# Bypass with `git commit --no-verify` if you need to commit WIP.
-npm run verify:fast
+# Coverage / typecheck / repo-wide lint run at pre-push time (see
+# .husky/pre-push) so the slow checks still gate before code leaves
+# your machine.
+#
+# Bypass with `git commit --no-verify` for WIP commits.
+npx lint-staged

@@ -54,6 +54,7 @@
         "@vitest/coverage-v8": "^2.0.0",
         "eslint": "^9.0.0",
         "husky": "^9.1.7",
+        "lint-staged": "^17.0.4",
         "prettier": "^3.3.0",
         "tsx": "^4.16.0",
         "typescript": "^5.5.0",
@@ -67,5 +68,14 @@
         "reverse-engineering",
         "instrumentation"
     ],
-    "license": "MIT"
+    "license": "MIT",
+    "lint-staged": {
+        "*.{ts,js,mjs,cjs}": [
+            "eslint --fix --max-warnings 0",
+            "prettier --write"
+        ],
+        "*.{md,yml,yaml,json}": [
+            "prettier --write"
+        ]
+    }
 }

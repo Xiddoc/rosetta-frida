@@ -1,10 +1,16 @@
-# rosetta-frida pre-push hook — the SLOW half.
+# rosetta-frida pre-push hook — the full CI mirror.
 #
-# Runs the full test suite + 100% coverage gate. Combined with the
-# pre-commit hook (typecheck + lint + format:check), this matches what
-# CI runs end-to-end. Catches coverage regressions before they reach
-# GitHub.
+# Runs `npm run verify`: typecheck + lint (repo-wide) + format:check
+# + the full test suite with the 100% coverage gate. This is exactly
+# what GitHub Actions runs, so a green pre-push is a green CI.
 #
-# Bypass with `git push --no-verify` if you need to push WIP and trust
-# CI to catch issues. Discouraged on the master branch.
-npm run test:coverage
+# Pre-commit only lints the staged files (via lint-staged) for speed —
+# this hook catches:
+#   - typecheck failures
+#   - lint regressions in files you DIDN'T touch this commit
+#   - format drift outside your staged set
+#   - test failures or coverage drops
+#
+# Bypass with `git push --no-verify` for WIP branches. Discouraged on
+# master.
+npm run verify
