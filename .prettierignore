@@ -1,6 +1,7 @@
 dist/
 node_modules/
 coverage/
+site/
 *.bundle.js
 .gitignore
 .prettierignore
@@ -8,3 +9,5 @@ CLAUDE.md
 package-lock.json
 maps/
 .claude/
+docs/
+mkdocs.yml
