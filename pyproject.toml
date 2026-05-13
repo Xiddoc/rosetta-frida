@@ -1,0 +1,28 @@
+# Python tooling configuration for rosetta-frida.
+#
+# This project is npm-published (TypeScript / JavaScript library) — the
+# Python side is purely for building the mkdocs-material documentation
+# site under docs/.
+#
+# Install with uv:
+#     uv pip install --system .
+#
+# Or, for an isolated env:
+#     uv sync
+#     uv run mkdocs build --strict
+
+[project]
+name = "rosetta-frida-docs"
+version = "0.0.0"
+description = "Documentation build dependencies for the rosetta-frida npm library."
+requires-python = ">=3.10"
+dependencies = [
+    "mkdocs-material>=9.5.0",
+    "pymdown-extensions",
+    "mkdocs-mermaid2-plugin",
+]
+
+[tool.uv]
+# This isn't a publishable Python package; uv treats it as a workspace
+# for managing the docs build environment.
+package = false

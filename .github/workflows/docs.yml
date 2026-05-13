@@ -27,15 +27,16 @@ jobs:
               uses: astral-sh/setup-uv@v3
               with:
                   enable-cache: true
-                  cache-dependency-glob: requirements-docs.txt
+                  cache-dependency-glob: pyproject.toml
 
             - name: Set up Python via uv
               run: uv python install 3.12
 
-            - name: Install mkdocs-material + plugins
+            - name: Install docs dependencies
+              # Reads `[project].dependencies` from pyproject.toml.
               # `--system` installs into the action's Python so the
               # `mkdocs build` step finds packages without venv activation.
-              run: uv pip install --system -r requirements-docs.txt
+              run: uv pip install --system .
 
             - name: Build site (strict — fails on broken links / missing nav)
               run: mkdocs build --strict --site-dir _site
