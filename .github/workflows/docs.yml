@@ -32,14 +32,20 @@ jobs:
             - name: Set up Python via uv
               run: uv python install 3.12
 
-            - name: Install docs dependencies
-              # Reads `[project].dependencies` from pyproject.toml.
-              # `--system` installs into the action's Python so the
-              # `mkdocs build` step finds packages without venv activation.
-              run: uv pip install --system .
+            - name: Sync docs dependencies into .venv
+              # Reads `[project].dependencies` from pyproject.toml and
+              # installs them into a project-local `.venv`. We don't use
+              # `pip install --system` because modern Ubuntu marks the
+              # runner's system Python as PEP-668 "externally managed".
+              # `uv sync` honors `[tool.uv].package = false` from our
+              # pyproject.toml so it just builds the venv without trying
+              # to install the project itself.
+              run: uv sync
 
             - name: Build site (strict — fails on broken links / missing nav)
-              run: mkdocs build --strict --site-dir _site
+              # `uv run` activates the .venv automatically; mkdocs +
+              # plugins resolve out of it.
+              run: uv run mkdocs build --strict --site-dir _site
 
             - name: Upload Pages artifact
               uses: actions/upload-pages-artifact@v3
