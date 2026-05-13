@@ -1,0 +1,9 @@
+# rosetta-frida pre-commit hook.
+#
+# Mirrors the GitHub Actions CI verify pipeline:
+#   typecheck → lint → format:check → test:coverage (100% gate)
+#
+# Bypass with `git commit --no-verify` if you genuinely need to commit
+# WIP work that doesn't pass these checks (rare; CI will catch it
+# eventually anyway).
+npm run verify
