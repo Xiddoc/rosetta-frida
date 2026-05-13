@@ -4,6 +4,6 @@
         "noEmit": true,
         "types": ["frida-gum", "node", "vitest/globals"]
     },
-    "include": ["src/**/*.ts", "cli/**/*.ts", "tests/**/*.ts"],
+    "include": ["src/**/*.ts", "cli/**/*.ts", "tests/**/*.ts", "examples/**/*.ts"],
     "exclude": ["node_modules", "dist"]
 }
