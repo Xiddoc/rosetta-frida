@@ -18,7 +18,9 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                node: ['18.18.0', '20', '22']
+                # Node 24 (current LTS) + 26 (current). GitHub Actions
+                # is phasing out older versions; we don't support <24.
+                node: ['24', '26']
 
         steps:
             - uses: actions/checkout@v4
@@ -45,7 +47,7 @@ jobs:
               run: npm run test:coverage
 
             - name: Upload coverage report
-              if: matrix.node == '22'
+              if: matrix.node == '24'
               uses: actions/upload-artifact@v4
               with:
                   name: coverage
@@ -62,7 +64,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: '22'
+                  node-version: '24'
                   cache: npm
 
             - run: npm ci
