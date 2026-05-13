@@ -1,0 +1,67 @@
+/*
+ * Dracula-flavored Material overrides.
+ *
+ * Material's "slate + deep purple + pink" palette already lands close
+ * to Dracula's foreground/accent feel; these overrides pull the
+ * background and code-block colors directly onto the canonical
+ * Dracula hues (https://draculatheme.com/contribute) so the dark
+ * scheme actually looks Dracula-y end-to-end.
+ */
+
+:root > * {
+  --md-default-fg-color: hsla(60, 30%, 96%, 1);
+  --md-default-fg-color--light: hsla(60, 30%, 88%, 0.7);
+  --md-default-fg-color--lighter: hsla(60, 30%, 88%, 0.3);
+  --md-default-fg-color--lightest: hsla(60, 30%, 88%, 0.07);
+}
+
+[data-md-color-scheme="slate"] {
+  /* Dracula canonical: background #282a36, current line #44475a,
+     foreground #f8f8f2, comment #6272a4. */
+  --md-default-bg-color: #282a36;
+  --md-default-bg-color--light: hsla(231, 15%, 26%, 0.54);
+  --md-default-bg-color--lighter: hsla(231, 15%, 32%, 0.26);
+  --md-default-bg-color--lightest: hsla(231, 15%, 50%, 0.07);
+
+  --md-default-fg-color: #f8f8f2;
+  --md-default-fg-color--light: #f8f8f2cc;
+  --md-default-fg-color--lighter: #f8f8f266;
+  --md-default-fg-color--lightest: #f8f8f233;
+
+  --md-typeset-color: #f8f8f2;
+  --md-typeset-a-color: #bd93f9;
+
+  /* Dracula purple */
+  --md-primary-fg-color: #bd93f9;
+  --md-primary-fg-color--light: #d6acff;
+  --md-primary-fg-color--dark: #9576d8;
+  --md-primary-bg-color: #282a36;
+  --md-primary-bg-color--light: hsla(231, 15%, 26%, 0.7);
+
+  /* Dracula pink as accent */
+  --md-accent-fg-color: #ff79c6;
+  --md-accent-fg-color--transparent: #ff79c61f;
+  --md-accent-bg-color: #ffffff;
+  --md-accent-bg-color--light: #ffffffcc;
+
+  --md-code-bg-color: #21222c;
+  --md-code-fg-color: #f8f8f2;
+
+  /* Admonition default tinting against the Dracula bg. */
+  --md-admonition-bg-color: hsla(231, 15%, 26%, 0.4);
+}
+
+/* Code-block syntax tinting toward Dracula tokens. */
+[data-md-color-scheme="slate"] .highlight {
+  --md-code-hl-comment-color: #6272a4;
+  --md-code-hl-string-color: #f1fa8c;
+  --md-code-hl-number-color: #bd93f9;
+  --md-code-hl-keyword-color: #ff79c6;
+  --md-code-hl-name-color: #50fa7b;
+  --md-code-hl-operator-color: #ff79c6;
+  --md-code-hl-punctuation-color: #f8f8f2;
+  --md-code-hl-function-color: #8be9fd;
+  --md-code-hl-variable-color: #f8f8f2;
+  --md-code-hl-constant-color: #bd93f9;
+  --md-code-hl-special-color: #ffb86c;
+}

@@ -1,0 +1,152 @@
+site_name: rosetta-frida
+site_description: >-
+  Translate real (unobfuscated) Java class, method, and field names to
+  per-version obfuscated names at Frida-attach time. Write hooks once,
+  hook many versions.
+site_author: rosetta-frida contributors
+repo_url: https://github.com/rosetta-frida/rosetta-frida
+repo_name: rosetta-frida/rosetta-frida
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - search.share
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+    - content.action.edit
+  palette:
+    # Dracula-flavored Material palettes — switchable.
+    # Default: dark Dracula-style.
+    - scheme: slate
+      media: "(prefers-color-scheme: dark)"
+      primary: deep purple
+      accent: pink
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+    - scheme: default
+      media: "(prefers-color-scheme: light)"
+      primary: deep purple
+      accent: pink
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/rosetta-frida/rosetta-frida
+    - icon: fontawesome/brands/npm
+      link: https://www.npmjs.com/package/rosetta-frida
+
+extra_css:
+  - assets/dracula.css
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      title: On this page
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search:
+      lang: en
+  - mermaid2:
+      version: 10.9.0
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Quick start: getting-started/quick-start.md
+      - Concepts: getting-started/concepts.md
+  - API:
+      - Overview: api/overview.md
+      - Session: api/session.md
+      - Tier 1 — declarative hooks: api/tier-1.md
+      - Tier 2 — Java.use-shaped: api/tier-2.md
+      - Tier 3 — low-level: api/tier-3.md
+  - Maps:
+      - Format reference: maps/format.md
+      - Authoring: maps/authoring.md
+      - Marker block: maps/marker-block.md
+      - Conversion: maps/conversion.md
+  - CLI:
+      - Overview: cli/overview.md
+      - rosetta init: cli/init.md
+      - rosetta validate: cli/validate.md
+      - rosetta convert: cli/convert.md
+      - rosetta patch: cli/patch.md
+      - rosetta extract: cli/extract.md
+      - rosetta inspect: cli/inspect.md
+  - Recipes:
+      - AIDL stub hooks: recipes/aidl-stub-hook.md
+      - Overloaded methods: recipes/overloaded-methods.md
+      - Field access: recipes/field-access.md
+      - Multi-version bundles: recipes/multi-version-bundle.md
+      - Debugging: recipes/debugging.md
+      - frida-compile integration: recipes/frida-compile-integration.md
+  - Reference:
+      - Errors: reference/errors.md
+      - Types: reference/types.md
+      - Events: reference/events.md
+      - Design: reference/design.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md
