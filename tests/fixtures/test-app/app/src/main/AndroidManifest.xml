@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Manifest for the rosetta-frida synthetic test app.
+
+    Declares the RemoteService binder.  No launcher activity — this
+    fixture exists to be statically analyzed and Frida-hooked, not
+    interactively run.  ApplicationId pins the rosetta-frida (app,
+    version) tuple to com.example.testapp@<versionName>.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:label="Rosetta Test App"
+        android:allowBackup="false">
+
+        <service
+            android:name="com.example.testapp.RemoteService"
+            android:exported="false" />
+
+    </application>
+
+</manifest>

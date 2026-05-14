@@ -1,0 +1,115 @@
+# ──────────────────────────────────────────────────────────────────────
+# Pinned obfuscation seed for the v1.0.0 fixture build.
+#
+# This file is consumed by R8's `-applymapping` directive.  Any class /
+# method / field listed here is forced to the obfuscated name on the
+# right of the `->`.  Anything NOT listed gets R8's default rotation.
+#
+# Lines starting with `#` are comments (standard ProGuard mapping
+# convention).  The format is:
+#
+#   <real.fqn> -> <obfuscated>:
+#       <real-return-type> <real-field-or-method-name>... -> <obf>
+#
+# Real return types / arg types are mandatory for methods so R8 can
+# disambiguate overloads.
+#
+# Compare against seeds/v1.1.0.applymapping.txt — that file mimics a
+# realistic minor-version rotation.  See the README for the rotation
+# matrix.
+# ──────────────────────────────────────────────────────────────────────
+
+# ── AIDL-anchored classes (stay at real names; -keep in proguard-rules) ──
+# IRemoteService, IRemoteService$Stub, IServiceCallback, IServiceCallback$Stub
+# are not listed here — they aren't obfuscated at all.
+
+# ── RemoteService — pins to `aaaa` ────────────────────────────────────
+com.example.testapp.RemoteService -> aaaa:
+    java.lang.String ROSETTA_ANCHOR -> a
+    int requestCounter -> b
+    java.lang.String lastTag -> c
+    com.example.testapp.IRemoteService$Stub binder -> d
+    void safeError(com.example.testapp.IServiceCallback,int,java.lang.String) -> a
+
+# ── Anonymous Runnable inside RemoteService.requestPrompt ─────────────
+com.example.testapp.RemoteService$1 -> bbbb:
+    com.example.testapp.RemoteService this$0 -> a
+    android.os.Bundle val$params -> b
+    com.example.testapp.IServiceCallback val$callback -> c
+    void run() -> run
+
+# ── BlobCache — pins to `cccc`, method letters `c`/`d`/`e`/`f`/`g` ──────
+com.example.testapp.BlobCache -> cccc:
+    java.lang.String ROSETTA_ANCHOR -> a
+    int MAX_SIZE -> b
+    int instanceCount -> c
+    com.example.testapp.BlobCache singleton -> d
+    java.util.HashMap buffer -> e
+    java.lang.String lastEvictedKey -> f
+    com.example.testapp.BlobCache getInstance() -> a
+    java.lang.Object get(java.lang.String) -> c
+    void put(java.lang.String,java.lang.Object) -> d
+    void put(java.lang.String,java.lang.Object,long) -> e
+    void evict(java.lang.String) -> f
+    void clear() -> g
+
+# ── Config — pins to `dddd` ───────────────────────────────────────────
+com.example.testapp.Config -> dddd:
+    java.lang.String ROSETTA_ANCHOR -> a
+    boolean ENABLE_TRACING -> b
+    int MAX_RETRIES -> c
+    long TIMEOUT_MILLIS -> d
+    java.lang.String ENDPOINT_URL -> e
+    int currentDebugLevel -> f
+
+# ── Ticket — pins to `eeee` ────────────────────────────────────────────
+com.example.testapp.Ticket -> eeee:
+    java.lang.String value -> a
+    long expiryMillis -> b
+    com.example.testapp.Ticket fromBytes(byte[]) -> a
+    java.lang.String getValue() -> b
+    long getExpiry() -> c
+
+# ── Ticket$Companion (synthetic-style nested) ──────────────────────────
+com.example.testapp.Ticket$Companion -> ffff:
+    com.example.testapp.Ticket create(java.lang.String) -> a
+
+# ── Ticket$Reader (inner instance class with synthetic accessor calls) ──
+com.example.testapp.Ticket$Reader -> gggg:
+    com.example.testapp.Ticket this$0 -> a
+    java.lang.String readValue() -> a
+    long readExpiry() -> b
+
+# ── ErrorCode — pins to `hhhh` (enum) ─────────────────────────────────
+com.example.testapp.ErrorCode -> hhhh:
+    com.example.testapp.ErrorCode SUCCESS -> a
+    com.example.testapp.ErrorCode TIMEOUT -> b
+    com.example.testapp.ErrorCode AUTH_FAILED -> c
+    int code -> d
+    com.example.testapp.ErrorCode[] $VALUES -> e
+    int getCode() -> a
+
+# ── AbstractServiceClient — pins to `iiii` ────────────────────────────
+com.example.testapp.AbstractServiceClient -> iiii:
+    int INSTANCE_COUNT -> a
+    android.content.Context context -> b
+    void connect() -> a
+    void disconnect() -> b
+    java.lang.Runnable retryHandle() -> c
+
+# ── AbstractServiceClient$1 (anonymous Runnable for retry) ────────────
+com.example.testapp.AbstractServiceClient$1 -> jjjj:
+    com.example.testapp.AbstractServiceClient this$0 -> a
+    void run() -> run
+
+# ── RemoteServiceClient — pins to `kkkk` ──────────────────────────────
+com.example.testapp.RemoteServiceClient -> kkkk:
+    java.lang.String sessionId -> c
+    int flags -> d
+    void connect() -> a
+    com.example.testapp.Ticket requestTicket(android.os.Bundle) -> c
+    java.lang.Object apply(java.lang.Object) -> e
+
+# ── PromiseCallback interface — pins to `llll` ────────────────────────
+com.example.testapp.PromiseCallback -> llll:
+    java.lang.Object apply(java.lang.Object) -> a

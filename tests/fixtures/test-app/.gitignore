@@ -1,0 +1,8 @@
+# Gradle / Android build artifacts — never committed.
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.cxx/
