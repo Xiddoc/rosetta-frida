@@ -11,3 +11,7 @@ maps/
 .claude/
 docs/
 mkdocs.yml
+# Test-app fixture is documentation + hand-aligned tables; prettier
+# wants to reflow the rotation matrix table which loses the visual
+# alignment authors rely on when reading the seed-vs-rotation diff.
+tests/fixtures/test-app/README.md
