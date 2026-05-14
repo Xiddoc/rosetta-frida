@@ -1,0 +1,221 @@
+name: Pipeline CI
+
+# Wave-2 integration test: build both test-app APKs, run them through
+# sigmatcher → adapter, and diff the result against the hand-authored
+# goldens. Triggered only on paths that can affect the pipeline so we
+# don't burn minutes on docs / unrelated source edits.
+
+on:
+    push:
+        branches: [master]
+        paths:
+            - 'tests/fixtures/test-app/**'
+            - 'tools/adapters/**'
+            - 'src/parse/**'
+            - 'src/validate/**'
+            - '.github/workflows/pipeline.yml'
+    pull_request:
+        branches: [master]
+        paths:
+            - 'tests/fixtures/test-app/**'
+            - 'tools/adapters/**'
+            - 'src/parse/**'
+            - 'src/validate/**'
+            - '.github/workflows/pipeline.yml'
+    # Weekly canary at Monday 13:00 UTC — after the existing CI's
+    # window of activity but still well within US-Pacific business
+    # hours, so any infra rot (sigmatcher pin drift, AGP changes,
+    # Gradle distribution availability) surfaces same-week.
+    schedule:
+        - cron: '0 13 * * MON'
+    workflow_dispatch: {}
+
+concurrency:
+    group: pipeline-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    pipeline:
+        name: build + sigmatcher + adapter + golden-diff
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up JDK 17 (Temurin)
+              uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: '17'
+
+            - name: Set up Android SDK
+              uses: android-actions/setup-android@v3
+
+            - name: Set up Node.js 24
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: npm
+
+            - name: Install uv (for sigmatcher install)
+              uses: astral-sh/setup-uv@v3
+              with:
+                  enable-cache: true
+
+            - name: Install sigmatcher (pinned)
+              # sigmatcher 1.9.2 is the version the goldens / adapter
+              # were authored against. Bump only with a matching
+              # regenerate-goldens.sh pass.
+              run: uv tool install sigmatcher==1.9.2
+
+            - name: Install OS dependencies (apktool + ripgrep)
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y ripgrep apktool
+
+            - name: Install npm dependencies (npm ci)
+              run: npm ci
+
+            # ── Caching ───────────────────────────────────────────────
+            - name: Cache Gradle dependencies
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.gradle/caches
+                      ~/.gradle/wrapper
+                  key: gradle-${{ runner.os }}-${{ hashFiles('tests/fixtures/test-app/**/*.gradle.kts', 'tests/fixtures/test-app/gradle.properties', 'tests/fixtures/test-app/gradle/wrapper/gradle-wrapper.properties') }}
+                  restore-keys: |
+                      gradle-${{ runner.os }}-
+
+            - name: Cache sigmatcher analysis directory
+              uses: actions/cache@v4
+              with:
+                  path: ${{ runner.temp }}/sigmatcher-cache
+                  # Cache key keyed on the signatures YAML + APK seeds —
+                  # both seeds force-pin obfuscation, so a cached
+                  # apktool unpack from a previous run is still valid if
+                  # the seeds didn't change.
+                  key: sigmatcher-${{ runner.os }}-${{ hashFiles('tests/fixtures/test-app/signatures/test-app.yaml', 'tests/fixtures/test-app/app/seeds/**') }}
+                  restore-keys: |
+                      sigmatcher-${{ runner.os }}-
+
+            # ── Build both APKs ───────────────────────────────────────
+            - name: Build v1.0.0 APK
+              working-directory: tests/fixtures/test-app
+              run: ./gradlew --quiet :app:assembleRelease -PapplyMapping=v1.0.0
+
+            - name: Capture v1.0.0 APK
+              run: cp tests/fixtures/test-app/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/v1.0.0.apk
+
+            - name: Build v1.1.0 APK
+              working-directory: tests/fixtures/test-app
+              run: ./gradlew --quiet :app:assembleRelease -PapplyMapping=v1.1.0
+
+            - name: Capture v1.1.0 APK
+              run: cp tests/fixtures/test-app/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/v1.1.0.apk
+
+            # ── Per-version sigmatcher + adapter + diff ───────────────
+            - name: Prepare aux maps for the adapter
+              run: |
+                  mkdir -p /tmp/pipeline
+                  cat > /tmp/pipeline/methodNameMap.json <<'EOF'
+                  {
+                      "put_2arg": "put",
+                      "put_3arg": "put"
+                  }
+                  EOF
+                  cat > /tmp/pipeline/classKindMap.json <<'EOF'
+                  {
+                      "com.example.testapp.IRemoteService$Stub": "aidl_stub",
+                      "com.example.testapp.IServiceCallback$Stub": "aidl_stub",
+                      "com.example.testapp.IServiceCallback": "aidl_callback",
+                      "com.example.testapp.Config": "class",
+                      "com.example.testapp.BlobCache": "class",
+                      "com.example.testapp.RemoteService": "class",
+                      "com.example.testapp.RemoteService$1": "anonymous",
+                      "com.example.testapp.Ticket": "class",
+                      "com.example.testapp.Ticket$Companion": "synthetic",
+                      "com.example.testapp.Ticket$Reader": "class",
+                      "com.example.testapp.ErrorCode": "enum",
+                      "com.example.testapp.AbstractServiceClient": "class",
+                      "com.example.testapp.AbstractServiceClient$1": "anonymous",
+                      "com.example.testapp.RemoteServiceClient": "class",
+                      "com.example.testapp.PromiseCallback": "interface"
+                  }
+                  EOF
+
+            - name: Run sigmatcher (v1.0.0)
+              run: |
+                  sigmatcher analyze /tmp/v1.0.0.apk \
+                      --signatures tests/fixtures/test-app/signatures/test-app.yaml \
+                      --output-format raw \
+                      --output-file /tmp/pipeline/v1.0.0.raw.json \
+                      --no-progress \
+                      --cache-dir "${{ runner.temp }}/sigmatcher-cache"
+
+            - name: Run adapter (v1.0.0)
+              run: |
+                  npx tsx tools/adapters/sigmatcher-cli.ts \
+                      /tmp/pipeline/v1.0.0.raw.json \
+                      --app com.example.testapp \
+                      --version 1.0.0 \
+                      --method-name-map /tmp/pipeline/methodNameMap.json \
+                      --class-kind-map  /tmp/pipeline/classKindMap.json \
+                      -o /tmp/pipeline/v1.0.0.actual.jsonc
+
+            - name: Validate emitted map (v1.0.0)
+              run: npm run --silent cli -- validate /tmp/pipeline/v1.0.0.actual.jsonc
+
+            - name: Diff vs golden (v1.0.0)
+              run: |
+                  if ! diff -u tests/fixtures/test-app/expected/v1.0.0.jsonc /tmp/pipeline/v1.0.0.actual.jsonc; then
+                      echo "::error::v1.0.0 emitted map does not match the golden"
+                      exit 1
+                  fi
+                  echo "v1.0.0 OK"
+
+            - name: Run sigmatcher (v1.1.0)
+              run: |
+                  sigmatcher analyze /tmp/v1.1.0.apk \
+                      --signatures tests/fixtures/test-app/signatures/test-app.yaml \
+                      --output-format raw \
+                      --output-file /tmp/pipeline/v1.1.0.raw.json \
+                      --no-progress \
+                      --cache-dir "${{ runner.temp }}/sigmatcher-cache"
+
+            - name: Run adapter (v1.1.0)
+              run: |
+                  npx tsx tools/adapters/sigmatcher-cli.ts \
+                      /tmp/pipeline/v1.1.0.raw.json \
+                      --app com.example.testapp \
+                      --version 1.1.0 \
+                      --method-name-map /tmp/pipeline/methodNameMap.json \
+                      --class-kind-map  /tmp/pipeline/classKindMap.json \
+                      -o /tmp/pipeline/v1.1.0.actual.jsonc
+
+            - name: Validate emitted map (v1.1.0)
+              run: npm run --silent cli -- validate /tmp/pipeline/v1.1.0.actual.jsonc
+
+            - name: Diff vs golden (v1.1.0)
+              run: |
+                  if ! diff -u tests/fixtures/test-app/expected/v1.1.0.jsonc /tmp/pipeline/v1.1.0.actual.jsonc; then
+                      echo "::error::v1.1.0 emitted map does not match the golden"
+                      exit 1
+                  fi
+                  echo "v1.1.0 OK"
+
+            # ── Artifacts on failure (or always, for spelunking) ──────
+            - name: Upload pipeline artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: pipeline-${{ github.run_id }}
+                  retention-days: 14
+                  path: |
+                      /tmp/v1.0.0.apk
+                      /tmp/v1.1.0.apk
+                      /tmp/pipeline/v1.0.0.raw.json
+                      /tmp/pipeline/v1.1.0.raw.json
+                      /tmp/pipeline/v1.0.0.actual.jsonc
+                      /tmp/pipeline/v1.1.0.actual.jsonc

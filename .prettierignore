@@ -11,3 +11,8 @@ maps/
 .claude/
 docs/
 mkdocs.yml
+# Golden maps under expected/ are JSONC; prettier defaults to trailing
+# commas, but our in-tree JSONC stripper in cli/commands/validate.ts
+# doesn't handle them yet. The canonical maps/ tree is ignored for the
+# same reason — keep these in step.
+tests/fixtures/test-app/expected/

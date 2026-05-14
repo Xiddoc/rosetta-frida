@@ -1,0 +1,267 @@
+// rosetta-frida golden map — com.example.testapp @ 1.1.0
+//
+// Hand-authored from seeds/v1.1.0.applymapping.txt. The structural
+// shape (set of real class names, methods, fields) is identical to
+// the v1.0.0 golden — what changes is the `obfuscated` short names,
+// per the rotation matrix in tests/fixtures/test-app/README.md.
+//
+// Re-generate via:
+//
+//   ./tests/fixtures/test-app/regenerate-goldens.sh
+//
+// after intentionally changing signatures or the schema. Review the
+// diff and commit the regenerated file alongside the change that
+// motivated it.
+{
+    "schema_version": 1,
+    "app": "com.example.testapp",
+    "version": "1.1.0",
+    "sources": [{ "tool": "sigmatcher", "classes": 16 }],
+    "classes": {
+        // ── AIDL-anchored: names never rotate ─────────────────────────
+        "com.example.testapp.IRemoteService": {
+            "obfuscated": "IRemoteService",
+            "source": "sigmatcher"
+        },
+        "com.example.testapp.IRemoteService$Stub": {
+            "obfuscated": "IRemoteService$Stub",
+            "kind": "aidl_stub",
+            "source": "sigmatcher"
+        },
+        "com.example.testapp.IServiceCallback": {
+            "obfuscated": "IServiceCallback",
+            "kind": "aidl_callback",
+            "source": "sigmatcher"
+        },
+        "com.example.testapp.IServiceCallback$Stub": {
+            "obfuscated": "IServiceCallback$Stub",
+            "kind": "aidl_stub",
+            "source": "sigmatcher"
+        },
+        // ── R8 rotated classes ────────────────────────────────────────
+        // Config — fields shuffle: MAX_RETRIES c→d, TIMEOUT_MILLIS d→c.
+        "com.example.testapp.Config": {
+            "obfuscated": "ddde",
+            "kind": "class",
+            "source": "sigmatcher",
+            "fields": {
+                "ROSETTA_ANCHOR": { "obfuscated": "a", "type": "Ljava/lang/String;" },
+                "ENABLE_TRACING": { "obfuscated": "b", "type": "Z" },
+                "MAX_RETRIES": { "obfuscated": "d", "type": "I" },
+                "TIMEOUT_MILLIS": { "obfuscated": "c", "type": "J" },
+                "ENDPOINT_URL": { "obfuscated": "e", "type": "Ljava/lang/String;" },
+                "currentDebugLevel": { "obfuscated": "f", "type": "I" }
+            }
+        },
+        // BlobCache — class stays at `cccc`, methods stable.
+        "com.example.testapp.BlobCache": {
+            "obfuscated": "cccc",
+            "kind": "class",
+            "source": "sigmatcher",
+            "methods": {
+                "get": {
+                    "obfuscated": "c",
+                    "signature": "(Ljava/lang/String;)Ljava/lang/Object;"
+                },
+                "put": [
+                    {
+                        "obfuscated": "d",
+                        "signature": "(Ljava/lang/String;Ljava/lang/Object;)V"
+                    },
+                    {
+                        "obfuscated": "e",
+                        "signature": "(Ljava/lang/String;Ljava/lang/Object;J)V"
+                    }
+                ],
+                "evict": {
+                    "obfuscated": "f",
+                    "signature": "(Ljava/lang/String;)V"
+                },
+                "clear": {
+                    "obfuscated": "g",
+                    "signature": "()V"
+                }
+            },
+            "fields": {
+                "ROSETTA_ANCHOR": { "obfuscated": "a", "type": "Ljava/lang/String;" },
+                "MAX_SIZE": { "obfuscated": "b", "type": "I" },
+                "instanceCount": { "obfuscated": "c", "type": "I" },
+                "buffer": { "obfuscated": "e", "type": "Ljava/util/HashMap;" },
+                "lastEvictedKey": { "obfuscated": "f", "type": "Ljava/lang/String;" }
+            }
+        },
+        // RemoteService — rotates aaaa → aaab; methods stable.
+        "com.example.testapp.RemoteService": {
+            "obfuscated": "aaab",
+            "kind": "class",
+            "source": "sigmatcher",
+            "methods": {
+                "safeError": {
+                    "obfuscated": "a",
+                    "signature": "(Lcom/example/testapp/IServiceCallback;ILjava/lang/String;)V"
+                }
+            },
+            "fields": {
+                "ROSETTA_ANCHOR": { "obfuscated": "a", "type": "Ljava/lang/String;" },
+                "requestCounter": { "obfuscated": "b", "type": "I" },
+                "lastTag": { "obfuscated": "c", "type": "Ljava/lang/String;" },
+                "binder": {
+                    "obfuscated": "d",
+                    "type": "Lcom/example/testapp/IRemoteService$Stub;"
+                }
+            }
+        },
+        // RemoteService$1 — bbbb → bbbc. Note this$0 type rotates too.
+        "com.example.testapp.RemoteService$1": {
+            "obfuscated": "bbbc",
+            "kind": "anonymous",
+            "source": "sigmatcher",
+            "methods": {
+                "run": { "obfuscated": "run", "signature": "()V" }
+            },
+            "fields": {
+                "this$0": { "obfuscated": "a", "type": "Laaab;" },
+                "val$params": { "obfuscated": "b", "type": "Landroid/os/Bundle;" },
+                "val$callback": {
+                    "obfuscated": "c",
+                    "type": "Lcom/example/testapp/IServiceCallback;"
+                }
+            }
+        },
+        // Ticket — eeee → eeef. Methods stable; return types rotate.
+        "com.example.testapp.Ticket": {
+            "obfuscated": "eeef",
+            "kind": "class",
+            "source": "sigmatcher",
+            "methods": {
+                "fromBytes": {
+                    "obfuscated": "a",
+                    "signature": "([B)Leeef;"
+                },
+                "getValue": {
+                    "obfuscated": "b",
+                    "signature": "()Ljava/lang/String;"
+                },
+                "getExpiry": {
+                    "obfuscated": "c",
+                    "signature": "()J"
+                }
+            },
+            "fields": {
+                "value": { "obfuscated": "a", "type": "Ljava/lang/String;" },
+                "expiryMillis": { "obfuscated": "b", "type": "J" }
+            }
+        },
+        // Ticket$Companion — ffff → fffg.
+        "com.example.testapp.Ticket$Companion": {
+            "obfuscated": "fffg",
+            "kind": "synthetic",
+            "source": "sigmatcher",
+            "methods": {
+                "create": {
+                    "obfuscated": "a",
+                    "signature": "(Ljava/lang/String;)Leeef;"
+                }
+            }
+        },
+        // Ticket$Reader — gggg → gggh. this$0 type rotates.
+        "com.example.testapp.Ticket$Reader": {
+            "obfuscated": "gggh",
+            "kind": "class",
+            "source": "sigmatcher",
+            "methods": {
+                "readValue": {
+                    "obfuscated": "a",
+                    "signature": "()Ljava/lang/String;"
+                },
+                "readExpiry": {
+                    "obfuscated": "b",
+                    "signature": "()J"
+                }
+            },
+            "fields": {
+                "this$0": { "obfuscated": "a", "type": "Leeef;" }
+            }
+        },
+        // ErrorCode — hhhh → hhhi. Enum self-refs all rotate.
+        "com.example.testapp.ErrorCode": {
+            "obfuscated": "hhhi",
+            "kind": "enum",
+            "source": "sigmatcher",
+            "methods": {
+                "getCode": { "obfuscated": "a", "signature": "()I" }
+            },
+            "fields": {
+                "SUCCESS": { "obfuscated": "a", "type": "Lhhhi;" },
+                "TIMEOUT": { "obfuscated": "b", "type": "Lhhhi;" },
+                "AUTH_FAILED": { "obfuscated": "c", "type": "Lhhhi;" },
+                "code": { "obfuscated": "d", "type": "I" },
+                "$VALUES": { "obfuscated": "e", "type": "[Lhhhi;" }
+            }
+        },
+        // AbstractServiceClient — iiii → iiij.
+        "com.example.testapp.AbstractServiceClient": {
+            "obfuscated": "iiij",
+            "kind": "class",
+            "source": "sigmatcher",
+            "methods": {
+                "connect": { "obfuscated": "a", "signature": "()V" },
+                "disconnect": { "obfuscated": "b", "signature": "()V" },
+                "retryHandle": {
+                    "obfuscated": "c",
+                    "signature": "()Ljava/lang/Runnable;"
+                }
+            },
+            "fields": {
+                "INSTANCE_COUNT": { "obfuscated": "a", "type": "I" },
+                "context": { "obfuscated": "b", "type": "Landroid/content/Context;" }
+            }
+        },
+        // AbstractServiceClient$1 — jjjj → jjjk. this$0 type rotates.
+        "com.example.testapp.AbstractServiceClient$1": {
+            "obfuscated": "jjjk",
+            "kind": "anonymous",
+            "source": "sigmatcher",
+            "methods": {
+                "run": { "obfuscated": "run", "signature": "()V" }
+            },
+            "fields": {
+                "this$0": { "obfuscated": "a", "type": "Liiij;" }
+            }
+        },
+        // RemoteServiceClient — kkkk → kkkl. `apply` method letter
+        // moves e → f. requestTicket return type rotates (Ticket).
+        "com.example.testapp.RemoteServiceClient": {
+            "obfuscated": "kkkl",
+            "kind": "class",
+            "source": "sigmatcher",
+            "methods": {
+                "connect": { "obfuscated": "a", "signature": "()V" },
+                "requestTicket": {
+                    "obfuscated": "c",
+                    "signature": "(Landroid/os/Bundle;)Leeef;"
+                },
+                "apply": {
+                    "obfuscated": "f",
+                    "signature": "(Ljava/lang/Object;)Ljava/lang/Object;"
+                }
+            },
+            "fields": {
+                "sessionId": { "obfuscated": "c", "type": "Ljava/lang/String;" },
+                "flags": { "obfuscated": "d", "type": "I" }
+            }
+        },
+        // PromiseCallback — llll → lllm.
+        "com.example.testapp.PromiseCallback": {
+            "obfuscated": "lllm",
+            "kind": "interface",
+            "source": "sigmatcher",
+            "methods": {
+                "apply": {
+                    "obfuscated": "a",
+                    "signature": "(Ljava/lang/Object;)Ljava/lang/Object;"
+                }
+            }
+        }
+    }
+}
