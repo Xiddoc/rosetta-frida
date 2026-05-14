@@ -1,0 +1,117 @@
+# ──────────────────────────────────────────────────────────────────────
+# Pinned obfuscation seed for the v1.1.0 fixture build.
+#
+# Crafted to mimic real-world minor-version rotation:
+#
+#   * MOST classes rotate their 4-letter obf name        (aaaa → aaab, etc.)
+#   * SOME classes keep the SAME name across the rotation (rare but real)
+#   * METHOD letters within a class are MOSTLY STABLE      (the project
+#       README §0.2 finding: methods rotate slower than classes)
+#   * A FEW method letters do rotate, simulating R8's
+#       optimization-driven re-ordering
+#   * FIELD letters mostly stay (R8 packs fields by descriptor type and
+#       order, which is unchanged between identical source builds)
+#
+# The on-disk diff between this file and v1.0.0.applymapping.txt is the
+# whole point of the fixture: it's the rotation pattern rosetta-frida
+# exists to abstract over.
+# ──────────────────────────────────────────────────────────────────────
+
+# ── AIDL-anchored classes (stay at real names; -keep in proguard-rules) ──
+
+# ── RemoteService — `aaaa` → `aaab` (class rotates; methods STABLE) ──
+com.example.testapp.RemoteService -> aaab:
+    java.lang.String ROSETTA_ANCHOR -> a
+    int requestCounter -> b
+    java.lang.String lastTag -> c
+    com.example.testapp.IRemoteService$Stub binder -> d
+    void safeError(com.example.testapp.IServiceCallback,int,java.lang.String) -> a
+
+# ── Anonymous Runnable: `bbbb` → `bbbc` ───────────────────────────────
+com.example.testapp.RemoteService$1 -> bbbc:
+    com.example.testapp.RemoteService this$0 -> a
+    android.os.Bundle val$params -> b
+    com.example.testapp.IServiceCallback val$callback -> c
+    void run() -> run
+
+# ── BlobCache — class STAYS at `cccc` (uncommon but real) ──────────────
+# Inside, methods STAY at c/d/e/f/g — illustrating the "method letters
+# are noticeably more stable than class names" observation from §0.2.
+com.example.testapp.BlobCache -> cccc:
+    java.lang.String ROSETTA_ANCHOR -> a
+    int MAX_SIZE -> b
+    int instanceCount -> c
+    com.example.testapp.BlobCache singleton -> d
+    java.util.HashMap buffer -> e
+    java.lang.String lastEvictedKey -> f
+    com.example.testapp.BlobCache getInstance() -> a
+    java.lang.Object get(java.lang.String) -> c
+    void put(java.lang.String,java.lang.Object) -> d
+    void put(java.lang.String,java.lang.Object,long) -> e
+    void evict(java.lang.String) -> f
+    void clear() -> g
+
+# ── Config — `dddd` → `ddde` (class rotates; FIELDS rotate too) ──────
+# Fields shuffle to a/b/d/c/e instead of a/b/c/d/e — simulating R8's
+# field reordering pass affecting only this class.
+com.example.testapp.Config -> ddde:
+    java.lang.String ROSETTA_ANCHOR -> a
+    boolean ENABLE_TRACING -> b
+    int MAX_RETRIES -> d
+    long TIMEOUT_MILLIS -> c
+    java.lang.String ENDPOINT_URL -> e
+    int currentDebugLevel -> f
+
+# ── Ticket — `eeee` → `eeef` (class rotates; methods STABLE) ──────────
+com.example.testapp.Ticket -> eeef:
+    java.lang.String value -> a
+    long expiryMillis -> b
+    com.example.testapp.Ticket fromBytes(byte[]) -> a
+    java.lang.String getValue() -> b
+    long getExpiry() -> c
+
+# ── Ticket$Companion — `ffff` → `fffg` ─────────────────────────────────
+com.example.testapp.Ticket$Companion -> fffg:
+    com.example.testapp.Ticket create(java.lang.String) -> a
+
+# ── Ticket$Reader — `gggg` → `gggh` ────────────────────────────────────
+com.example.testapp.Ticket$Reader -> gggh:
+    com.example.testapp.Ticket this$0 -> a
+    java.lang.String readValue() -> a
+    long readExpiry() -> b
+
+# ── ErrorCode — `hhhh` → `hhhi` (enum class rotates; methods STABLE) ─
+com.example.testapp.ErrorCode -> hhhi:
+    com.example.testapp.ErrorCode SUCCESS -> a
+    com.example.testapp.ErrorCode TIMEOUT -> b
+    com.example.testapp.ErrorCode AUTH_FAILED -> c
+    int code -> d
+    com.example.testapp.ErrorCode[] $VALUES -> e
+    int getCode() -> a
+
+# ── AbstractServiceClient — `iiii` → `iiij` ───────────────────────────
+com.example.testapp.AbstractServiceClient -> iiij:
+    int INSTANCE_COUNT -> a
+    android.content.Context context -> b
+    void connect() -> a
+    void disconnect() -> b
+    java.lang.Runnable retryHandle() -> c
+
+# ── AbstractServiceClient$1 — `jjjj` → `jjjk` ─────────────────────────
+com.example.testapp.AbstractServiceClient$1 -> jjjk:
+    com.example.testapp.AbstractServiceClient this$0 -> a
+    void run() -> run
+
+# ── RemoteServiceClient — `kkkk` → `kkkl` (class rotates; METHOD `apply` rotates too) ──
+# Method `apply` was `e` in v1.0.0 — it moves to `f` here, simulating
+# R8 reshuffling the method-name slot after `connect`/`requestTicket`.
+com.example.testapp.RemoteServiceClient -> kkkl:
+    java.lang.String sessionId -> c
+    int flags -> d
+    void connect() -> a
+    com.example.testapp.Ticket requestTicket(android.os.Bundle) -> c
+    java.lang.Object apply(java.lang.Object) -> f
+
+# ── PromiseCallback interface — `llll` → `lllm` ───────────────────────
+com.example.testapp.PromiseCallback -> lllm:
+    java.lang.Object apply(java.lang.Object) -> a
