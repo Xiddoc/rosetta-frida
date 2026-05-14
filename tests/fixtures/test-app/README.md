@@ -177,6 +177,44 @@ tests/fixtures/test-app/
   initializers reached by live code; sigmatcher uses them as discovery
   anchors per the schema's `anchors` array.
 
+## Pipeline CI
+
+The wave-2 GitHub Actions workflow at `.github/workflows/pipeline.yml`
+drives the full integration test on every push / pull-request that
+touches this fixture, the adapter (`tools/adapters/`), the parser
+(`src/parse/`), or the schema (`src/validate/`). It also runs weekly
+on a `0 13 * * MON` schedule and on `workflow_dispatch`.
+
+What it does, per run:
+
+1. Builds **both** APKs (`-PapplyMapping=v1.0.0` and `-PapplyMapping=v1.1.0`).
+2. Runs `sigmatcher analyze --output-format raw` against each APK
+   using `signatures/test-app.yaml`.
+3. Pipes each raw output through `tools/adapters/sigmatcher-cli.ts`
+   to produce a `.jsonc` `RosettaMap`.
+4. Validates the emitted maps via `rosetta validate`.
+5. Diffs them against `expected/v1.0.0.jsonc` / `expected/v1.1.0.jsonc`
+   — any mismatch fails the workflow with the structured diff visible
+   in the run log.
+6. Uploads APKs + raw JSON + emitted maps as workflow artifacts
+   (retention 14 days) so failures can be reproduced offline.
+
+When you intentionally change the schema, the adapter, the signatures,
+or the Java sources / seeds, the goldens will need to be regenerated.
+The maintainer-facing script `regenerate-goldens.sh` automates that:
+
+```sh
+cd tests/fixtures/test-app
+./regenerate-goldens.sh
+git diff expected/    # review carefully — any unexpected diff is a bug
+git add expected/
+git commit -m 'Regenerate test-app goldens: <why>'
+```
+
+The script does **not** auto-commit — it builds the APKs, regenerates
+the goldens, and prints a `git diff` so you can audit the rotation
+exactly once before it lands.
+
 ## See also
 
 * `src/types/map.ts` — the locked `RosettaMap` schema this fixture
@@ -186,6 +224,8 @@ tests/fixtures/test-app/
 * `examples/sample-hook/hook.ts` — the canonical example hook; a
   hook written against `com.example.testapp` real names will look
   morphologically identical.
-* CI integration: the wave-2 GitHub Actions workflow (filed
-  separately) drives the build-both-APKs + emit-maps + diff-against-
-  golden flow.
+* `.github/workflows/pipeline.yml` — the wave-2 pipeline CI workflow.
+* `regenerate-goldens.sh` — maintainer-facing regen script (see
+  "Pipeline CI" section above).
+* `tools/adapters/sigmatcher.ts` — the sigmatcher → RosettaMap
+  adapter the pipeline calls.
