@@ -1,16 +1,33 @@
-# rosetta-frida pre-push hook — the full CI mirror.
+# rosetta-frida pre-push hook — leak scan + the full CI mirror.
 #
-# Runs `npm run verify`: typecheck + lint (repo-wide) + format:check
-# + the full test suite with the 100% coverage gate. This is exactly
-# what GitHub Actions runs, so a green pre-push is a green CI.
+# Step 1: leak-scan (system-wide tool at ~/.local/bin/leak-scan).
+# Reads patterns from ~/.config/leak-scanner/patterns.txt and scans
+# every commit being pushed for any match in either diff content or
+# commit messages. Aborts the push on the first hit. This is the safety
+# net for accidentally publishing private project names, paths, or
+# fingerprints to a public remote.
+#
+# Step 2: npm run verify — typecheck + lint (repo-wide) + format:check
+# + the full test suite with the 100% coverage gate. Mirrors GitHub
+# Actions, so a green pre-push is a green CI.
 #
 # Pre-commit only lints the staged files (via lint-staged) for speed —
 # this hook catches:
+#   - leaks of private identifiers in commits or diffs
 #   - typecheck failures
 #   - lint regressions in files you DIDN'T touch this commit
 #   - format drift outside your staged set
 #   - test failures or coverage drops
 #
 # Bypass with `git push --no-verify` for WIP branches. Discouraged on
-# master.
+# master, and dangerous for the leak scan — you are the last line of
+# defense once --no-verify is in play.
+
+if command -v leak-scan >/dev/null 2>&1; then
+    leak-scan --pre-push
+else
+    printf '\n[pre-push] WARN: leak-scan not on PATH; skipping leak scan.\n' >&2
+    printf '[pre-push] Install at ~/.local/bin/leak-scan to enable the safeguard.\n\n' >&2
+fi
+
 npm run verify
