@@ -148,5 +148,7 @@ nav:
       - Types: reference/types.md
       - Events: reference/events.md
       - Design: reference/design.md
+  - RFCs:
+      - 0001 — Unified cross-framework signatures: rfcs/0001-unified-cross-framework-signatures.md
   - Contributing: contributing.md
   - Changelog: changelog.md
