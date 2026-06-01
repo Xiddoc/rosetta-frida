@@ -94,12 +94,16 @@ describe('renderSkeleton', () => {
         const out = renderSkeleton('com.example.app', '1.2.3');
         expect(out).toContain('"app": "com.example.app"');
         expect(out).toContain('"version": "1.2.3"');
-        expect(out).toContain('"schema_version": 1');
+        expect(out).toContain('"schema_version": 2');
+        expect(out).toContain('"version_code": 0');
     });
 
-    it('includes a commented-out example class', () => {
+    it('includes a worked example class and parses as strict JSON', () => {
         const out = renderSkeleton('com.example.app', '1.2.3');
-        expect(out).toContain('// "com.example.app.IRemoteService$Stub"');
+        expect(out).not.toContain('//');
+        expect(out).toContain('"com.example.app.IRemoteService$Stub"');
+        const parsed = JSON.parse(out) as { classes: Record<string, unknown> };
+        expect(parsed.classes['com.example.app.IRemoteService$Stub']).toBeDefined();
     });
 
     it('is deterministic for the same inputs', () => {
@@ -110,9 +114,9 @@ describe('renderSkeleton', () => {
 });
 
 describe('defaultOutputPath', () => {
-    it('builds maps/<app>/<version>.jsonc', () => {
+    it('builds maps/<app>/<version>.json', () => {
         expect(defaultOutputPath('com.example.app', '1.2.3')).toMatch(
-            /maps[\\/]com\.example\.app[\\/]1\.2\.3\.jsonc$/,
+            /maps[\\/]com\.example\.app[\\/]1\.2\.3\.json$/,
         );
     });
 });
@@ -121,7 +125,7 @@ describe('runInit', () => {
     it('writes to the default path when none is provided', async () => {
         const { fs, files } = makeFs();
         const out = await runInit(['com.example.app', '1.2.3'], fs);
-        expect(out).toMatch(/com\.example\.app[\\/]1\.2\.3\.jsonc$/);
+        expect(out).toMatch(/com\.example\.app[\\/]1\.2\.3\.json$/);
         expect(files.has(out)).toBe(true);
         expect(files.get(out)).toContain('"app": "com.example.app"');
     });

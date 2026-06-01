@@ -16,7 +16,7 @@ import { MapValidationError, RosettaError } from '../errors.js';
 
 const DEFAULT_EXPORT_SRC = `
 export default {
-    schema_version: 1,
+    schema_version: 2, version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
     classes: {
@@ -27,7 +27,7 @@ export default {
 
 const NAMED_EXPORT_SRC = `
 export const map = {
-    schema_version: 1,
+    schema_version: 2, version_code: 1,
     app: 'com.example.app',
     version: '2.0.0',
     classes: {
@@ -42,7 +42,7 @@ export const unrelated = 42;
 
 const INVALID_EXPORT_SRC = `
 export default {
-    schema_version: 1,
+    schema_version: 2, version_code: 1,
     app: '',
     version: '',
     classes: {},

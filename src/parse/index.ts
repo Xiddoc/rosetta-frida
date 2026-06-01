@@ -2,5 +2,5 @@
  * Public surface of the parse subsystem.
  */
 
-export { parseJsonc, stripCommentsAndTrailingCommas } from './jsonc.js';
-export { loadMap, looksLikeJsoncSource } from './load.js';
+export { parseJson } from './json.js';
+export { loadMap, looksLikeJsonSource } from './load.js';

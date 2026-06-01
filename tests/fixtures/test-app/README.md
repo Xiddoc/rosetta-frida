@@ -39,7 +39,7 @@ The fixture feeds the pipeline-CI integration test that validates the
 
 1. CI builds both APKs from this fixture.
 2. Sigmatcher (or an equivalent mapper) scans each APK and emits a
-   rosetta-frida `.jsonc` map.
+   rosetta-frida `.json` map.
 3. The emitted map is compared against a hand-authored golden expected
    map.
 4. A `rosetta diff` between the v1.0.0 and v1.1.0 maps reproduces the
@@ -191,9 +191,9 @@ What it does, per run:
 2. Runs `sigmatcher analyze --output-format raw` against each APK
    using `signatures/test-app.yaml`.
 3. Pipes each raw output through `tools/adapters/sigmatcher-cli.ts`
-   to produce a `.jsonc` `RosettaMap`.
+   to produce a `.json` `RosettaMap`.
 4. Validates the emitted maps via `rosetta validate`.
-5. Diffs them against `expected/v1.0.0.jsonc` / `expected/v1.1.0.jsonc`
+5. Diffs them against `expected/v1.0.0.json` / `expected/v1.1.0.json`
    — any mismatch fails the workflow with the structured diff visible
    in the run log.
 6. Uploads APKs + raw JSON + emitted maps as workflow artifacts
@@ -219,7 +219,7 @@ exactly once before it lands.
 
 - `src/types/map.ts` — the locked `RosettaMap` schema this fixture
   exercises.
-- `maps/com.example.app/3.4.5.jsonc` — the canonical example map
+- `maps/com.example.app/3.4.5.json` — the canonical example map
   whose feature coverage this fixture mirrors.
 - `examples/sample-hook/hook.ts` — the canonical example hook; a
   hook written against `com.example.testapp` real names will look

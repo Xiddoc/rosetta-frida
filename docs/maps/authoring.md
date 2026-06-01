@@ -10,7 +10,7 @@ the running version. This page walks through the workflow.
 flowchart LR
     A[APK in hand] --> B[rosetta init]
     B --> C[jadx / sigmatcher<br/>find obf names]
-    C --> D[edit JSONC,<br/>fill entries]
+    C --> D[edit JSON,<br/>fill entries]
     D --> E[rosetta validate]
     E -- fail --> D
     E -- pass --> F[run hook on device,<br/>verify each class]
@@ -28,16 +28,16 @@ do **not** try to enumerate the whole app's surface up front.
 npx rosetta init com.example.app 3.4.5
 ```
 
-This writes `maps/com.example.app/3.4.5.jsonc` — a JSONC skeleton
+This writes `maps/com.example.app/3.4.5.json` — a strict-JSON skeleton
 with header comments documenting each field, all top-level metadata
 filled in, an empty `classes: {}`, and a single commented-out example
 entry to copy-paste from.
 
-By default the path is `maps/<app>/<version>.jsonc`. Override with
+By default the path is `maps/<app>/<version>.json`. Override with
 `-o <path>`:
 
 ```sh
-npx rosetta init com.example.app 3.4.5 -o vendor/maps/example-3.4.5.jsonc
+npx rosetta init com.example.app 3.4.5 -o vendor/maps/example-3.4.5.json
 ```
 
 Pass `--force` if the file already exists and you want to overwrite.
@@ -86,15 +86,16 @@ class graph as the relevant code path executes, and hand-author the
 mapping from the trace output. This is the "verified via Frida
 runtime trace" path you see in many `MapSource.notes`.
 
-## 3. Fill the JSONC entries
+## 3. Fill the JSON entries
 
 Open the file and replace the example with real classes:
 
-```jsonc
+```json
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "app": "com.example.app",
     "version": "3.4.5",
+    "version_code": 30405,
     "captured_at": "2026-05-13",
     "sources": [
         { "tool": "sigmatcher", "config": "signatures/example.json", "classes": 12 },
@@ -146,19 +147,19 @@ the AIDL-descriptor check alone.
 ## 4. Validate
 
 ```sh
-npx rosetta validate maps/com.example.app/3.4.5.jsonc
+npx rosetta validate maps/com.example.app/3.4.5.json
 ```
 
 Success:
 
 ```text
-OK: maps/com.example.app/3.4.5.jsonc — com.example.app@3.4.5, 15 class(es), schema_version=1
+OK: maps/com.example.app/3.4.5.json — com.example.app@3.4.5, 15 class(es), schema_version=1
 ```
 
 Failure surfaces specific issues:
 
 ```text
-FAIL: maps/com.example.app/3.4.5.jsonc — invalid map
+FAIL: maps/com.example.app/3.4.5.json — invalid map
   at classes.com.example.app.Foo.obfuscated: required
   at classes.com.example.app.Bar.methods.baz.signature: must match /\(.*\)[^()]+/
 ```
@@ -215,8 +216,8 @@ For each failed entry, recheck:
 
 ## 6. Commit
 
-One map per `(app, version)`. Commit the JSONC file under
-`maps/<app>/<version>.jsonc`. The community maps repo (V2+) will
+One map per `(app, version)`. Commit the JSON file under
+`maps/<app>/<version>.json`. The community maps repo (V2+) will
 PR-gate by schema validation; until then, your own repo is fine.
 
 Use a descriptive commit message:
@@ -235,7 +236,7 @@ and two synthetic Companions) were hand-authored.
 When the next release ships:
 
 1. Copy the previous version's map to a new file:
-   `cp maps/com.example.app/3.4.5.jsonc maps/com.example.app/3.5.0.jsonc`
+   `cp maps/com.example.app/3.4.5.json maps/com.example.app/3.5.0.json`
 2. Update the top-level `version` field.
 3. Re-run sigmatcher to refresh class anchors.
 4. For classes sigmatcher couldn't find, jadx them by hand using the
@@ -249,15 +250,15 @@ column of the table.
 
 ## Authoring alternative formats
 
-If JSONC isn't your preferred authoring environment:
+If hand-writing JSON isn't your preferred authoring environment:
 
 - **YAML** — write `maps/com.example.app/3.4.5.yaml`, then
-  `rosetta convert maps/com.example.app/3.4.5.yaml -o maps/com.example.app/3.4.5.jsonc`.
+  `rosetta convert maps/com.example.app/3.4.5.yaml -o maps/com.example.app/3.4.5.json`.
 - **TypeScript module** — write `maps/com.example.app/3.4.5.ts`
   with a default export of type `RosettaMap`, then
-  `rosetta convert maps/com.example.app/3.4.5.ts -o maps/com.example.app/3.4.5.jsonc`.
+  `rosetta convert maps/com.example.app/3.4.5.ts -o maps/com.example.app/3.4.5.json`.
 
-JSONC is the canonical on-disk format; YAML and TS are authoring
+Strict JSON is the canonical on-disk format; YAML and TS are authoring
 conveniences. See [Conversion](conversion.md) for the full converter
 docs.
 

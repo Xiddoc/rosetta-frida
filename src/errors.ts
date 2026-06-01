@@ -53,8 +53,8 @@ export class MapValidationError extends RosettaError {
     }
 }
 
-/** Thrown when the JSONC source can't be parsed. */
-export class JsoncParseError extends RosettaError {
+/** Thrown when the JSON source can't be parsed. */
+export class JsonParseError extends RosettaError {
     constructor(
         message: string,
         public readonly line: number,

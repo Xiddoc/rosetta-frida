@@ -6,9 +6,10 @@ import { describe, it, expect } from 'vitest';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
 import { isRegistry, pickMapForVersion } from './version-match.js';
 
-function buildMap(version: string, app = 'com.example.app'): RosettaMap {
+function buildMap(version: string, app = 'com.example.app', versionCode = 1): RosettaMap {
     return {
-        schema_version: 1,
+        schema_version: 2,
+        version_code: versionCode,
         app,
         version,
         classes: {},
@@ -75,6 +76,37 @@ describe('pickMapForVersion — registry exact', () => {
 
     it('throws on an empty registry', () => {
         expect(() => pickMapForVersion({}, { version: '1.0.0' })).toThrow(/registry is empty/);
+    });
+});
+
+describe('pickMapForVersion — version_code (authoritative)', () => {
+    const registry: RosettaMapRegistry = {
+        '1.0.0': buildMap('1.0.0', 'com.example.app', 100),
+        '1.1.0': buildMap('1.1.0', 'com.example.app', 110),
+        '2.0.0': buildMap('2.0.0', 'com.example.app', 200),
+    };
+
+    it('selects by version_code regardless of the version label', () => {
+        // Pass a label that would NOT exact-match, but a code that does.
+        const picked = pickMapForVersion(registry, { version: 'whatever', versionCode: 110 });
+        expect(picked.map.version).toBe('1.1.0');
+        expect(picked.fromRegistry).toBe(true);
+        expect(picked.fuzzy).toBe(false);
+        expect(picked.registryKey).toBe('1.1.0');
+    });
+
+    it('falls back to label matching when no map carries the detected code', () => {
+        // Code 999 is absent → falls through to the exact-label path, which
+        // finds '1.0.0'.
+        const picked = pickMapForVersion(registry, { version: '1.0.0', versionCode: 999 });
+        expect(picked.map.version).toBe('1.0.0');
+        expect(picked.fuzzy).toBe(false);
+    });
+
+    it('falls through to the exact-label error when neither code nor label match', () => {
+        expect(() => pickMapForVersion(registry, { version: '3.0.0', versionCode: 999 })).toThrow(
+            /no map for version '3\.0\.0'/,
+        );
     });
 });
 

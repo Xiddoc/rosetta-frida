@@ -22,7 +22,7 @@ every time the obfuscator rotates.
 
     ---
 
-    On-disk JSONC — human-readable, comment-supporting, machine-
+    On-disk JSON — human-readable, comment-supporting, machine-
     round-trippable. Supports YAML and TypeScript-module input formats
     via a CLI converter.
 
@@ -111,7 +111,7 @@ the full motivating story.
 - **Session lifecycle.** In-process auto-detect of app + version,
   registry-bundle picking with optional fuzzy fallback, attach-time
   health check.
-- **JSONC maps with comments.** YAML and TypeScript modules supported
+- **Comment-bearing authoring inputs.** YAML and TypeScript modules supported
   via `rosetta convert`.
 - **PEM-style marker block.** Maps embed into the compiled bundle
   between `-----BEGIN ROSETTA MAP-----` / `-----END ROSETTA MAP-----`
@@ -144,7 +144,7 @@ roadmap.
 
 ```mermaid
 flowchart LR
-    A[sigmatcher] -->|emit| M[rosetta map JSONC]
+    A[sigmatcher] -->|emit| M[rosetta map (JSON)]
     B[jadx + hand-author] -->|emit| M
     M -->|imported at build time| C[frida-compile]
     C --> D[hook.bundle.js<br/>marker block embedded]

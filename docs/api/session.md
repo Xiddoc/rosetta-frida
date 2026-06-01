@@ -37,7 +37,7 @@ The map (or registry of maps) to consult. Required.
   `versionMatch: 'exact'` (the default), a missing version throws;
   with `versionMatch: 'fuzzy'`, it falls back to the closest entry.
 
-You build the value in-script: `import` from a JSONC file via
+You build the value in-script: `import` from a JSON file via
 `frida-compile` (which inlines it as an object literal), or build it
 with [`loadMap(...)`](../maps/format.md#loading-maps-loadmap) in
 environments that have filesystem access (typically the CLI, not the

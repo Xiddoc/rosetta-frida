@@ -1,63 +1,52 @@
-# Conversion — YAML / TS module / JSONC interchange
+# Conversion — YAML / TS module → strict JSON
 
-rosetta-frida's canonical on-disk format is **JSONC** (JSON with
-Comments). Two additional input formats are supported via converters
-so contributors who prefer YAML or TypeScript can still author
-maps without losing the runtime's strict schema validation.
+rosetta-frida's canonical on-disk format is **strict JSON** (no
+comments, no trailing commas). Two comment-bearing *authoring* input
+formats are supported via converters so contributors who prefer YAML
+or TypeScript can still author maps without losing the runtime's
+strict schema validation — `rosetta convert` renders them to the
+canonical JSON artifact.
 
 ## Format choice
 
-| Format | Authoring strength | Native bundler import | Comments | Type safety |
+| Format | Role | Native bundler import | Comments | Type safety |
 |---|---|---|---|---|
-| **JSONC** | The canonical format. | Yes (`.json`/`.jsonc`) — `frida-compile` resolves the import and inlines the value. | Yes, in source. Stripped before `JSON.parse`. | Validated at load. |
-| **TypeScript module** | Power users; full IDE help. | Yes (`.ts`) — `frida-compile` compiles it. | Yes. | Yes (compile time), then validated again. |
-| **YAML** | Contributors comfortable with YAML. | No — must convert via CLI. | Yes. | Validated post-conversion. |
+| **JSON** | The canonical on-disk artifact. | Yes (`.json`) — `frida-compile` resolves the import and inlines the value. | No (strict). | Validated at load. |
+| **TypeScript module** | Authoring input; full IDE help. | Yes (`.ts`) — `frida-compile` compiles it. | Yes. | Yes (compile time), then validated again. |
+| **YAML** | Authoring input. | No — must convert via CLI. | Yes. | Validated post-conversion. |
 
 Recommendation:
 
-- **For maps you commit:** JSONC. One format to support in CI; lowest
-  friction for contributors.
-- **For private / experimental maps:** whichever the author prefers.
-  TS gives IDE feedback; YAML reads cleaner when there are many
-  classes.
+- **For maps you commit:** the canonical JSON artifact (optionally
+  generated from a YAML / TS authoring source via `rosetta convert`).
+- **For authoring:** whichever input the author prefers. TS gives IDE
+  feedback; YAML reads cleaner when there are many classes.
 
-The canonical format is JSONC because it's natively importable by
-any JS bundler, machine-round-trippable, and trivially embeddable
+The canonical artifact is strict JSON because it's natively importable
+by any JS bundler, machine-round-trippable, and trivially embeddable
 as a JS literal in the marker block.
 
-## JSONC parsing
+## JSON parsing
 
-JSONC source has comments; `JSON.parse` rejects them. rosetta-frida
-ships a small in-tree comment stripper rather than pulling in an
-external JSONC parser:
-
-- Handles C-style line comments (`//` to end-of-line).
-- Handles C-style block comments (`/* ... */`).
-- Respects string literals — comment-style sequences inside `"..."`
-  are left intact, with backslash escapes honored.
-- Strips trailing commas in arrays and objects (`[1, 2, 3,]` →
-  `[1, 2, 3]`).
-
-The stripper is exported as `stripCommentsAndTrailingCommas` for
-callers that want to use it directly. `parseJsonc` is the higher-
-level helper that strips + `JSON.parse`s and throws
-[`JsoncParseError`](../reference/errors.md#jsoncparseerror) with a
-line/column on failure.
+The artifact is strict JSON, so loading is just `JSON.parse` wrapped
+with positioned error reporting — comments and trailing commas are
+rejected as syntax errors. `parseJson` is the helper that does this
+and throws [`JsonParseError`](../reference/errors.md#jsonparseerror)
+with a line/column on failure.
 
 ```typescript
-import { parseJsonc } from 'rosetta-frida';
+import { parseJson } from 'rosetta-frida';
 
 const source = `
-// the example map
 {
-    "schema_version": 1,
-    /* trailing comma is fine in JSONC */
+    "schema_version": 2,
     "app": "com.example.app",
     "version": "3.4.5",
-    "classes": {},
+    "version_code": 30405,
+    "classes": {}
 }
 `;
-const map = parseJsonc(source);
+const map = parseJson(source);
 ```
 
 ## YAML
@@ -67,9 +56,10 @@ YAML conversion uses the [`yaml`](https://eemeli.org/yaml/) package
 
 ```yaml
 # rosetta-frida map — com.example.app @ 3.4.5
-schema_version: 1
+schema_version: 2
 app: com.example.app
 version: "3.4.5"
+version_code: 30405
 classes:
   com.example.app.IRemoteService$Stub:
     obfuscated: aaaa
@@ -82,22 +72,22 @@ classes:
         aidl_txn: 2
 ```
 
-Convert to canonical JSONC:
+Convert to the canonical JSON artifact:
 
 ```sh
 npx rosetta convert maps/com.example.app/3.4.5.yaml \
-    -o maps/com.example.app/3.4.5.jsonc
+    -o maps/com.example.app/3.4.5.json
 ```
 
 Programmatically:
 
 ```typescript
-import { yamlToMap, renderJsonc } from 'rosetta-frida';
+import { yamlToMap, renderJson } from 'rosetta-frida';
 
 const yamlSrc = await readFile('map.yaml', 'utf8');
 const map = yamlToMap(yamlSrc);          // validated RosettaMap
-const jsonc = renderJsonc(map);           // canonical JSONC string
-await writeFile('map.jsonc', jsonc, 'utf8');
+const json = renderJson(map);            // canonical strict-JSON string
+await writeFile('map.json', json, 'utf8');
 ```
 
 `yamlToMap` runs the same Zod schema validator as
@@ -126,9 +116,10 @@ through dynamic `import()` and pulls the value out:
 import type { RosettaMap } from 'rosetta-frida';
 
 const map: RosettaMap = {
-    schema_version: 1,
+    schema_version: 2,
     app: 'com.example.app',
     version: '3.4.5',
+    version_code: 30405,
     classes: {
         'com.example.app.IRemoteService$Stub': {
             obfuscated: 'aaaa',
@@ -152,16 +143,16 @@ Convert:
 
 ```sh
 npx rosetta convert maps/com.example.app/3.4.5.ts \
-    -o maps/com.example.app/3.4.5.jsonc
+    -o maps/com.example.app/3.4.5.json
 ```
 
 Programmatically:
 
 ```typescript
-import { tsModuleToMap, renderJsonc } from 'rosetta-frida';
+import { tsModuleToMap, renderJson } from 'rosetta-frida';
 
 const map = await tsModuleToMap('/abs/path/to/map.ts');
-const jsonc = renderJsonc(map);
+const json = renderJson(map);
 ```
 
 The function looks for a `default` export first, then a named `map`
@@ -186,9 +177,9 @@ export. Either works.
 - Don't run side effects at import time. The converter calls into the
   module exactly once, and any side effects fire on every conversion.
 
-## Renderer — `renderJsonc(map)`
+## Renderer — `renderJson(map)`
 
-The canonical JSONC writer. Takes an in-memory `RosettaMap`, returns
+The canonical strict-JSON writer. Takes an in-memory `RosettaMap`, returns
 a string with:
 
 - 4-space indent.
@@ -199,9 +190,9 @@ a string with:
   serialization concern.
 
 ```typescript
-import { renderJsonc } from 'rosetta-frida';
+import { renderJson } from 'rosetta-frida';
 
-const jsonc = renderJsonc(map);
+const json = renderJson(map);
 ```
 
 For pretty-printing with header comments (e.g. the `rosetta init`
@@ -209,31 +200,31 @@ output), build the comment string yourself and concatenate. The
 [init command implementation](https://github.com/rosetta-frida/rosetta-frida/blob/master/cli/commands/init.ts)
 is a worked example.
 
-## `convertToJsonc` — one-stop entry point
+## `convertToJson` — one-stop entry point
 
-The CLI's `convert` command uses `convertToJsonc` internally — a
+The CLI's `convert` command uses `convertToJson` internally — a
 single async function that takes a source string and a format
-discriminator, runs the right converter, and returns the rendered
-JSONC:
+discriminator, runs the right converter, and returns the rendered strict
+JSON:
 
 ```typescript
-import { convertToJsonc } from 'rosetta-frida';
+import { convertToJson } from 'rosetta-frida';
 
 const yamlSrc = await readFile('map.yaml', 'utf8');
-const jsonc = await convertToJsonc(yamlSrc, 'yaml');
+const json = await convertToJson(yamlSrc, 'yaml');
 ```
 
-The TS-module path is not supported through `convertToJsonc` (TS
+The TS-module path is not supported through `convertToJson` (TS
 needs a file path, not a string); call `tsModuleToMap` +
-`renderJsonc` directly for those.
+`renderJson` directly for those.
 
 ## Round-trip fidelity
 
-`yamlToMap` → `renderJsonc` is **not** byte-stable across the two
+`yamlToMap` → `renderJson` is **not** byte-stable across the two
 formats — comments don't carry over, key ordering normalizes, and
-whitespace formatting follows JSONC convention. The *data* is
+whitespace formatting is canonicalized. The *data* is
 identical, but the source is canonicalized.
 
-If you want comments in the rendered JSONC, hand-edit the output —
+If you want comments, keep them in the YAML/TS authoring source and re-render; do not hand-edit the output —
 or keep a separate "annotated" source (YAML or TS) that the CLI
 re-renders on demand.

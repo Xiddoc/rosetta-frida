@@ -19,10 +19,10 @@
  *   - syntactically valid JS (`const x = <JSON>;` parses), and
  *   - parseable as JSON by `parseMarkerBlock` without an eval.
  *
- * We intentionally do NOT inject comments inside the payload. The JSONC
- * source on disk may have comments, but by the time the map is in
- * memory and we're embedding it, we want a single canonical
- * machine-readable form.
+ * We intentionally do NOT inject comments inside the payload. The
+ * authoring source (YAML / TS module) may have comments, but the
+ * on-disk artifact and the embedded payload are both a single canonical
+ * machine-readable JSON form.
  */
 
 import {

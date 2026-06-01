@@ -48,10 +48,12 @@ import { RosettaError } from '../../src/errors.js';
 export interface SigmatcherAdapterOptions {
     /** Android package name (e.g. "com.example.testapp"). */
     app: string;
-    /** App version this raw output was captured against. */
+    /** App version *label* (PackageInfo.versionName) this output was captured against. */
     version: string;
-    /** Optional SHA-256 of the APK sigmatcher analyzed. */
-    apkSha256?: string;
+    /** Authoritative version code (PackageInfo.versionCode / longVersionCode). */
+    versionCode: number;
+    /** Optional SHA-256 (hex) of the APK signing certificate. */
+    signerSha256?: string;
     /** Optional ISO date when the map was captured. */
     capturedAt?: string;
     /**
@@ -149,13 +151,14 @@ export function sigmatcherRawToRosettaMap(
     }
 
     const map: RosettaMap = {
-        schema_version: 1,
+        schema_version: 2,
         app: options.app,
         version: options.version,
+        version_code: options.versionCode,
         classes,
     };
     if (options.capturedAt !== undefined) map.captured_at = options.capturedAt;
-    if (options.apkSha256 !== undefined) map.apk_sha256 = options.apkSha256;
+    if (options.signerSha256 !== undefined) map.signer_sha256 = options.signerSha256;
     map.sources = [{ tool: 'sigmatcher', classes: Object.keys(classes).length }];
 
     return validateMap(map);

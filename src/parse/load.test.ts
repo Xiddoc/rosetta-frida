@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { loadMap, looksLikeJsoncSource } from './load.js';
-import { JsoncParseError, MapValidationError } from '../errors.js';
+import { loadMap, looksLikeJsonSource } from './load.js';
+import { JsonParseError, MapValidationError } from '../errors.js';
 import type { RosettaMap } from '../types/map.js';
 
 // Mock node:fs/promises at module-load time so loadMap routes
@@ -14,7 +14,8 @@ import { readFile } from 'node:fs/promises';
 const readFileMock = vi.mocked(readFile);
 
 const validMap: RosettaMap = {
-    schema_version: 1,
+    schema_version: 2,
+    version_code: 1,
     app: 'com.example.app',
     version: '1.2.3',
     classes: {
@@ -31,48 +32,48 @@ beforeEach(() => {
     readFileMock.mockReset();
 });
 
-describe('looksLikeJsoncSource', () => {
+describe('looksLikeJsonSource', () => {
     it('recognizes a leading {', () => {
-        expect(looksLikeJsoncSource('{}')).toBe(true);
+        expect(looksLikeJsonSource('{}')).toBe(true);
     });
 
     it('recognizes a leading [', () => {
-        expect(looksLikeJsoncSource('[]')).toBe(true);
+        expect(looksLikeJsonSource('[]')).toBe(true);
     });
 
     it('recognizes a leading " (string literal)', () => {
-        expect(looksLikeJsoncSource('"hi"')).toBe(true);
+        expect(looksLikeJsonSource('"hi"')).toBe(true);
     });
 
-    it('recognizes a leading comment marker', () => {
-        expect(looksLikeJsoncSource('// header\n{}')).toBe(true);
-        expect(looksLikeJsoncSource('/* header */{}')).toBe(true);
+    it('treats a leading comment marker as a path (comments are not valid JSON)', () => {
+        expect(looksLikeJsonSource('// header\n{}')).toBe(false);
+        expect(looksLikeJsonSource('/* header */{}')).toBe(false);
     });
 
     it('recognizes leading digits', () => {
-        expect(looksLikeJsoncSource('42')).toBe(true);
-        expect(looksLikeJsoncSource('-1')).toBe(true);
+        expect(looksLikeJsonSource('42')).toBe(true);
+        expect(looksLikeJsonSource('-1')).toBe(true);
     });
 
     it('recognizes leading keyword starts (t/f/n)', () => {
-        expect(looksLikeJsoncSource('true')).toBe(true);
-        expect(looksLikeJsoncSource('false')).toBe(true);
-        expect(looksLikeJsoncSource('null')).toBe(true);
+        expect(looksLikeJsonSource('true')).toBe(true);
+        expect(looksLikeJsonSource('false')).toBe(true);
+        expect(looksLikeJsonSource('null')).toBe(true);
     });
 
     it('skips leading whitespace', () => {
-        expect(looksLikeJsoncSource('   {}')).toBe(true);
-        expect(looksLikeJsoncSource('\n\t{}')).toBe(true);
+        expect(looksLikeJsonSource('   {}')).toBe(true);
+        expect(looksLikeJsonSource('\n\t{}')).toBe(true);
     });
 
     it('returns true for whitespace-only input (let the parser fail)', () => {
-        expect(looksLikeJsoncSource('   \n\t')).toBe(true);
+        expect(looksLikeJsonSource('   \n\t')).toBe(true);
     });
 
     it('treats a path-shaped string as not-source', () => {
-        expect(looksLikeJsoncSource('maps/com.example.app/1.2.3.jsonc')).toBe(false);
-        expect(looksLikeJsoncSource('./relative/path.json')).toBe(false);
-        expect(looksLikeJsoncSource('C:\\Users\\x\\map.json')).toBe(false);
+        expect(looksLikeJsonSource('maps/com.example.app/1.2.3.json')).toBe(false);
+        expect(looksLikeJsonSource('./relative/path.json')).toBe(false);
+        expect(looksLikeJsonSource('C:\\Users\\x\\map.json')).toBe(false);
     });
 });
 
@@ -82,7 +83,7 @@ describe('loadMap — object input', () => {
     });
 
     it('throws MapValidationError on an invalid object', async () => {
-        const bad = { schema_version: 1, app: 'a' } as unknown as RosettaMap;
+        const bad = { schema_version: 2, version_code: 1, app: 'a' } as unknown as RosettaMap;
         await expect(loadMap(bad)).rejects.toBeInstanceOf(MapValidationError);
     });
 
@@ -92,18 +93,24 @@ describe('loadMap — object input', () => {
     });
 });
 
-describe('loadMap — JSONC source input', () => {
-    it('parses + validates a JSONC literal', async () => {
-        const src = `// header\n${JSON.stringify(validMap)}`;
+describe('loadMap — JSON source input', () => {
+    it('parses + validates a strict-JSON literal', async () => {
+        const src = JSON.stringify(validMap);
         await expect(loadMap(src)).resolves.toEqual(validMap);
         expect(readFileMock).not.toHaveBeenCalled();
     });
 
-    it('throws JsoncParseError on malformed JSONC', async () => {
-        await expect(loadMap('{ "bad": ')).rejects.toBeInstanceOf(JsoncParseError);
+    it('throws JsonParseError on malformed JSON', async () => {
+        await expect(loadMap('{ "bad": ')).rejects.toBeInstanceOf(JsonParseError);
     });
 
-    it('throws MapValidationError on schema-invalid valid JSONC', async () => {
+    it('throws JsonParseError on a JSON literal with comments (strict)', async () => {
+        // A `{`-leading source is parsed in-band; the trailing comment is
+        // not valid strict JSON, so it surfaces a JsonParseError.
+        await expect(loadMap(`{"a":1} // trailing`)).rejects.toBeInstanceOf(JsonParseError);
+    });
+
+    it('throws MapValidationError on schema-invalid valid JSON', async () => {
         const src = '{ "schema_version": 99, "app": "a", "version": "v", "classes": {} }';
         await expect(loadMap(src)).rejects.toBeInstanceOf(MapValidationError);
     });
@@ -112,23 +119,18 @@ describe('loadMap — JSONC source input', () => {
 describe('loadMap — file path input', () => {
     it('reads the file via fs.readFile and parses it', async () => {
         readFileMock.mockResolvedValueOnce(JSON.stringify(validMap));
-        await expect(loadMap('maps/x.jsonc')).resolves.toEqual(validMap);
+        await expect(loadMap('maps/x.json')).resolves.toEqual(validMap);
         expect(readFileMock).toHaveBeenCalledOnce();
-        expect(readFileMock).toHaveBeenCalledWith('maps/x.jsonc', 'utf8');
-    });
-
-    it('handles a JSONC file with comments', async () => {
-        readFileMock.mockResolvedValueOnce(`// header\n${JSON.stringify(validMap)}`);
-        await expect(loadMap('maps/x.jsonc')).resolves.toEqual(validMap);
+        expect(readFileMock).toHaveBeenCalledWith('maps/x.json', 'utf8');
     });
 
     it('propagates read errors verbatim', async () => {
         readFileMock.mockRejectedValueOnce(new Error('ENOENT'));
-        await expect(loadMap('maps/missing.jsonc')).rejects.toThrow(/ENOENT/);
+        await expect(loadMap('maps/missing.json')).rejects.toThrow(/ENOENT/);
     });
 
-    it('surfaces JsoncParseError from on-disk malformed content', async () => {
+    it('surfaces JsonParseError from on-disk malformed content', async () => {
         readFileMock.mockResolvedValueOnce('{ "broken": ');
-        await expect(loadMap('maps/bad.jsonc')).rejects.toBeInstanceOf(JsoncParseError);
+        await expect(loadMap('maps/bad.json')).rejects.toBeInstanceOf(JsonParseError);
     });
 });

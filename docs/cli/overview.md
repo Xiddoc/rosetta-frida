@@ -13,17 +13,17 @@ Usage: rosetta <command> [options]
 Commands:
   init <app> <version>                 Scaffold a new map skeleton
   validate <map>                       Schema + sanity check (auto-detect format)
-  convert <in> -o <out>                Convert YAML/TS module to canonical JSONC
-  patch <bundle.js> --map <new.jsonc>  Replace embedded map in bundle
+  convert <in> -o <out>                Convert YAML/TS module to canonical JSON
+  patch <bundle.js> --map <new.json>  Replace embedded map in bundle
   extract <bundle.js> -o <out.json>    Pull embedded map out of bundle (JSON output)
   inspect <bundle.js>                  One-line summary of embedded map
 ```
 
 | Command | What it does | Operates on |
 |---|---|---|
-| [`init`](init.md) | Scaffold a JSONC skeleton for a new `(app, version)` pair. | The filesystem — writes `maps/<app>/<version>.jsonc` by default. |
-| [`validate`](validate.md) | Run the schema + sanity check against a map. Auto-detects format from the extension. | One map file (JSONC / YAML / TS module). |
-| [`convert`](convert.md) | Convert a YAML or TS-module map to canonical JSONC. | One map file. |
+| [`init`](init.md) | Scaffold a strict-JSON skeleton for a new `(app, version)` pair. | The filesystem — writes `maps/<app>/<version>.json` by default. |
+| [`validate`](validate.md) | Run the schema + sanity check against a map. Auto-detects format from the extension. | One map file (JSON / YAML / TS module). |
+| [`convert`](convert.md) | Convert a YAML or TS-module map to canonical JSON. | One map file. |
 | [`patch`](patch.md) | Replace the embedded map in a compiled bundle with a fresh one. In-place by default. | A compiled bundle + a new map. |
 | [`extract`](extract.md) | Pull the embedded map back out of a compiled bundle into a standalone JSON file. | A compiled bundle. |
 | [`inspect`](inspect.md) | Print a one-line summary of the map embedded in a compiled bundle. | A compiled bundle. |
@@ -72,8 +72,8 @@ named output file.
 ```json
 {
     "scripts": {
-        "build:hook": "frida-compile hook.ts -o hook.bundle.js && rosetta patch hook.bundle.js --map maps/com.example.app/3.4.5.jsonc",
-        "validate:maps": "rosetta validate maps/com.example.app/3.4.5.jsonc"
+        "build:hook": "frida-compile hook.ts -o hook.bundle.js && rosetta patch hook.bundle.js --map maps/com.example.app/3.4.5.json",
+        "validate:maps": "rosetta validate maps/com.example.app/3.4.5.json"
     }
 }
 ```
@@ -93,7 +93,7 @@ jobs:
       - name: Validate every map
         run: |
           shopt -s globstar nullglob
-          for m in maps/**/*.jsonc; do
+          for m in maps/**/*.json; do
             npx rosetta validate "$m" || exit 1
           done
 ```
@@ -107,7 +107,7 @@ Compile the bundle once, swap maps per environment:
 npx frida-compile hook.ts -o hook.bundle.js
 
 # Deploy phase (per environment):
-npx rosetta patch hook.bundle.js --map maps/com.example.app/${VERSION}.jsonc -o hook-${VERSION}.bundle.js
+npx rosetta patch hook.bundle.js --map maps/com.example.app/${VERSION}.json -o hook-${VERSION}.bundle.js
 ```
 
 This is the CI flow the marker block was designed for. See
@@ -117,15 +117,15 @@ This is the CI flow the marker block was designed for. See
 
 The following commands are planned for V1.5 but not in V1.0:
 
-- `rosetta diff <a.jsonc> <b.jsonc>` — show rotation deltas between
+- `rosetta diff <a.json> <b.json>` — show rotation deltas between
   versions (the canonical "what changed in this release" report).
-- `rosetta merge <a.jsonc> <b.jsonc> [...]` — merge partial maps,
+- `rosetta merge <a.json> <b.json> [...]` — merge partial maps,
   preferring higher-confidence entries.
-- `rosetta merge-bundle <bundle.js> <map1.jsonc> [...]` — convert a
+- `rosetta merge-bundle <bundle.js> <map1.json> [...]` — convert a
   single-map bundle to a registry bundle.
-- `rosetta types <map.jsonc> -o <out.d.ts>` — generate per-map
+- `rosetta types <map.json> -o <out.d.ts>` — generate per-map
   TypeScript declarations.
-- `rosetta migrate <map.jsonc>` — run schema migrators on old maps.
+- `rosetta migrate <map.json>` — run schema migrators on old maps.
 - `rosetta verify --device <id>` — live health check via
   `frida-server`.
 - `rosetta fetch <app> <version>` — pull from a public registry (V2+).

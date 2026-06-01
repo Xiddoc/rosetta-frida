@@ -78,16 +78,19 @@ called out is implemented and tested.
 
 ### Map format
 
-- **Schema v1** — `schema_version: 1` mandatory. Validated by Zod.
-- **JSONC** — canonical on-disk format. Comments and trailing
-  commas supported by in-tree stripper.
+- **Schema v2** — `schema_version: 2` mandatory. Adds the required
+  authoritative `version_code` key and the optional `signer_sha256`
+  authenticity guard; drops `apk_sha256`. Validated by Zod.
+- **Strict JSON** — canonical on-disk format (no comments / trailing
+  commas). Comment-bearing YAML / TS modules are authoring inputs
+  rendered to JSON via `rosetta convert`.
 - **YAML converter** — `yamlToMap(...)` via the `yaml` package.
 - **TS-module converter** — `tsModuleToMap(...)` via dynamic
   `import()`.
 - **Single-map and registry forms** — `RosettaMap` and
   `RosettaMapRegistry`.
 - **15-class anonymized sample map** at
-  `maps/com.example.app/3.4.5.jsonc` covering AIDL stubs,
+  `maps/com.example.app/3.4.5.json` covering AIDL stubs,
   callbacks, overloads, fields, constructors, enums, synthetic
   Companions, anonymous inner classes.
 
@@ -106,11 +109,11 @@ called out is implemented and tested.
 
 The `rosetta` binary, six commands:
 
-- [`init <app> <version>`](cli/init.md) — scaffold a new JSONC map.
+- [`init <app> <version>`](cli/init.md) — scaffold a new JSON map.
 - [`validate <map>`](cli/validate.md) — schema + sanity check.
-  Auto-detects JSONC / YAML / TS-module from extension.
+  Auto-detects JSON / YAML / TS-module from extension.
 - [`convert <in> -o <out>`](cli/convert.md) — YAML / TS module →
-  canonical JSONC.
+  canonical JSON.
 - [`patch <bundle.js> --map <new>`](cli/patch.md) — replace embedded
   map in a compiled bundle. In-place by default.
 - [`extract <bundle.js> -o <out>`](cli/extract.md) — pull the
@@ -125,7 +128,7 @@ Nine error classes, all subclasses of [`RosettaError`](reference/errors.md#roset
 - `ResolveError` — class/method/field not in map.
 - `AmbiguousOverloadError` — multi-overload method, string form.
 - `MapValidationError` — schema failure; carries structured `issues`.
-- `JsoncParseError` — JSONC source syntax error; carries `line`/`col`.
+- `JsonParseError` — JSON source syntax error; carries `line`/`col`.
 - `MapVersionMismatchError` — loaded map doesn't match detected
   app/version.
 - `HealthCheckFailedError` — attach-time check failed, strict mode.
@@ -134,7 +137,7 @@ Nine error classes, all subclasses of [`RosettaError`](reference/errors.md#roset
 
 ### Tests
 
-- **595 tests across 34 files.**
+- **611 tests across 35 files.**
 - **100% line / branch / function / statement coverage.**
 - Test pattern: dependency-injected `Java.use` / `fs`; each
   subsystem unit-testable in isolation.
@@ -149,14 +152,14 @@ Nine error classes, all subclasses of [`RosettaError`](reference/errors.md#roset
 
 Not in V1.0; tracked for the next release:
 
-- `rosetta diff <a.jsonc> <b.jsonc>` — show rotation deltas between
+- `rosetta diff <a.json> <b.json>` — show rotation deltas between
   versions.
-- `rosetta merge <a.jsonc> <b.jsonc> [...]` — merge partial maps.
+- `rosetta merge <a.json> <b.json> [...]` — merge partial maps.
 - `rosetta merge-bundle <bundle.js> <maps...> -o <out>` —
   single-map → registry bundle.
-- `rosetta types <map.jsonc> -o <out.d.ts>` — generate per-map TS
+- `rosetta types <map.json> -o <out.d.ts>` — generate per-map TS
   declarations.
-- `rosetta migrate <map.jsonc>` — schema migrators (for when v2 ships).
+- `rosetta migrate <map.json>` — schema migrators (e.g. for a future v3 bump; the 1→2 change was a hard cutover).
 - `rosetta verify --device <id>` — live health check via
   `frida-server`.
 - `frida-compile` plugin for auto-marker-wrapping.

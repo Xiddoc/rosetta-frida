@@ -14,7 +14,7 @@ import {
     ResolveError,
     AmbiguousOverloadError,
     MapValidationError,
-    JsoncParseError,
+    JsonParseError,
     MapVersionMismatchError,
     HealthCheckFailedError,
     MarkerBlockError,
@@ -67,10 +67,10 @@ describe('error hierarchy', () => {
         expect(err.issues).toEqual(issues);
     });
 
-    it('JsoncParseError carries position info', () => {
-        const err = new JsoncParseError('unexpected token', 12, 34);
+    it('JsonParseError carries position info', () => {
+        const err = new JsonParseError('unexpected token', 12, 34);
         expect(err).toBeInstanceOf(RosettaError);
-        expect(err.name).toBe('JsoncParseError');
+        expect(err.name).toBe('JsonParseError');
         expect(err.line).toBe(12);
         expect(err.column).toBe(34);
     });
@@ -261,7 +261,8 @@ describe('formatEvent', () => {
 describe('RosettaMap type shape (compile-time)', () => {
     it('accepts a minimal well-formed map', () => {
         const map: RosettaMap = {
-            schema_version: 1,
+            schema_version: 2,
+            version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',
             classes: {
@@ -279,13 +280,14 @@ describe('RosettaMap type shape (compile-time)', () => {
                 },
             },
         };
-        expect(map.schema_version).toBe(1);
+        expect(map.schema_version).toBe(2);
         expect(map.classes['com.example.app.IRemoteService$Stub']?.obfuscated).toBe('aaaa');
     });
 
     it('accepts overload-array form for methods', () => {
         const map: RosettaMap = {
-            schema_version: 1,
+            schema_version: 2,
+            version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',
             classes: {

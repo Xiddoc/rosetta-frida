@@ -23,7 +23,8 @@ import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import { makeCaptured, makeFakeFs, makeIo } from './helpers.js';
 
 const map = (version = '1.0.0'): RosettaMap => ({
-    schema_version: 1,
+    schema_version: 2,
+    version_code: 1,
     app: 'com.example.app',
     version,
     classes: { IFoo: { obfuscated: 'aaaa' } },
@@ -159,7 +160,7 @@ describe('runPatch', () => {
 
     it('exits 1 when bundle file cannot be read', async () => {
         const fs = makeFakeFs({
-            'm.json': '{"schema_version":1,"app":"x","version":"y","classes":{}}',
+            'm.json': '{"schema_version":2,"version_code":1,"app":"x","version":"y","classes":{}}',
         });
         const captured = makeCaptured();
         const code = await runPatch(['missing.js', '--map', 'm.json'], makeIo(fs, captured));
@@ -175,32 +176,50 @@ describe('runPatch', () => {
         expect(captured.stderr[0]).toMatch(/cannot read map/);
     });
 
-    it('exits 1 when map source is malformed JSONC', async () => {
+    it('exits 1 when map source is malformed JSON', async () => {
         const fs = makeFakeFs({
             'b.js': emitMarkerBlock(map()),
-            'bad.jsonc': '{ this is not JSON',
+            'bad.json': '{ this is not JSON',
         });
         const captured = makeCaptured();
-        const code = await runPatch(['b.js', '--map', 'bad.jsonc'], makeIo(fs, captured));
+        const code = await runPatch(['b.js', '--map', 'bad.json'], makeIo(fs, captured));
         expect(code).toBe(1);
         expect(captured.stderr[0]).toMatch(/map is malformed/);
     });
 
-    it('accepts a JSONC map (comments tolerated)', async () => {
+    it('exits 1 when a map carries comments (strict JSON only)', async () => {
         const fs = makeFakeFs({
             'b.js': emitMarkerBlock(map()),
-            'm.jsonc':
+            'm.json':
                 '// canonical map with comments\n' +
                 '{\n' +
-                '    /* schema header */\n' +
-                '    "schema_version": 1,\n' +
+                '    "schema_version": 2,\n' +
+                '    "version_code": 1,\n' +
                 '    "app": "com.example.app",\n' +
                 '    "version": "3.5.0",\n' +
                 '    "classes": {}\n' +
                 '}\n',
         });
         const captured = makeCaptured();
-        const code = await runPatch(['b.js', '--map', 'm.jsonc'], makeIo(fs, captured));
+        const code = await runPatch(['b.js', '--map', 'm.json'], makeIo(fs, captured));
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/map is malformed/);
+    });
+
+    it('accepts a strict-JSON map', async () => {
+        const fs = makeFakeFs({
+            'b.js': emitMarkerBlock(map()),
+            'm.json':
+                '{\n' +
+                '    "schema_version": 2,\n' +
+                '    "version_code": 1,\n' +
+                '    "app": "com.example.app",\n' +
+                '    "version": "3.5.0",\n' +
+                '    "classes": {}\n' +
+                '}\n',
+        });
+        const captured = makeCaptured();
+        const code = await runPatch(['b.js', '--map', 'm.json'], makeIo(fs, captured));
         expect(code).toBe(0);
     });
 

@@ -13,7 +13,7 @@ import {
     ResolveError,
     AmbiguousOverloadError,
     MapValidationError,
-    JsoncParseError,
+    JsonParseError,
     MapVersionMismatchError,
     HealthCheckFailedError,
     MarkerBlockError,
@@ -144,18 +144,19 @@ with `issues`:
 
 **When fired:**
 
-- `loadMap('./x.jsonc')` when the parsed object doesn't satisfy the
+- `loadMap('./x.json')` when the parsed object doesn't satisfy the
   Zod schema.
 - `yamlToMap(...)` / `tsModuleToMap(...)` — the converters all run
   the same validator.
 - `rosetta validate <map>` CLI when the file fails the check.
 
-## `JsoncParseError`
+## `JsonParseError`
 
-The JSONC source can't be parsed.
+The strict-JSON source can't be parsed (this includes comments and
+trailing commas, which are not valid JSON).
 
 ```typescript
-class JsoncParseError extends RosettaError {
+class JsonParseError extends RosettaError {
     readonly line: number;
     readonly column: number;
 }
@@ -166,13 +167,13 @@ class JsoncParseError extends RosettaError {
 | `line` | 1-indexed line of the syntax error. |
 | `column` | 1-indexed column. |
 
-**Example message:** `rosetta-frida: JSONC parse error at line 12
-col 4: unexpected token`
+**Example message:** `Invalid JSON: Unexpected token ... (line 12,
+column 4)`
 
 **When fired:**
 
-- `parseJsonc('...')` on syntactically invalid JSONC.
-- `loadMap('./x.jsonc')` on a JSONC file that fails to parse.
+- `parseJson('...')` on syntactically invalid JSON.
+- `loadMap('./x.json')` on a JSON file that fails to parse.
 
 ## `MapVersionMismatchError`
 

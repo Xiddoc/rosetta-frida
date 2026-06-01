@@ -19,7 +19,7 @@ Supported extensions:
 
 | Extension | Format |
 |---|---|
-| `.json`, `.jsonc` | JSONC (default). JSONC comment-stripper runs first. |
+| `.json` | Strict JSON. Comments/trailing commas are rejected. |
 | `.yaml`, `.yml` | YAML — converted in-memory to a map, then validated. |
 | `.ts`, `.js`, `.mjs`, `.cjs` | TypeScript / JavaScript module — dynamically imported; default or named `map` export is validated. |
 
@@ -31,7 +31,7 @@ schema](../maps/format.md#validation) check, then prints either:
 **Pass:**
 
 ```text
-OK: maps/com.example.app/3.4.5.jsonc — com.example.app@3.4.5, 15 class(es), schema_version=1
+OK: maps/com.example.app/3.4.5.json — com.example.app@3.4.5, 15 class(es), schema_version=2
 ```
 
 Exit code 0.
@@ -39,7 +39,7 @@ Exit code 0.
 **Fail:**
 
 ```text
-FAIL: maps/com.example.app/3.4.5.jsonc — invalid map
+FAIL: maps/com.example.app/3.4.5.json — invalid map
   at classes.com.example.app.IRemoteService$Stub.obfuscated: required
   at classes.com.example.app.Foo.methods.bar.signature: must match /\(.*\)[^()]+/
 ```
@@ -48,32 +48,32 @@ Exit code 1.
 
 ## Examples
 
-### JSONC
+### JSON
 
 ```sh
-$ npx rosetta validate maps/com.example.app/3.4.5.jsonc
-OK: maps/com.example.app/3.4.5.jsonc — com.example.app@3.4.5, 15 class(es), schema_version=1
+$ npx rosetta validate maps/com.example.app/3.4.5.json
+OK: maps/com.example.app/3.4.5.json — com.example.app@3.4.5, 15 class(es), schema_version=2
 ```
 
 ### YAML
 
 ```sh
 $ npx rosetta validate maps/com.example.app/3.4.5.yaml
-OK: maps/com.example.app/3.4.5.yaml — com.example.app@3.4.5, 15 class(es), schema_version=1
+OK: maps/com.example.app/3.4.5.yaml — com.example.app@3.4.5, 15 class(es), schema_version=2
 ```
 
 ### TS module
 
 ```sh
 $ npx rosetta validate maps/com.example.app/3.4.5.ts
-OK: maps/com.example.app/3.4.5.ts — com.example.app@3.4.5, 15 class(es), schema_version=1
+OK: maps/com.example.app/3.4.5.ts — com.example.app@3.4.5, 15 class(es), schema_version=2
 ```
 
 ### Invalid map
 
 ```sh
-$ npx rosetta validate maps/example/broken.jsonc
-FAIL: maps/example/broken.jsonc — invalid map
+$ npx rosetta validate maps/example/broken.json
+FAIL: maps/example/broken.json — invalid map
   at schema_version: must be 1
   at classes.com.example.app.Foo.methods: must be an object
 ```
@@ -117,7 +117,7 @@ Validate every map on every PR:
   run: |
     fail=0
     shopt -s globstar nullglob
-    for m in maps/**/*.jsonc maps/**/*.json maps/**/*.yaml maps/**/*.yml; do
+    for m in maps/**/*.json maps/**/*.json maps/**/*.yaml maps/**/*.yml; do
       npx rosetta validate "$m" || fail=1
     done
     exit $fail
@@ -132,7 +132,7 @@ checks are identical post-conversion.
 import { loadMap, MapValidationError } from 'rosetta-frida';
 
 try {
-    const map = await loadMap('maps/com.example.app/3.4.5.jsonc');
+    const map = await loadMap('maps/com.example.app/3.4.5.json');
     console.log(`${map.app}@${map.version}, ${Object.keys(map.classes).length} classes`);
 } catch (e) {
     if (e instanceof MapValidationError) {

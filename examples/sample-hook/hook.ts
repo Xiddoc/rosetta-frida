@@ -3,7 +3,7 @@
  *
  * This is the canonical "what does a real hook look like" example.
  * It targets the synthetic app `com.example.app` whose map ships at
- * `maps/com.example.app/3.4.5.jsonc` (15 classes covering AIDL stubs,
+ * `maps/com.example.app/3.4.5.json` (15 classes covering AIDL stubs,
  * callback proxies, value objects, etc.).
  *
  * The same source compiles unchanged for any app version that has a
@@ -11,9 +11,8 @@
  *
  * Build (V1.0):
  *
- *   # JSONC isn't natively importable by bundlers, so convert to JSON
- *   # first. V1.5 ships a frida-compile plugin that handles .jsonc directly.
- *   npx rosetta convert maps/com.example.app/3.4.5.jsonc -o /tmp/map.json
+ *   # The on-disk map artifact is strict JSON, so bundlers import it
+ *   # directly — no conversion step needed.
  *   npx frida-compile examples/sample-hook/hook.ts -o hook.bundle.js
  *
  *   # For inspect/extract/patch to work on the bundle, wrap the map
@@ -25,13 +24,11 @@
  *   # or via the Python/Node controller you already use
  */
 
-// Until the V1.5 frida-compile plugin lands, the bundle import points
-// at a tooling-generated `.json` sibling of the canonical `.jsonc`.
-// Run `npx rosetta convert maps/com.example.app/3.4.5.jsonc -o ...`
-// to produce it before bundling.
-// @ts-expect-error — the JSON sibling is generated at build time;
-// TypeScript will complain until you run the convert step. Suppressed
-// so the example still typechecks against the canonical .jsonc source.
+// The canonical map artifact is strict JSON and importable directly by
+// bundlers. The `with { type: 'json' }` import attribute is what
+// frida-compile / modern bundlers consume.
+// @ts-expect-error — import attributes require a newer `module` target than
+// the library's ES2022 build setting; bundlers honour it at compile time.
 import sampleMap from '../../maps/com.example.app/3.4.5.json' with { type: 'json' };
 import { rosetta, type RosettaMap } from '../../src/index.js';
 

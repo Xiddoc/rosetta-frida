@@ -36,7 +36,7 @@ Per release. Per script.
 ## The fix
 
 Write hooks against **real names**. rosetta-frida translates them at attach
-time using a per-version JSONC map:
+time using a per-version JSON map:
 
 ```typescript
 import { rosetta } from 'rosetta-frida';
@@ -80,10 +80,10 @@ with `rosetta init`) or — eventually — pull from the community
 
 ```sh
 npx rosetta init com.example.app 3.4.5
-# → wrote maps/com.example.app/3.4.5.jsonc  (JSONC = JSON with comments)
+# → wrote maps/com.example.app/3.4.5.json
 # edit the scaffold to fill in your real → obfuscated mappings
-npx rosetta validate maps/com.example.app/3.4.5.jsonc
-# → OK: ...@3.4.5, 1 class(es), schema_version=1
+npx rosetta validate maps/com.example.app/3.4.5.json
+# → OK: ...@3.4.5, 1 class(es), schema_version=2
 ```
 
 **2. Write a hook.** The full sample lives in `examples/sample-hook/`:
@@ -91,8 +91,8 @@ npx rosetta validate maps/com.example.app/3.4.5.jsonc
 ```typescript
 import { rosetta } from 'rosetta-frida';
 import map from './maps/com.example.app/3.4.5.json' with { type: 'json' };
-// (Author maps in .jsonc with comments; convert to .json for bundling
-// until the V1.5 frida-compile plugin handles .jsonc natively.)
+// (Author maps in .json with comments; convert to .json for bundling
+// until the V1.5 frida-compile plugin handles .json natively.)
 
 Java.perform(() => {
     rosetta.session({ map, failurePolicy: 'warn' });
@@ -149,8 +149,8 @@ frida -U -l hook.bundle.js com.example.app
 ```
 rosetta init <app> <version>                  Scaffold a new map skeleton
 rosetta validate <map>                        Schema + sanity check (auto-detect format)
-rosetta convert <in> -o <out>                 Convert YAML / TS module to canonical JSONC
-rosetta patch <bundle.js> --map <new.jsonc>   Replace embedded map in a compiled bundle
+rosetta convert <in> -o <out>                 Convert YAML / TS module to canonical JSON
+rosetta patch <bundle.js> --map <new.json>   Replace embedded map in a compiled bundle
 rosetta extract <bundle.js> -o <out.json>     Pull embedded map out of a compiled bundle (JSON output)
 rosetta inspect <bundle.js>                   One-line summary of an embedded map
 ```

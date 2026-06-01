@@ -34,9 +34,10 @@ version-specific maps per environment without ever touching
 /*! -----BEGIN ROSETTA MAP----- */
 /*! app: com.example.app | version: 3.4.5 | schema: 1 | classes: 15 */
 const __rosetta_map = {
-    "schema_version": 1,
+    "schema_version": 2,
     "app": "com.example.app",
     "version": "3.4.5",
+    "version_code": 30405,
     "classes": { /* ... */ }
 };
 /*! -----END ROSETTA MAP----- */
@@ -128,7 +129,7 @@ suitable for concatenation with a compiled bundle.
 ```typescript
 import { emitMarkerBlock, loadMap } from 'rosetta-frida';
 
-const map = await loadMap('./maps/com.example.app/3.4.5.jsonc');
+const map = await loadMap('./maps/com.example.app/3.4.5.json');
 const markerSrc = emitMarkerBlock(map);
 
 // markerSrc is:
@@ -207,7 +208,7 @@ await writeFile('hook.bundle.js', newBundleSrc, 'utf8');
 ```mermaid
 sequenceDiagram
     participant U as user hook source
-    participant J as map.jsonc
+    participant J as map.json
     participant E as emitMarkerBlock
     participant FC as frida-compile
     participant B as hook.bundle.js
@@ -235,7 +236,7 @@ npx frida-compile hook.ts -o hook.compiled.js
 # 2. Emit the marker block.
 node -e "
   import('rosetta-frida').then(async ({ emitMarkerBlock, loadMap }) => {
-    const map = await loadMap('maps/com.example.app/3.4.5.jsonc');
+    const map = await loadMap('maps/com.example.app/3.4.5.json');
     process.stdout.write(emitMarkerBlock(map));
   });
 " > marker.js

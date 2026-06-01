@@ -25,14 +25,12 @@ import { _resetCurrentSession } from '../../src/api/rosetta.js';
 import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/index.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SAMPLE_MAP_PATH = join(HERE, '..', '..', 'maps', 'com.example.app', '3.4.5.jsonc');
+const SAMPLE_MAP_PATH = join(HERE, '..', '..', 'maps', 'com.example.app', '3.4.5.json');
 
 function loadSampleMap(): RosettaMap {
-    // The on-disk file is JSONC with comments; use the library's
-    // own parser to handle them correctly.
+    // The on-disk artifact is strict JSON — parse it directly.
     const raw = readFileSync(SAMPLE_MAP_PATH, 'utf8');
-    const stripped = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    return JSON.parse(stripped) as RosettaMap;
+    return JSON.parse(raw) as RosettaMap;
 }
 
 describe('sample-hook example', () => {

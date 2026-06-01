@@ -58,7 +58,7 @@ Rosetta already factors into four layers. Only the bottom one is Frida-specific.
 | Layer | What it is | Where it lives today | Framework-specific? |
 |---|---|---|---|
 | 1. Signature authoring & matching | rules that identify a class/method across versions | sigmatcher + `tools/adapters/sigmatcher.ts` | No |
-| 2. Canonical map artifact + schema | `(app, version) → {real→obf + JVM descriptor}` | `maps/*.jsonc`, `src/validate/schema.ts` | No |
+| 2. Canonical map artifact + schema | `(app, version) → {real→obf + JVM descriptor}` | `maps/*.json`, `src/validate/schema.ts` | No |
 | 3. Resolution semantics | real + version → obf + overload | `src/resolver/`, `src/session/version-match.ts` | No (spec); TS-only impl |
 | 4. Binding / runtime adapter | apply the resolved name to actually hook | `src/proxy/` (`Java.use`), `src/marker/` | **Yes (Frida)** |
 

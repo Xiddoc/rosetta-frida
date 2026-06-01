@@ -7,9 +7,10 @@ import { yamlToMap } from './yaml.js';
 import { MapValidationError, RosettaError } from '../errors.js';
 
 const GOOD_YAML = `
-schema_version: 1
+schema_version: 2
 app: com.example.app
 version: "3.4.5"
+version_code: 30405
 captured_at: 2026-05-13
 sources:
   - tool: hand-authored
@@ -34,7 +35,8 @@ classes:
 describe('yamlToMap', () => {
     it('parses well-formed YAML into a RosettaMap', () => {
         const map = yamlToMap(GOOD_YAML);
-        expect(map.schema_version).toBe(1);
+        expect(map.schema_version).toBe(2);
+        expect(map.version_code).toBe(30405);
         expect(map.app).toBe('com.example.app');
         expect(map.version).toBe('3.4.5');
         const klass = map.classes['com.example.app.IRemoteService$Stub'];
@@ -49,9 +51,10 @@ describe('yamlToMap', () => {
 
     it('parses overload-array form for methods', () => {
         const yaml = `
-schema_version: 1
+schema_version: 2
 app: com.example.app
 version: "1.0.0"
+version_code: 100
 classes:
   IFoo:
     obfuscated: aaaa
@@ -81,9 +84,10 @@ classes:
 
     it('throws MapValidationError when schema_version is wrong', () => {
         const bad = `
-schema_version: 2
+schema_version: 1
 app: com.example.app
 version: "1.0.0"
+version_code: 100
 classes: {}
 `;
         expect(() => yamlToMap(bad)).toThrow(MapValidationError);
@@ -91,7 +95,7 @@ classes: {}
 
     it('throws MapValidationError when required fields are missing', () => {
         const bad = `
-schema_version: 1
+schema_version: 2
 app: com.example.app
 classes: {}
 `;
@@ -100,9 +104,10 @@ classes: {}
 
     it('throws MapValidationError when a class entry is malformed', () => {
         const bad = `
-schema_version: 1
+schema_version: 2
 app: com.example.app
 version: "1.0.0"
+version_code: 100
 classes:
   IFoo:
     kind: aidl_stub
@@ -113,9 +118,10 @@ classes:
 
     it('issues array contains paths for nested errors', () => {
         const bad = `
-schema_version: 1
+schema_version: 2
 app: com.example.app
 version: "1.0.0"
+version_code: 100
 classes:
   IFoo:
     obfuscated: ""

@@ -1,14 +1,14 @@
 /**
- * Canonical JSONC emission + the user-facing `convertToJsonc` entry point.
+ * Canonical JSON emission + the user-facing `convertToJson` entry point.
  *
- * `convertToJsonc` is the single function the CLI / tooling should call
- * to turn a YAML source string or TS-module path into the canonical JSONC
- * representation that lives on disk.
+ * `convertToJson` is the single function the CLI / tooling should call
+ * to turn a YAML source string or TS-module path into the canonical
+ * strict-JSON representation that lives on disk.
  *
  * Output is deterministic: the same input always produces byte-identical
- * output, because we use a stable comment header, a stable indent (4
- * spaces), and rely on insertion-order preservation of object keys (which
- * JS engines guarantee for string keys).
+ * output, because we use a stable indent (4 spaces) and rely on
+ * insertion-order preservation of object keys (which JS engines
+ * guarantee for string keys).
  */
 
 import { extname } from 'node:path';
@@ -17,29 +17,11 @@ import type { RosettaMap } from '../types/map.js';
 import { yamlToMap } from './yaml.js';
 import { tsModuleToMap } from './ts-module.js';
 
-/** Input formats accepted by `convertToJsonc`. */
+/** Input formats accepted by `convertToJson`. */
 export type ConvertFormat = 'yaml' | 'ts' | 'auto';
 
 /**
- * The header comments emitted at the top of every canonical JSONC map.
- *
- * Comments are wrapped in `//` so a downstream JSONC parser strips them
- * uniformly, and so users can read the header in a text editor without
- * needing block-comment awareness.
- */
-const CANONICAL_HEADER = [
-    '// rosetta-frida map — auto-generated canonical JSONC.',
-    '//',
-    '// schema_version: 1',
-    '//',
-    '// This file is JSON-with-comments. Any JSONC-aware tool (incl. all',
-    '// modern JS bundlers and `JSON.parse` after comment-stripping) can',
-    '// read it. Edit the source map, then re-run `rosetta convert` rather',
-    '// than hand-editing the generated file.',
-];
-
-/**
- * Convert `input` (file path or raw source) to canonical JSONC.
+ * Convert `input` (file path or raw source) to canonical strict JSON.
  *
  * The `format` parameter selects the converter:
  *   - `'yaml'`: `input` is YAML *source text*; parse + validate + emit.
@@ -52,7 +34,7 @@ const CANONICAL_HEADER = [
  *
  * Output is deterministic: same input → byte-identical output.
  */
-export async function convertToJsonc(
+export async function convertToJson(
     input: string,
     format: ConvertFormat = 'auto',
 ): Promise<string> {
@@ -67,19 +49,19 @@ export async function convertToJsonc(
         // for callers that bypass TS (e.g. plain-JS consumers).
         throw new RosettaError(`unsupported convert format: ${String(resolved)}`);
     }
-    return renderJsonc(map);
+    return renderJson(map);
 }
 
 /**
- * Render a RosettaMap as canonical JSONC source text.
+ * Render a RosettaMap as canonical strict-JSON source text.
  *
  * Uses `JSON.stringify` with a 4-space indent to match the project's
- * Prettier config, prepends the canonical header comments, and ends with
- * a trailing newline (POSIX convention; Prettier enforces it).
+ * Prettier config, and ends with a trailing newline (POSIX convention;
+ * Prettier enforces it). No comment header — the artifact is plain JSON.
  */
-export function renderJsonc(map: RosettaMap): string {
+export function renderJson(map: RosettaMap): string {
     const body = JSON.stringify(map, null, 4);
-    return `${CANONICAL_HEADER.join('\n')}\n${body}\n`;
+    return `${body}\n`;
 }
 
 /**

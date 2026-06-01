@@ -17,7 +17,8 @@ import { BEGIN_MARKER, BEGIN_REGISTRY, END_MARKER, END_REGISTRY } from './format
 /** A minimal well-formed map. */
 function minimalMap(): RosettaMap {
     return {
-        schema_version: 1,
+        schema_version: 2,
+        version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
         classes: {},
@@ -27,11 +28,12 @@ function minimalMap(): RosettaMap {
 /** A richly-populated map covering optional fields and multiple classes. */
 function richMap(): RosettaMap {
     return {
-        schema_version: 1,
+        schema_version: 2,
+        version_code: 1,
         app: 'com.example.app',
         version: '3.4.5',
         captured_at: '2026-05-11',
-        apk_sha256: 'a'.repeat(64),
+        signer_sha256: 'a'.repeat(64),
         frida_min_version: '16.0.0',
         frida_max_version: '17.99.0',
         sources: [
@@ -87,7 +89,7 @@ describe('emitMarkerBlock', () => {
         const out = emitMarkerBlock(richMap());
         // header order: app | version | schema | classes
         expect(out).toMatch(
-            /\/\*! app: com\.example\.app \| version: 3\.4\.5 \| schema: 1 \| classes: 3 \*\//,
+            /\/\*! app: com\.example\.app \| version: 3\.4\.5 \| schema: 2 \| classes: 3 \*\//,
         );
     });
 
@@ -103,7 +105,7 @@ describe('emitMarkerBlock', () => {
     it('uses 4-space indent in the embedded JSON', () => {
         const out = emitMarkerBlock(richMap());
         // The first indented line should start with exactly 4 spaces.
-        expect(out).toMatch(/\n {4}"schema_version": 1,/);
+        expect(out).toMatch(/\n {4}"schema_version": 2,/);
         // A doubly-nested key should start with 8 spaces.
         expect(out).toMatch(/\n {8}"com\.example\.app\.IRemoteService\$Stub": \{/);
     });

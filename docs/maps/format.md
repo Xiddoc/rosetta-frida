@@ -1,12 +1,12 @@
 # Map format reference
 
-A rosetta-frida **map** is a single JSONC file describing the real
-→ obfuscated translation for one `(app, version)` pair. This page is
+A rosetta-frida **map** is a single strict-JSON file describing the real
+→ obfuscated translation for one `(app, version_code)` pair. This page is
 the field-by-field reference. For the authoring workflow, see
 [Authoring](authoring.md); for the on-bundle embedding, see
 [Marker block](marker-block.md).
 
-The canonical example lives at `maps/com.example.app/3.4.5.jsonc`
+The canonical example lives at `maps/com.example.app/3.4.5.json`
 in the repo. It exercises every feature documented here at least
 once — 15 classes covering AIDL stubs, callback proxies, value
 objects, an enum, a synthetic Companion, an anonymous inner class.
@@ -15,11 +15,12 @@ objects, an enum, a synthetic Companion, an anonymous inner class.
 
 ```typescript
 interface RosettaMap {
-    schema_version: 1;
+    schema_version: 2;
     app: string;
     version: string;
+    version_code: number;
     captured_at?: string;
-    apk_sha256?: string;
+    signer_sha256?: string;
     frida_min_version?: string;
     frida_max_version?: string;
     sources?: MapSource[];
@@ -31,9 +32,10 @@ interface RosettaMap {
 
 | Field | Type | Description |
 |---|---|---|
-| `schema_version` | `1` | The schema version. Must be `1`. Bumped on breaking schema changes; old maps will fail to load against newer libraries until in-tree migrators are added. |
+| `schema_version` | `2` | The schema version. Must be `2`. Bumped on breaking schema changes; old maps will fail to load against newer libraries until in-tree migrators are added. (`2` added the required `version_code` and optional `signer_sha256`, and dropped `apk_sha256`.) |
 | `app` | string | Android package name (`com.example.app`). Cross-checked against the auto-detected app at session start. |
-| `version` | string | App version (`3.4.5`). Cross-checked against the auto-detected version. |
+| `version` | string | App version *label* (`PackageInfo.versionName`, e.g. `3.4.5`). A human display label only — NOT authoritative for selection (labels can repeat across builds). Used as the fuzzy-match fallback key. |
+| `version_code` | integer | **The authoritative app-identity key** — Android `PackageInfo.versionCode` (or the low 32 bits of `longVersionCode`). The runtime selects maps by this first (O(1), monotonic per build); the `version` label is only a fallback. See [RFC 0001](../rfcs/0001-unified-cross-framework-signatures.md). |
 | `classes` | object | Real-FQN → `ClassEntry`. The whole point of the file. |
 
 ### Optional fields
@@ -41,7 +43,7 @@ interface RosettaMap {
 | Field | Type | Description |
 |---|---|---|
 | `captured_at` | ISO date string | When the map was captured. Useful when reading old maps to know how stale they are. |
-| `apk_sha256` | SHA-256 hex | Integrity evidence — the SHA-256 of the APK this map was derived from. Not enforced at runtime in V1; reserved for V2+ trust workflows. |
+| `signer_sha256` | SHA-256 hex | Authenticity guard — the SHA-256 of the APK *signing certificate* (not the APK bytes). Cheap to verify on-device via PackageManager; guards against loading a map for a repackaged/spoofed app. Not enforced at runtime in V1; reserved for the trust workflow. |
 | `frida_min_version`, `frida_max_version` | semver | The Frida runtime range this map is known to work with. Not enforced at runtime in V1; emitted as metadata. |
 | `sources` | `MapSource[]` | Provenance per tool. See [Provenance](#provenance). |
 
@@ -50,7 +52,7 @@ interface RosettaMap {
 A real map for a non-trivial app comes from several tools. The format
 tracks which entries came from where:
 
-```jsonc
+```json
 "sources": [
     {
         "tool": "sigmatcher",
@@ -92,7 +94,7 @@ cross-references one of these entries — see
 
 A class entry is keyed by its real fully-qualified name:
 
-```jsonc
+```json
 "classes": {
     "com.example.app.IRemoteService$Stub": {
         "obfuscated": "aaaa",
@@ -156,7 +158,7 @@ multiple overloads).
 
 ### Single-overload form
 
-```jsonc
+```json
 "methods": {
     "requestPrompt": {
         "obfuscated": "f",
@@ -172,7 +174,7 @@ multiple overloads).
 
 ### Overload-array form
 
-```jsonc
+```json
 "methods": {
     "requestTicket": [
         {
@@ -218,7 +220,7 @@ type MethodMap = Record<string, MethodEntry | MethodEntry[]>;
 Constructors are written with the real name `<init>` and the obfuscated
 name also `<init>`. Frida exposes them the same way:
 
-```jsonc
+```json
 "<init>": [
     {
         "obfuscated": "<init>",
@@ -237,7 +239,7 @@ name also `<init>`. Frida exposes them the same way:
 
 Fields are keyed by real field name:
 
-```jsonc
+```json
 "fields": {
     "sessionId": {
         "obfuscated": "a",
@@ -288,26 +290,31 @@ For a single bundle that ships maps for many versions:
 type RosettaMapRegistry = Record<string, RosettaMap>;
 ```
 
-```jsonc
+```json
 {
     "3.4.5": {
-        "schema_version": 1,
+        "schema_version": 2,
         "app": "com.example.app",
         "version": "3.4.5",
-        "classes": { /* ... */ }
+        "version_code": 30405,
+        "classes": {}
     },
     "3.4.6": {
-        "schema_version": 1,
+        "schema_version": 2,
         "app": "com.example.app",
         "version": "3.4.6",
-        "classes": { /* ... */ }
+        "version_code": 30406,
+        "classes": {}
     }
 }
 ```
 
-The session picks the right entry by the detected version. With
-`versionMatch: 'exact'`, a missing version throws; with `'fuzzy'`,
-the closest version wins.
+The registry is keyed by `version` label for human readability, but
+the session selects the right entry by the detected **`version_code`**
+first (scanning the entries for a matching code), falling back to the
+label only when no code is available or matches. With
+`versionMatch: 'exact'`, a non-matching build throws; with `'fuzzy'`,
+the closest label wins.
 
 See [Multi-version bundle recipe](../recipes/multi-version-bundle.md)
 for the full workflow.
@@ -317,17 +324,18 @@ for the full workflow.
 ```typescript
 import { loadMap } from 'rosetta-frida';
 
-const map = await loadMap('./maps/com.example.app/3.4.5.jsonc');
+const map = await loadMap('./maps/com.example.app/3.4.5.json');
 ```
 
 `loadMap` accepts:
 
 - A `RosettaMap` (passed through the validator and returned).
-- A JSONC source string (parsed, then validated).
+- A strict-JSON source string (parsed, then validated). Comments and
+  trailing commas are rejected.
 - A filesystem path (read, parsed, validated).
 
 The path-vs-source heuristic is cheap: if the first non-whitespace
-character looks like JSON (`{`, `[`, `"`, digit, `/`, …) the string
+character looks like JSON (`{`, `[`, `"`, digit, …) the string
 is treated as source. Otherwise it's a path.
 
 In the Frida runtime (where there is no filesystem), `loadMap` is
@@ -342,7 +350,7 @@ Every map flows through a Zod schema. Authoring tools (the CLI,
 so format errors surface uniformly:
 
 ```text
-FAIL: maps/com.example.app/3.4.5.jsonc — invalid map
+FAIL: maps/com.example.app/3.4.5.json — invalid map
   at classes.com.example.app.IRemoteService$Stub.obfuscated: required
   at classes.com.example.app.Foo.methods.bar.signature: must match /\(.*\)[^()]+/
 ```
@@ -373,6 +381,9 @@ New optional fields are additive: old maps continue to load against
 newer libraries (the library just sees `undefined` for the new
 fields).
 
-Breaking changes will bump `schema_version` to `2`. The library will
-ship in-tree migrators (`1 → 2`, ...) at that point so old maps keep
-loading after migration. V1 ships only `schema_version: 1`.
+Breaking changes bump `schema_version`. The current schema is `2`
+(it made `version_code` required, added the optional `signer_sha256`
+authenticity guard, and dropped `apk_sha256`); `schema_version: 1`
+maps fail to load and must be re-emitted with a `version_code`. Future
+breaking changes will ship in-tree migrators (`2 → 3`, ...) so old
+maps keep loading after migration.

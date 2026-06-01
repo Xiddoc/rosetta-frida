@@ -1,5 +1,5 @@
 /**
- * `rosetta validate <map.{json,jsonc,yaml,yml,ts,js,mjs,cjs}>`
+ * `rosetta validate <map.{json,yaml,yml,ts,js,mjs,cjs}>`
  *
  * Loads a map via the appropriate path (auto-detected by extension),
  * runs structural validation, and prints either "OK" or a structured
@@ -10,6 +10,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError, MapValidationError } from '../../src/errors.js';
 import { yamlToMap, tsModuleToMap, validateStructure } from '../../src/convert/index.js';
+import { parseJson } from '../../src/parse/json.js';
 import type { RosettaMap } from '../../src/types/map.js';
 
 export interface ValidateOptions {
@@ -34,73 +35,16 @@ export function parseValidateArgs(argv: readonly string[]): ValidateOptions {
 }
 
 /**
- * Strip JSONC comments (line + block) from a JSON-with-comments string.
- *
- * This is a small in-tree stripper rather than a dep — see design doc
- * Q2. It handles:
- *   - C-style line comments (slash-slash) to end-of-line.
- *   - C-style block comments (slash-star ... star-slash).
- *   - String literals — comment-style sequences inside a "..." pair
- *     are left intact, with backslash escapes respected.
- *
- * INTEGRATION NOTE: Agent A's parse layer will produce a richer JSONC
- * parser. Once that lands, this function should defer to it.
- */
-export function stripJsoncComments(src: string): string {
-    let out = '';
-    let i = 0;
-    const n = src.length;
-    while (i < n) {
-        const ch = src[i];
-        const next = src[i + 1];
-        // String literal — copy through, respecting backslash escapes.
-        if (ch === '"') {
-            out += ch;
-            i++;
-            while (i < n) {
-                const c = src[i];
-                out += c;
-                i++;
-                if (c === '\\' && i < n) {
-                    out += src[i];
-                    i++;
-                    continue;
-                }
-                if (c === '"') break;
-            }
-            continue;
-        }
-        // Line comment.
-        if (ch === '/' && next === '/') {
-            i += 2;
-            while (i < n && src[i] !== '\n') i++;
-            continue;
-        }
-        // Block comment.
-        if (ch === '/' && next === '*') {
-            i += 2;
-            while (i < n && !(src[i] === '*' && src[i + 1] === '/')) i++;
-            if (i < n) i += 2;
-            continue;
-        }
-        out += ch;
-        i++;
-    }
-    return out;
-}
-
-/**
  * Load a map from the filesystem, auto-detecting format from the path's
  * extension.
  */
 export async function loadMap(inputPath: string, fsImpl: typeof fs = fs): Promise<RosettaMap> {
     const ext = path.extname(inputPath).toLowerCase();
-    if (ext === '.json' || ext === '.jsonc') {
+    if (ext === '.json') {
         const raw = await fsImpl.readFile(inputPath, 'utf8');
-        const stripped = stripJsoncComments(raw);
         let parsed: unknown;
         try {
-            parsed = JSON.parse(stripped) as unknown;
+            parsed = parseJson(raw);
         } catch (e) {
             throw new RosettaError(`JSON parse error in ${inputPath}: ${(e as Error).message}`);
         }

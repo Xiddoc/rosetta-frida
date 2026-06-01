@@ -11,7 +11,7 @@ you will have:
 
 The example uses the canonical anonymized sample app
 `com.example.app` whose map ships in this repo at
-`maps/com.example.app/3.4.5.jsonc` (a 15-class example covering
+`maps/com.example.app/3.4.5.json` (a 15-class example covering
 every feature of the schema).
 
 ## 1. Scaffold or import the map
@@ -20,17 +20,18 @@ For real work, start with `rosetta init` and fill in entries:
 
 ```sh
 npx rosetta init com.example.app 3.4.5
-# wrote maps/com.example.app/3.4.5.jsonc
+# wrote maps/com.example.app/3.4.5.json
 ```
 
 For this tutorial, use the ready-made sample map at
-`maps/com.example.app/3.4.5.jsonc`. It contains:
+`maps/com.example.app/3.4.5.json`. It contains:
 
 ```json
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "app": "com.example.app",
     "version": "3.4.5",
+    "version_code": 30405,
     "captured_at": "2026-05-13",
     "classes": {
         "com.example.app.IRemoteService$Stub": {
@@ -99,7 +100,7 @@ npx frida-compile hook.ts -o hook.bundle.js
 ```
 
 The resulting `hook.bundle.js` is a single self-contained script. The
-imported `.json` sibling (produced from `.jsonc` via `rosetta convert`)
+imported `.json` sibling (produced from `.json` via `rosetta convert`)
 is inlined by `frida-compile` as a JavaScript object literal — no
 filesystem dependency at hook-execution time.
 
@@ -149,7 +150,7 @@ com.example.app@3.4.5, schema_version 1, 15 classes
 And you can swap maps without recompiling:
 
 ```sh
-$ npx rosetta patch hook.bundle.js --map maps/com.example.app/3.5.0.jsonc
+$ npx rosetta patch hook.bundle.js --map maps/com.example.app/3.5.0.json
 patch: wrote hook.bundle.js (in place)
 
 $ npx rosetta inspect hook.bundle.js

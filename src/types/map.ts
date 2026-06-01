@@ -4,8 +4,9 @@
  * These are the LOCKED contracts that all Wave 1 agents implement against.
  * Do not change shapes without coordination across agents.
  *
- * The on-disk format is JSONC (JSON with Comments). The in-memory
- * representation is this structure.
+ * The on-disk format is strict JSON (one map per file). The in-memory
+ * representation is this structure. (Comment-bearing YAML / TS modules
+ * are *authoring inputs* converted to JSON via `rosetta convert`.)
  */
 
 /** Provenance source for a map (or subset of entries). */
@@ -112,16 +113,38 @@ export type ClassMap = Record<string, ClassEntry>;
 
 /** The top-level mapping file. */
 export interface RosettaMap {
-    /** Mandatory. Bumped on breaking schema changes. */
-    schema_version: 1;
+    /**
+     * Mandatory. Bumped on breaking schema changes.
+     *
+     * `2` (current): adds the required `version_code` app-identity key and
+     * the optional `signer_sha256` authenticity guard; drops `apk_sha256`.
+     */
+    schema_version: 2;
     /** Android package name (e.g. "com.example.app"). */
     app: string;
-    /** App version (e.g. "3.4.5"). */
+    /**
+     * Human-readable version label (e.g. "3.4.5"), from
+     * `PackageInfo.versionName`. NOT authoritative for selection — it is
+     * a display label that can repeat across builds. Used only as the
+     * fuzzy-match fallback key. See RFC 0001 Decision 3.
+     */
     version: string;
+    /**
+     * Authoritative app-identity key — Android `PackageInfo.versionCode`
+     * (the int field, or the low 32 bits of `longVersionCode`). The
+     * primary, O(1) key the runtime selects maps by; monotonic per build.
+     * See RFC 0001 Decision 3.
+     */
+    version_code: number;
     /** ISO date when the map was captured. */
     captured_at?: string;
-    /** SHA-256 of the APK this map was derived from. */
-    apk_sha256?: string;
+    /**
+     * Optional authenticity guard — hex SHA-256 of the APK signing
+     * certificate (not the APK bytes). Cheap to verify on-device via
+     * PackageManager; guards against loading a map for a repackaged or
+     * spoofed app. See RFC 0001 Decision 3.
+     */
+    signer_sha256?: string;
     /** Minimum Frida version this map is known to work with. */
     frida_min_version?: string;
     /** Maximum Frida version this map is known to work with. */

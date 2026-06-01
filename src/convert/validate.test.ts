@@ -7,7 +7,8 @@ import { validateStructure } from './validate.js';
 import { MapValidationError } from '../errors.js';
 
 const MINIMAL = {
-    schema_version: 1,
+    schema_version: 2,
+    version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
     classes: {
@@ -25,7 +26,7 @@ describe('validateStructure', () => {
         const full = {
             ...MINIMAL,
             captured_at: '2026-05-13',
-            apk_sha256: 'a'.repeat(64),
+            signer_sha256: 'a'.repeat(64),
             frida_min_version: '16.0.0',
             frida_max_version: '17.99.99',
             sources: [
@@ -39,7 +40,7 @@ describe('validateStructure', () => {
             ],
         };
         const map = validateStructure(full);
-        expect(map.apk_sha256?.length).toBe(64);
+        expect(map.signer_sha256?.length).toBe(64);
         expect(map.sources?.[0]?.confidence).toBe('high');
     });
 
@@ -82,7 +83,7 @@ describe('validateStructure', () => {
 
     it('throws MapValidationError with issues on a bad map', () => {
         try {
-            validateStructure({ schema_version: 1, app: 'x' });
+            validateStructure({ schema_version: 2, version_code: 1, app: 'x' });
             throw new Error('expected throw');
         } catch (e) {
             expect(e).toBeInstanceOf(MapValidationError);
@@ -94,7 +95,8 @@ describe('validateStructure', () => {
     it('formats a single-issue error count correctly', () => {
         try {
             validateStructure({
-                schema_version: 1,
+                schema_version: 2,
+                version_code: 1,
                 app: 'x',
                 version: '1.0',
                 classes: { IFoo: {} },

@@ -122,13 +122,26 @@ Behind the scenes:
 
 ## Mapping file format
 
-YAML, one file per `(app, version)`. Stored under a maps directory
-that's loaded at attach time.
+**Resolved (post-RFC-0001):** the canonical on-disk artifact is
+**strict JSON** (`schema_version: 2`), one file per
+`(app, version_code)`, stored under a maps directory loaded at attach
+time. YAML and TS modules remain *authoring inputs* converted to JSON
+via `rosetta convert` — the YAML below is shown for authoring
+flavour. Two app-identity changes landed with schema 2:
+
+- **`version_code` is required and authoritative.** It is the Android
+  `PackageInfo.versionCode` (or low 32 bits of `longVersionCode`) and
+  is the primary, O(1) key the runtime selects maps by. The `version`
+  (versionName) string is a human label / fuzzy fallback only.
+- **`signer_sha256`** (optional) replaced `apk_sha256`: it is the hash
+  of the signing certificate, a cheap on-device authenticity guard
+  (the APK-bytes hash never belonged in a per-version selection key).
 
 ```yaml
-# rosetta-frida/maps/com.example.app/3.4.5.yaml
+# authoring source — rosetta convert renders this to 3.4.5.json
 app: com.example.app
 version: "3.4.5"
+version_code: 30405
 captured_at: 2026-05-11
 sources:
   - tool: sigmatcher
@@ -162,11 +175,17 @@ classes:
     kind: aidl_callback
 ```
 
-Why YAML (not JSON):
+Why YAML/TS *for authoring* (the canonical artifact is still strict
+JSON):
 - Human-readable and human-writable (a lot of these will be hand-
   authored or hand-edited).
-- Comments are first-class (`# notes here`).
+- Comments are first-class (`# notes here`) in the authoring source.
 - Multi-line strings work naturally.
+
+The on-disk *artifact* is strict JSON (no comments) so it imports
+natively into any bundler / `frida-compile` and round-trips through
+`JSON.parse` without a custom parser. Keep comment-bearing notes in a
+YAML/TS authoring source and re-render with `rosetta convert`.
 
 ## Distribution model — separate maps repo
 
@@ -280,9 +299,13 @@ contexts where you don't have a `Context` yet.
 
 ### 7. Versioning the mapping file format itself?
 
-We'll learn things about the schema as we go. Add a top-level
-`schema_version: 1` field from day 1 so future format changes can be
-detected and handled.
+We'll learn things about the schema as we go. The top-level
+`schema_version` field exists from day 1 so format changes can be
+detected and handled. **Resolved:** the current schema is `2` — the
+RFC-0001 app-identity refinement made `version_code` required, added
+the optional `signer_sha256` guard, and dropped `apk_sha256`. The
+literal is a hard gate (`z.literal(2)`); `schema_version: 1` maps are
+rejected and must be re-emitted with a `version_code`.
 
 ## When to NOT use rosetta-frida (anti-scope)
 

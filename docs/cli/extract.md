@@ -37,7 +37,7 @@ extract: wrote extracted.json (single)
 
 $ head -3 extracted.json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "app": "com.example.app",
 ```
 
@@ -64,7 +64,7 @@ extract: no rosetta-frida marker block found in bundle
 
 ## Output format
 
-The extracted file is **pure JSON**, not JSONC. Comments and
+The extracted file is **pure strict JSON**. Comments and
 formatting from the original source do not survive — only the
 canonical data does.
 

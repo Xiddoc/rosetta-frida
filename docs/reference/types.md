@@ -23,11 +23,12 @@ Defined in `src/types/map.ts`.
 
 ```typescript
 interface RosettaMap {
-    schema_version: 1;
+    schema_version: 2;
     app: string;
-    version: string;
+    version: string; // versionName label — fuzzy fallback only
+    version_code: number; // authoritative selection key (RFC 0001)
     captured_at?: string;
-    apk_sha256?: string;
+    signer_sha256?: string; // signing-cert hash authenticity guard
     frida_min_version?: string;
     frida_max_version?: string;
     sources?: MapSource[];

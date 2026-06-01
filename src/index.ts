@@ -12,12 +12,7 @@ export * from './types/index.js';
 export { EventBus, formatEvent, createSilentBus } from './diagnostics/index.js';
 
 // Parse + validate
-export {
-    parseJsonc,
-    stripCommentsAndTrailingCommas,
-    loadMap,
-    looksLikeJsoncSource,
-} from './parse/index.js';
+export { parseJson, loadMap, looksLikeJsonSource } from './parse/index.js';
 export { validateMap, rosettaMapSchema } from './validate/index.js';
 
 // Resolver
@@ -39,7 +34,7 @@ export {
 export type { ParsedMarker, ParsedSingle, ParsedRegistry } from './marker/index.js';
 
 // Converters
-export { yamlToMap, tsModuleToMap, convertToJsonc, renderJsonc } from './convert/index.js';
+export { yamlToMap, tsModuleToMap, convertToJson, renderJson } from './convert/index.js';
 export type { ConvertFormat } from './convert/index.js';
 
 // Session + auto-detect + health-check (Wave 2G)

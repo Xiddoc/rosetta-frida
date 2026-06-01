@@ -22,9 +22,10 @@ import { createSession, RosettaSession, isRegistry } from './session.js';
 import type { AutoDetectJavaApi } from './auto-detect.js';
 import type { HealthCheckJavaApi } from './health-check.js';
 
-function buildMap(version: string, app = 'com.example.app'): RosettaMap {
+function buildMap(version: string, app = 'com.example.app', versionCode = 1): RosettaMap {
     return {
-        schema_version: 1,
+        schema_version: 2,
+        version_code: versionCode,
         app,
         version,
         classes: {
@@ -34,13 +35,22 @@ function buildMap(version: string, app = 'com.example.app'): RosettaMap {
     };
 }
 
-function makeAutoDetectJavaApi(app: string, version: string): AutoDetectJavaApi {
+function makeAutoDetectJavaApi(
+    app: string,
+    version: string,
+    versionCode?: number,
+): AutoDetectJavaApi {
     return {
         use: () => ({
             currentApplication: () => ({
                 getApplicationContext: () => ({
                     getPackageManager: () => ({
-                        getPackageInfo: () => ({ versionName: { value: version } }),
+                        getPackageInfo: () => ({
+                            versionName: { value: version },
+                            ...(versionCode === undefined
+                                ? {}
+                                : { getLongVersionCode: () => versionCode }),
+                        }),
                     }),
                 }),
                 getPackageName: () => app,
@@ -122,7 +132,7 @@ describe('createSession — explicit app/version', () => {
         expect(mapLoad).toBeDefined();
         if (mapLoad?.type === 'map-load') {
             expect(mapLoad.classCount).toBe(2);
-            expect(mapLoad.schemaVersion).toBe(1);
+            expect(mapLoad.schemaVersion).toBe(2);
         }
     });
 });
@@ -277,6 +287,68 @@ describe('createSession — registry input', () => {
     });
 });
 
+describe('createSession — version_code selection (authoritative)', () => {
+    it('selects a registry map by detected version_code, ignoring the label', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0', 'com.example.app', 100),
+            '1.1.0': buildMap('1.1.0', 'com.example.app', 110),
+        };
+        const session = createSession({
+            map: registry,
+            // Auto-detect reports code 110 but a label that wouldn't match.
+            autoDetectJavaApi: makeAutoDetectJavaApi('com.example.app', 'marketing-name', 110),
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(session.map.version).toBe('1.1.0');
+    });
+
+    it('accepts a single map when the detected version_code matches even if labels differ', () => {
+        const session = createSession({
+            map: buildMap('1.2.3', 'com.example.app', 999),
+            app: 'com.example.app',
+            version: 'different-label',
+            versionCode: 999,
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(session.map.version_code).toBe(999);
+    });
+
+    it('throws on a version_code mismatch even when version labels are equal', () => {
+        try {
+            createSession({
+                map: buildMap('1.2.3', 'com.example.app', 100),
+                app: 'com.example.app',
+                version: '1.2.3',
+                versionCode: 999,
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+            });
+            throw new Error('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(MapVersionMismatchError);
+            expect((e as Error).message).toMatch(/code 999/);
+            expect((e as Error).message).toMatch(/code 100/);
+        }
+    });
+
+    it('tolerates a version_code mismatch when the pick itself is fuzzy', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0', 'com.example.app', 100),
+            '1.1.0': buildMap('1.1.0', 'com.example.app', 110),
+        };
+        const session = createSession({
+            map: registry,
+            app: 'com.example.app',
+            // Code 999 is absent AND the label is non-exact → a genuine fuzzy
+            // pick (nearest label), under which the code mismatch is tolerated.
+            version: '1.0.5',
+            versionCode: 999,
+            versionMatch: 'fuzzy',
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(session.map.version).toBe('1.0.0');
+    });
+});
+
 describe('createSession — health check', () => {
     it('emits a passing health-check event when all classes resolve', () => {
         const events = new EventBus();
@@ -390,7 +462,8 @@ describe('createSession — health check', () => {
 
 describe('createSession — health check with AIDL descriptors and anchors', () => {
     const map: RosettaMap = {
-        schema_version: 1,
+        schema_version: 2,
+        version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
         classes: {

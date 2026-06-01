@@ -2,17 +2,24 @@
  * Selecting a `RosettaMap` for the running app version.
  *
  * The session may be handed:
- *   - A single `RosettaMap` — use as-is. The version field is validated
- *     against the detected version at the session layer.
+ *   - A single `RosettaMap` — use as-is. The version is validated
+ *     against the detected app at the session layer.
  *   - A `RosettaMapRegistry` — a record of `RosettaMap` keyed by
- *     version string. Pick the entry that matches the version.
+ *     version *label*. Pick the entry that matches the running build.
  *
- * Version-match modes:
- *   - 'exact' (default) — registry must contain an entry whose key
- *     equals the version. No match → throw.
- *   - 'fuzzy' — fall back to the closest available version by
- *     major-minor-patch distance. Used when the user explicitly
- *     opts in (`versionMatch: 'fuzzy'`).
+ * Selection precedence (RFC 0001 Decision 3):
+ *   1. `version_code` — the authoritative, O(1) key. When the caller
+ *      supplies a detected/overridden `versionCode`, we scan the
+ *      registry values for the map whose `version_code` equals it and
+ *      return that map regardless of its label. This is exact, never
+ *      fuzzy.
+ *   2. version *label* — the fallback when no `versionCode` is available
+ *      or no map carries the detected code. Behaves as before:
+ *      - 'exact' (default) — registry must contain an entry whose key
+ *        equals the version label. No match → throw.
+ *      - 'fuzzy' — fall back to the closest available label by
+ *        major-minor-patch distance (user opts in via
+ *        `versionMatch: 'fuzzy'`).
  *
  * Fuzzy comparison is intentionally simple: we parse each version into
  * a numeric `[major, minor, patch]` tuple (defaulting missing
@@ -41,9 +48,15 @@ export interface PickedMap {
 
 /** Options controlling the pick. */
 export interface PickMapOptions {
-    /** The user-supplied or auto-detected version to satisfy. */
+    /** The user-supplied or auto-detected version *label* to satisfy. */
     version: string;
-    /** Version-matching mode. Defaults to 'exact'. */
+    /**
+     * The authoritative version code, when known. Takes precedence over
+     * the version label: a registry entry whose `version_code` equals
+     * this is selected directly. Undefined falls back to label matching.
+     */
+    versionCode?: number;
+    /** Version-label-matching mode. Defaults to 'exact'. */
     versionMatch?: VersionMatch;
 }
 
@@ -69,7 +82,7 @@ export function isRegistry(input: RosettaMap | RosettaMapRegistry): input is Ros
  */
 export function pickMapForVersion(
     input: RosettaMap | RosettaMapRegistry,
-    { version, versionMatch = 'exact' }: PickMapOptions,
+    { version, versionCode, versionMatch = 'exact' }: PickMapOptions,
 ): PickedMap {
     if (!isRegistry(input)) {
         return { map: input, fromRegistry: false, fuzzy: false };
@@ -82,6 +95,19 @@ export function pickMapForVersion(
         );
     }
 
+    // 1. Authoritative selection by version_code (RFC 0001 Decision 3).
+    if (versionCode !== undefined) {
+        for (const key of keys) {
+            const candidate = input[key];
+            if (candidate && candidate.version_code === versionCode) {
+                return { map: candidate, fromRegistry: true, fuzzy: false, registryKey: key };
+            }
+        }
+        // No map carries the detected code — fall through to label matching,
+        // which surfaces a precise error (or fuzzy fallback) below.
+    }
+
+    // 2. Fallback selection by version label.
     const exact = input[version];
     if (exact !== undefined) {
         return { map: exact, fromRegistry: true, fuzzy: false, registryKey: version };
