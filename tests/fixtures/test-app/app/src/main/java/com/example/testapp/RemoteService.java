@@ -11,7 +11,6 @@ import android.os.IBinder;
  * Exercises:
  *   <ul>
  *     <li>{@code kind: aidl_stub} — extends {@code IRemoteService.Stub}</li>
- *     <li>Multi-overload methods — two {@code requestTicket} overloads</li>
  *     <li>Cross-class signature reference — args include
  *         {@link IServiceCallback}</li>
  *     <li>{@code kind: anonymous} — anonymous {@link Runnable} on the
@@ -35,23 +34,17 @@ public class RemoteService extends Service {
         @Override
         public void requestTicket(Bundle params, IServiceCallback callback) {
             requestCounter++;
+            // AIDL forbids overloading, so there is a single requestTicket.
+            // Keep BOTH BlobCache.put overloads (2-arg + 3-arg) reachable
+            // here — the 3-arg form is the multi-overload exemplar in the
+            // generated map — and keep the public `lastTag` field live.
+            lastTag = params != null ? params.getString("tag") : null;
             BlobCache.getInstance().put("last", params);
-            try {
-                callback.onResult(params);
-            } catch (Exception e) {
-                safeError(callback, ErrorCode.TIMEOUT.getCode(), e.getMessage());
-            }
-        }
-
-        @Override
-        public void requestTicket(Bundle params, String tag, IServiceCallback callback) {
-            requestCounter++;
-            lastTag = tag;
             BlobCache.getInstance().put("last", params, Config.TIMEOUT_MILLIS);
             try {
                 callback.onResult(params);
             } catch (Exception e) {
-                safeError(callback, ErrorCode.AUTH_FAILED.getCode(), e.getMessage());
+                safeError(callback, ErrorCode.TIMEOUT.getCode(), e.getMessage());
             }
         }
 
