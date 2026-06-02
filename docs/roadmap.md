@@ -22,26 +22,49 @@ move between them as priorities shift.
 
 ## Housekeeping (do first)
 
-### Confirm the integration pipeline is green on `master`
+### Fix the test-app integration pipeline (`pipeline.yml`) and get it green
 
 - **Purpose.** The `pipeline.yml` GitHub Actions job builds both
   test-app APKs, runs them through sigmatcher → the adapter, and diffs
   the emitted map against the committed goldens
-  (`tests/fixtures/test-app/expected/v1.0.0.json` /
-  `v1.1.0.json`). After the schema-v2 migration the goldens were
-  rewritten to strict JSON in the adapter's exact key order, and the
-  adapter/CLI now require `--version-code`.
-- **Benefit.** This job is the only check that exercises the **real
-  sigmatcher output ordering** end-to-end; the unit suite can't. A green
-  run confirms the golden migration didn't introduce class/method
-  ordering or schema drift.
-- **Scope / dependencies.** Requires the Android SDK + sigmatcher, which
-  the standard local dev environment's network policy may block
-  (`dl.google.com` / `maven.google.com`). If the diff fails, regenerate
-  via `tests/fixtures/test-app/regenerate-goldens.sh` (it now passes
-  `--version-code`) and commit the result.
-- **Status.** planned (needs a CI run or an environment with the Android
-  SDK reachable).
+  (`tests/fixtures/test-app/expected/v1.0.0.json` / `v1.1.0.json`). It
+  is **currently failing — and appears to have never been green.**
+- **Root cause (confirmed).** The AIDL fixture
+  `tests/fixtures/test-app/app/src/main/aidl/com/example/testapp/IRemoteService.aidl`
+  declares `requestTicket` **twice** ("to exercise the multi-overload
+  form"). AIDL does **not** support method overloading — interface
+  methods must have unique names — so `:app:compileReleaseAidl` fails and
+  the APK never builds. Pre-existing since the fixture's founding commit
+  (`6ebd5a6`); the schema-v2 work was simply the first change to touch
+  this job's trigger paths and make it run.
+- **Why it matters.** This is the only check that exercises the **real
+  sigmatcher output ordering** end-to-end; the unit suite can't. Until
+  it's green, the goldens and the adapter's class/method emission order
+  are unverified against a real sigmatcher run (the goldens are
+  hand-authored today and almost certainly do *not* byte-match a real
+  build).
+- **Suggested fix.**
+  1. **Remove the same-name AIDL overload** — AIDL cannot express it.
+     The multi-overload schema feature is *already* exercised by
+     `BlobCache.put` (a plain class with `put_2arg` / `put_3arg` in the
+     `methodNameMap`), so the AIDL doesn't need to. Make `IRemoteService`
+     declare a single `requestTicket` (plus `requestPrompt`) and fix the
+     now-misleading header comment. Check the Java sources, the
+     `proguard-rules`/applymapping seeds, and `signatures/test-app.yaml`
+     for references to the dropped overload.
+  2. **Regenerate the goldens** with
+     `tests/fixtures/test-app/regenerate-goldens.sh` (it now passes
+     `--version-code`) against a real build, and commit them — the
+     hand-authored goldens won't byte-match a fresh sigmatcher run.
+  3. Confirm `pipeline.yml` is green; the first error likely masks
+     others, so iterate against a real build rather than fixing blind.
+- **Scope / dependencies.** **Requires the Android SDK + sigmatcher**,
+  which the default web environment's network policy blocks
+  (`dl.google.com` / `maven.google.com` return 403 while PyPI/GitHub are
+  reachable). Do this in a session/environment where those hosts are
+  allowlisted (or against CI).
+- **Status.** blocked (needs the Android SDK reachable); high priority
+  once unblocked.
 
 ---
 
@@ -106,6 +129,48 @@ These close out the app-identity work that landed the `version_code` and
   `src/proxy/` against the Xposed hooking API; the resolver and map
   layers are reused unchanged. Largest item here; a V2/V3-scale effort.
 - **Status.** planned (longer horizon).
+
+---
+
+## Developer experience & tech debt
+
+### Centralize `schema_version` / `version_code` in test fixtures
+
+- **Purpose.** The schema version is now DRY in the source code (one
+  `CURRENT_SCHEMA_VERSION` constant) and guarded in docs + the sample map
+  (`npm run schema-version:check`). The remaining hand-maintained surface
+  is the **test suite**: ~30 test files inline `schema_version: 2` (and
+  `version_code: 1`) in map literals.
+- **Why it wasn't auto-fixed.** A blind codemod over the tests is unsafe
+  because the suite deliberately mixes two kinds of literal: **valid**
+  maps that *should* track the current version, and **invalid** maps that
+  intentionally pin an old/wrong version for rejection tests (e.g.
+  `schema_version: 1` "is rejected", `99` "is invalid", "expected 2").
+  A find-replace can't tell them apart and would corrupt the negative
+  tests.
+- **Suggested approach.** Introduce a shared test map factory — e.g.
+  `tests/helpers/maps.ts` exporting `validMap(overrides?:
+  Partial<RosettaMap>): RosettaMap` — that defaults `schema_version:
+  CURRENT_SCHEMA_VERSION`, a `version_code`, `app`, `version`, and an
+  empty `classes`, merged with per-test overrides. Migrate the **valid**
+  fixtures across the suite to it (or, more minimally, just import
+  `CURRENT_SCHEMA_VERSION` for the `schema_version` field). Leave the
+  negative-test literals explicit and clearly flagged (e.g. a
+  `// schema-keep: intentional old version` comment).
+- **Benefit.** A future schema bump then touches **one** constant and the
+  valid fixtures follow automatically — eliminating the last big manual
+  surface. As a bonus, a factory de-duplicates fixture boilerplate
+  (`version_code`, `app`, `classes`) and makes test intent clearer
+  (factory + overrides instead of copy-pasted literals).
+- **Scope / care.** Broad but mechanical (~30 files). Do it as its **own
+  PR** so the diff is reviewable; keep the 100% coverage gate; don't fold
+  it into a feature change. Verify the negative tests still assert
+  rejection with explicit literals afterward. (Optionally extend
+  `scripts/check-schema-version.mjs` to assert no stray *valid*-looking
+  `schema_version` literal remains in `tests/`, but once fixtures use the
+  factory there's little left to guard.)
+- **Status.** planned (deliberately deferred from the schema-version-DRY
+  change because it's invasive enough to deserve its own review).
 
 ---
 
