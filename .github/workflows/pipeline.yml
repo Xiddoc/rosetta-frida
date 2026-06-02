@@ -127,6 +127,7 @@ jobs:
                   EOF
                   cat > /tmp/pipeline/classKindMap.json <<'EOF'
                   {
+                      "com.example.testapp.IRemoteService": "interface",
                       "com.example.testapp.IRemoteService$Stub": "aidl_stub",
                       "com.example.testapp.IServiceCallback$Stub": "aidl_stub",
                       "com.example.testapp.IServiceCallback": "aidl_callback",
@@ -134,6 +135,7 @@ jobs:
                       "com.example.testapp.BlobCache": "class",
                       "com.example.testapp.RemoteService": "class",
                       "com.example.testapp.RemoteService$1": "anonymous",
+                      "com.example.testapp.RemoteService$1$1": "anonymous",
                       "com.example.testapp.Ticket": "class",
                       "com.example.testapp.Ticket$Companion": "synthetic",
                       "com.example.testapp.Ticket$Reader": "class",

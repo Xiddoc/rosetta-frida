@@ -92,6 +92,7 @@ cat >"$CLASS_KIND_MAP_FILE" <<'EOF'
     "com.example.testapp.BlobCache": "class",
     "com.example.testapp.RemoteService": "class",
     "com.example.testapp.RemoteService$1": "anonymous",
+    "com.example.testapp.RemoteService$1$1": "anonymous",
     "com.example.testapp.Ticket": "class",
     "com.example.testapp.Ticket$Companion": "synthetic",
     "com.example.testapp.Ticket$Reader": "class",
