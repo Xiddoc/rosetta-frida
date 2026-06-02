@@ -387,3 +387,20 @@ authenticity guard, and dropped `apk_sha256`); `schema_version: 1`
 maps fail to load and must be re-emitted with a `version_code`. Future
 breaking changes will ship in-tree migrators (`2 → 3`, ...) so old
 maps keep loading after migration.
+
+!!! note "Bumping the schema version (maintainers)"
+
+    The version lives in **one** place — `CURRENT_SCHEMA_VERSION` in
+    `src/types/map.ts` — which drives the `RosettaMap.schema_version`
+    type, the Zod gate, the adapter, and `rosetta init`. To bump it:
+
+    1. Change `CURRENT_SCHEMA_VERSION`.
+    2. Run `npm run schema-version:fix` to update the literals in the
+       docs and the canonical sample map, then review the diff.
+    3. Update any negative-test fixtures by hand (the suite deliberately
+       carries invalid/old versions for rejection tests).
+
+    `npm run schema-version:check` (part of `npm run verify` and CI)
+    fails if a doc/sample literal drifts from the constant. Mark an
+    intentional older literal inside a code block with a `schema-keep`
+    comment to exempt it.

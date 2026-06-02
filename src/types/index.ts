@@ -2,6 +2,9 @@
  * Type re-exports. Public surface of types is rooted here.
  */
 
+// Value export (not a type): the single source-of-truth schema version.
+export { CURRENT_SCHEMA_VERSION } from './map.js';
+
 export type {
     MapSource,
     Confidence,

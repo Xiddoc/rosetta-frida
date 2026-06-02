@@ -31,6 +31,7 @@
  * merge step (Wave 1.5 `rosetta merge`).
  */
 
+import { CURRENT_SCHEMA_VERSION } from '../../src/types/map.js';
 import type {
     ClassEntry,
     ClassKind,
@@ -151,7 +152,7 @@ export function sigmatcherRawToRosettaMap(
     }
 
     const map: RosettaMap = {
-        schema_version: 2,
+        schema_version: CURRENT_SCHEMA_VERSION,
         app: options.app,
         version: options.version,
         version_code: options.versionCode,

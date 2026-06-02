@@ -16,6 +16,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
+import { CURRENT_SCHEMA_VERSION } from '../../src/types/map.js';
 
 export interface InitOptions {
     app: string;
@@ -71,7 +72,7 @@ export function parseInitArgs(argv: readonly string[]): InitOptions {
  */
 export function renderSkeleton(app: string, version: string): string {
     const skeleton = {
-        schema_version: 2,
+        schema_version: CURRENT_SCHEMA_VERSION,
         app,
         version,
         version_code: 0,

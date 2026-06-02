@@ -131,9 +131,9 @@ What is **not** in V1.0:
   `merge-bundle` CLI commands (deferred to V1.5).
 - Native (JNI / ELF symbol) mapping (deferred to V2+).
 
-See [Changelog](changelog.md) for the full V1.0 changelog and
-[Design — V1 MVP scope](reference/design.md#v10-mvp-scope) for the
-roadmap.
+See [Changelog](changelog.md) for the full V1.0 changelog and the
+[Roadmap](roadmap.md) for what's next (purpose + benefit of each
+upcoming item).
 
 ## Getting started
 

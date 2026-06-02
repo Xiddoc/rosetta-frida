@@ -16,6 +16,7 @@
  */
 
 import { z } from 'zod';
+import { CURRENT_SCHEMA_VERSION } from '../types/map.js';
 import type {
     ClassEntry,
     ClassKind,
@@ -105,7 +106,7 @@ export const classMapSchema = z.record(z.string(), classEntrySchema);
 // ---------------------------------------------------------------------------
 
 export const rosettaMapSchema: z.ZodType<RosettaMap> = z.object({
-    schema_version: z.literal(2),
+    schema_version: z.literal(CURRENT_SCHEMA_VERSION),
     app: z.string().min(1),
     version: z.string().min(1),
     version_code: z.number().int().nonnegative(),

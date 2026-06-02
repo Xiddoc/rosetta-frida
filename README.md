@@ -152,7 +152,8 @@ Full docs live under [`docs/`](docs/index.md) (also published to
 - [Map format & authoring](docs/maps/format.md) — schema 2, `version_code`, authoring guide
 - [CLI reference](docs/cli/overview.md) — `init`, `validate`, `convert`, `patch`, `extract`, `inspect`
 - [Recipes](docs/recipes/aidl-stub-hook.md) — common hook patterns
-- [Design doc](docs/reference/design.md) — architecture and roadmap
+- [Design doc](docs/reference/design.md) — architecture
+- [Roadmap](docs/roadmap.md) — what's next, and why
 
 ## Testing
 
