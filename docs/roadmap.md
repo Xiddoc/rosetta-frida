@@ -172,6 +172,47 @@ These close out the app-identity work that landed the `version_code` and
 - **Status.** planned (deliberately deferred from the schema-version-DRY
   change because it's invasive enough to deserve its own review).
 
+### Rename the inner `*Map` Record aliases (reserve "map" for the artifact)
+
+- **Purpose.** "Map" is used in two senses in `src/types/map.ts`: the
+  **translation artifact** (`RosettaMap`, one `(app, version_code)`; and
+  `RosettaMapRegistry`, a record of them) versus plain **lookup
+  dictionaries** (`ClassMap = Record<realFQN, ClassEntry>`, `MethodMap`,
+  `FieldMap`). Rename the dictionary aliases to `*Table` (or `*Index`) —
+  e.g. `ClassMap → ClassTable`, `MethodMap → MethodTable`, `FieldMap →
+  FieldTable` — and keep `RosettaMap` / `RosettaMapRegistry` as-is.
+- **Benefit.** "Map" then means exactly one thing (the Rosetta artifact),
+  matching the `rosetta-maps` repo name; the dictionaries read as
+  lookups. New contributors stop conflating "the map" with "a Record".
+- **Scope / care.** Mechanical rename across `src/`, tests, and docs.
+  Note these aliases are part of the **public type surface** (re-exported
+  from `src/types/index.ts`), so it's a breaking type-name change — ship
+  it behind deprecated re-exports (`export type ClassMap = ClassTable`)
+  or fold it into the next breaking release. Keep the 100% coverage gate;
+  do it as its own PR. Low urgency — clarity, not correctness.
+- **Status.** planned.
+
+### Reconcile provenance counts (`MapSource.classes` vs per-class `source`)
+
+- **Purpose.** Each class is already attributed to a tool via
+  `ClassEntry.source` (e.g. `"sigmatcher"`), so "which classes came from
+  which tool" is answerable from the data. The top-level
+  `MapSource.classes` count duplicates that — it's a hand-maintained
+  rollup that can drift out of sync with the per-class tags, and nothing
+  validates the two agree.
+- **Benefit.** A single source of truth for provenance. No stale or
+  contradictory counts; the authoritative per-class `source` answers the
+  "which ones?" question precisely, and tooling derives the totals.
+- **Options / scope.** Either (a) **derive** the count on demand
+  (compute it in `inspect` / a provenance report) and drop the stored
+  field on the next schema bump; or (b) keep the field but add a
+  `validate`-time check/warning that it equals the per-class tally.
+  Recommend (b) now (non-breaking — `classes` is already optional), (a)
+  at the next bump. Either way, keep `sources[]` for the per-*tool*
+  metadata that has nowhere else to live (`config`, `notes`,
+  `confidence`).
+- **Status.** planned.
+
 ---
 
 ## V1.5 — tooling for map maintainers
