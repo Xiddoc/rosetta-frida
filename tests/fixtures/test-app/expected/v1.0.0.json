@@ -3,29 +3,35 @@
     "app": "com.example.testapp",
     "version": "1.0.0",
     "version_code": 1,
+    "sources": [
+        {
+            "tool": "sigmatcher",
+            "classes": 17
+        }
+    ],
     "classes": {
         "com.example.testapp.IRemoteService": {
             "obfuscated": "IRemoteService",
+            "kind": "interface",
             "source": "sigmatcher"
         },
         "com.example.testapp.IRemoteService$Stub": {
             "obfuscated": "IRemoteService$Stub",
-            "source": "sigmatcher",
-            "kind": "aidl_stub"
+            "kind": "aidl_stub",
+            "source": "sigmatcher"
         },
         "com.example.testapp.IServiceCallback": {
             "obfuscated": "IServiceCallback",
-            "source": "sigmatcher",
-            "kind": "aidl_callback"
+            "kind": "aidl_callback",
+            "source": "sigmatcher"
         },
         "com.example.testapp.IServiceCallback$Stub": {
             "obfuscated": "IServiceCallback$Stub",
-            "source": "sigmatcher",
-            "kind": "aidl_stub"
+            "kind": "aidl_stub",
+            "source": "sigmatcher"
         },
         "com.example.testapp.Config": {
             "obfuscated": "dddd",
-            "source": "sigmatcher",
             "kind": "class",
             "fields": {
                 "ROSETTA_ANCHOR": {
@@ -52,34 +58,28 @@
                     "obfuscated": "f",
                     "type": "I"
                 }
-            }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.BlobCache": {
             "obfuscated": "cccc",
-            "source": "sigmatcher",
             "kind": "class",
             "methods": {
                 "get": {
                     "obfuscated": "c",
                     "signature": "(Ljava/lang/String;)Ljava/lang/Object;"
                 },
-                "put": [
-                    {
-                        "obfuscated": "d",
-                        "signature": "(Ljava/lang/String;Ljava/lang/Object;)V"
-                    },
-                    {
-                        "obfuscated": "e",
-                        "signature": "(Ljava/lang/String;Ljava/lang/Object;J)V"
-                    }
-                ],
-                "evict": {
-                    "obfuscated": "f",
-                    "signature": "(Ljava/lang/String;)V"
+                "put_2arg": {
+                    "obfuscated": "d",
+                    "signature": "(Ljava/lang/String;Ljava/lang/Object;)V"
+                },
+                "put_3arg": {
+                    "obfuscated": "e",
+                    "signature": "(Ljava/lang/String;Ljava/lang/Object;J)V"
                 },
                 "clear": {
-                    "obfuscated": "g",
-                    "signature": "()V"
+                    "obfuscated": "a",
+                    "signature": "()Lcccc;"
                 }
             },
             "fields": {
@@ -91,10 +91,6 @@
                     "obfuscated": "b",
                     "type": "I"
                 },
-                "instanceCount": {
-                    "obfuscated": "c",
-                    "type": "I"
-                },
                 "buffer": {
                     "obfuscated": "e",
                     "type": "Ljava/util/HashMap;"
@@ -103,18 +99,12 @@
                     "obfuscated": "f",
                     "type": "Ljava/lang/String;"
                 }
-            }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.RemoteService": {
-            "obfuscated": "aaaa",
-            "source": "sigmatcher",
+            "obfuscated": "RemoteService",
             "kind": "class",
-            "methods": {
-                "safeError": {
-                    "obfuscated": "a",
-                    "signature": "(Lcom/example/testapp/IServiceCallback;ILjava/lang/String;)V"
-                }
-            },
             "fields": {
                 "ROSETTA_ANCHOR": {
                     "obfuscated": "a",
@@ -132,11 +122,32 @@
                     "obfuscated": "d",
                     "type": "Lcom/example/testapp/IRemoteService$Stub;"
                 }
-            }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.RemoteService$1": {
             "obfuscated": "bbbb",
-            "source": "sigmatcher",
+            "kind": "anonymous",
+            "methods": {
+                "requestTicket": {
+                    "obfuscated": "requestTicket",
+                    "signature": "(Landroid/os/Bundle;Lcom/example/testapp/IServiceCallback;)V"
+                },
+                "requestPrompt": {
+                    "obfuscated": "requestPrompt",
+                    "signature": "(Landroid/os/Bundle;Lcom/example/testapp/IServiceCallback;)Ljava/lang/String;"
+                }
+            },
+            "fields": {
+                "this$0": {
+                    "obfuscated": "a",
+                    "type": "Lcom/example/testapp/RemoteService;"
+                }
+            },
+            "source": "sigmatcher"
+        },
+        "com.example.testapp.RemoteService$1$1": {
+            "obfuscated": "bbbb$a",
             "kind": "anonymous",
             "methods": {
                 "run": {
@@ -145,27 +156,23 @@
                 }
             },
             "fields": {
-                "this$0": {
+                "val$callback": {
                     "obfuscated": "a",
-                    "type": "Laaaa;"
+                    "type": "Lcom/example/testapp/IServiceCallback;"
                 },
                 "val$params": {
                     "obfuscated": "b",
                     "type": "Landroid/os/Bundle;"
-                },
-                "val$callback": {
-                    "obfuscated": "c",
-                    "type": "Lcom/example/testapp/IServiceCallback;"
                 }
-            }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.Ticket": {
             "obfuscated": "eeee",
-            "source": "sigmatcher",
             "kind": "class",
             "methods": {
                 "fromBytes": {
-                    "obfuscated": "a",
+                    "obfuscated": "fromBytes",
                     "signature": "([B)Leeee;"
                 },
                 "getValue": {
@@ -178,6 +185,10 @@
                 }
             },
             "fields": {
+                "ROSETTA_ANCHOR": {
+                    "obfuscated": "c",
+                    "type": "Ljava/lang/String;"
+                },
                 "value": {
                     "obfuscated": "a",
                     "type": "Ljava/lang/String;"
@@ -186,22 +197,28 @@
                     "obfuscated": "b",
                     "type": "J"
                 }
-            }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.Ticket$Companion": {
             "obfuscated": "ffff",
-            "source": "sigmatcher",
             "kind": "synthetic",
             "methods": {
                 "create": {
                     "obfuscated": "a",
                     "signature": "(Ljava/lang/String;)Leeee;"
                 }
-            }
+            },
+            "fields": {
+                "ROSETTA_ANCHOR": {
+                    "obfuscated": "a",
+                    "type": "Ljava/lang/String;"
+                }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.Ticket$Reader": {
             "obfuscated": "gggg",
-            "source": "sigmatcher",
             "kind": "class",
             "methods": {
                 "readValue": {
@@ -214,15 +231,19 @@
                 }
             },
             "fields": {
+                "ROSETTA_ANCHOR": {
+                    "obfuscated": "b",
+                    "type": "Ljava/lang/String;"
+                },
                 "this$0": {
                     "obfuscated": "a",
                     "type": "Leeee;"
                 }
-            }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.ErrorCode": {
             "obfuscated": "hhhh",
-            "source": "sigmatcher",
             "kind": "enum",
             "methods": {
                 "getCode": {
@@ -231,17 +252,9 @@
                 }
             },
             "fields": {
-                "SUCCESS": {
-                    "obfuscated": "a",
-                    "type": "Lhhhh;"
-                },
-                "TIMEOUT": {
-                    "obfuscated": "b",
-                    "type": "Lhhhh;"
-                },
-                "AUTH_FAILED": {
-                    "obfuscated": "c",
-                    "type": "Lhhhh;"
+                "ROSETTA_ANCHOR": {
+                    "obfuscated": "f",
+                    "type": "Ljava/lang/String;"
                 },
                 "code": {
                     "obfuscated": "d",
@@ -251,17 +264,13 @@
                     "obfuscated": "e",
                     "type": "[Lhhhh;"
                 }
-            }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.AbstractServiceClient": {
             "obfuscated": "iiii",
-            "source": "sigmatcher",
             "kind": "class",
             "methods": {
-                "connect": {
-                    "obfuscated": "a",
-                    "signature": "()V"
-                },
                 "disconnect": {
                     "obfuscated": "b",
                     "signature": "()V"
@@ -272,6 +281,10 @@
                 }
             },
             "fields": {
+                "ROSETTA_ANCHOR": {
+                    "obfuscated": "f",
+                    "type": "Ljava/lang/String;"
+                },
                 "INSTANCE_COUNT": {
                     "obfuscated": "a",
                     "type": "I"
@@ -280,11 +293,11 @@
                     "obfuscated": "b",
                     "type": "Landroid/content/Context;"
                 }
-            }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.AbstractServiceClient$1": {
             "obfuscated": "jjjj",
-            "source": "sigmatcher",
             "kind": "anonymous",
             "methods": {
                 "run": {
@@ -297,11 +310,11 @@
                     "obfuscated": "a",
                     "type": "Liiii;"
                 }
-            }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.RemoteServiceClient": {
             "obfuscated": "kkkk",
-            "source": "sigmatcher",
             "kind": "class",
             "methods": {
                 "connect": {
@@ -313,11 +326,15 @@
                     "signature": "(Landroid/os/Bundle;)Leeee;"
                 },
                 "apply": {
-                    "obfuscated": "e",
+                    "obfuscated": "a",
                     "signature": "(Ljava/lang/Object;)Ljava/lang/Object;"
                 }
             },
             "fields": {
+                "ROSETTA_ANCHOR": {
+                    "obfuscated": "h",
+                    "type": "Ljava/lang/String;"
+                },
                 "sessionId": {
                     "obfuscated": "c",
                     "type": "Ljava/lang/String;"
@@ -326,24 +343,25 @@
                     "obfuscated": "d",
                     "type": "I"
                 }
-            }
+            },
+            "source": "sigmatcher"
         },
         "com.example.testapp.PromiseCallback": {
             "obfuscated": "llll",
-            "source": "sigmatcher",
             "kind": "interface",
             "methods": {
                 "apply": {
                     "obfuscated": "a",
                     "signature": "(Ljava/lang/Object;)Ljava/lang/Object;"
                 }
-            }
+            },
+            "fields": {
+                "ROSETTA_ANCHOR": {
+                    "obfuscated": "e",
+                    "type": "Ljava/lang/String;"
+                }
+            },
+            "source": "sigmatcher"
         }
-    },
-    "sources": [
-        {
-            "tool": "sigmatcher",
-            "classes": 16
-        }
-    ]
+    }
 }
