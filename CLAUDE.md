@@ -199,10 +199,10 @@ YAML/TS authoring source and re-render with `rosetta convert`.
 
 **The long-term killer feature:** a public, community-contributed
 repository of mapping files. Like an obfuscation-map "CVE database."
-Someone writes a hook for an app, the tool fetches the latest
-community-contributed map for their installed version, the hook
-works — even if the original hook author never tested against that
-exact version.
+Someone writes a hook for an app; at **build time** they pull the
+community-contributed map for the version they want to support and
+bundle it into their script, and the hook works — even if the original
+hook author never tested against that exact version.
 
 Two repos at maturity:
 
@@ -218,11 +218,24 @@ Two repos at maturity:
   YAML/TS, rendered via `rosetta convert`). rosetta-frida is the
   first-class **client** of that schema, not its home.
 
-The library, at attach time, can optionally fetch from the maps repo
-if no local override exists. Caching keyed by `(app, version_code)`.
+**Maps are acquired and bundled at build/author time — never fetched
+from the cloud on the device.** The map for a given `(app,
+version_code)` is baked into the compiled Frida script (via
+`frida-compile`) or the Xposed/LSPosed APK (via Gradle) before it ever
+reaches a phone; the device only sees a map that already lives inside
+the shipped artifact, and does no network I/O to obtain one. The
+distribution channel is therefore a **build-time, developer-machine**
+concern: straight git/GitHub is the channel (it is already the source
+of truth), with the `rosetta` CLI as the thin ergonomic on top — pull
+the single verified map you intend to bundle into your project instead
+of vendoring the whole corpus. A `git submodule` / sparse-checkout of
+the maps repo is the zero-tooling fallback.
 
 **Not in V1.** For the MVP, maps live in the same repo
-(`rosetta-frida/maps/`) and ship with the library.
+(`rosetta-frida/maps/`) and ship with the library. The community maps
+repo and a `rosetta pull` CLI verb are later phases — but in all of
+them the fetch happens on the developer's machine at build time, not
+on the device.
 
 ## Resolved design decisions
 
