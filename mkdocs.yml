@@ -61,9 +61,7 @@ extra:
   generator: false
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/rosetta-frida/rosetta-frida
-    - icon: fontawesome/brands/npm
-      link: https://www.npmjs.com/package/rosetta-frida
+      link: https://github.com/Xiddoc/rosetta-frida
 
 extra_css:
   - assets/dracula.css
@@ -150,5 +148,6 @@ nav:
       - Design: reference/design.md
   - RFCs:
       - 0001 — Unified cross-framework signatures: rfcs/0001-unified-cross-framework-signatures.md
+  - Roadmap: roadmap.md
   - Contributing: contributing.md
   - Changelog: changelog.md
