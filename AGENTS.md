@@ -59,8 +59,8 @@ large obfuscated Android apps:
   different upstream/downstream positions. Clean split: sigmatcher
   (and other tools) emit a canonical mapping file format; this tool
   reads that format. That way sigmatcher stays focused and rosetta-
-  frida can take inputs from any mapper (sigmatcher + hand-authored
-    - runtime-discovered all merge into the same format).
+  frida can take inputs from any mapper (sigmatcher, hand-authored, and
+  runtime-discovered entries all merge into the same format).
 - **Standalone npm package.** Frida hooks are JS. `frida-compile`
   and `frida-java-bridge` are already established tooling. Same
   distribution channel makes sense.
