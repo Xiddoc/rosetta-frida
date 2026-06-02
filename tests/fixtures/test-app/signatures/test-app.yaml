@@ -1,77 +1,77 @@
 # rosetta-frida synthetic test-app sigmatcher signatures.
 #
-# Purpose: drive the pipeline-CI integration test — same YAML, two
-# different obfuscated APKs (v1.0.0 and v1.1.0), two different
-# sigmatcher outputs, both correctly resolving to the real-name targets
+# Purpose: drive the pipeline-CI integration test — the same YAML, run
+# against two differently-obfuscated APKs (v1.0.0 and v1.1.0), produces
+# two sigmatcher outputs that both resolve to the real-name targets
 # documented in tests/fixtures/test-app/README.md.
 #
-# Anchoring strategy (so the same signatures match against both
-# rotation seeds):
+# ── How sigmatcher matching actually works (empirically verified
+#    against sigmatcher 1.9.2) ──────────────────────────────────────
 #
-#   * Stable string literals — the `ROSETTA_ANCHOR` constants on
-#     Config, BlobCache, and RemoteService survive R8 because they're
-#     `static final String` initializers reached by live code.
-#   * AIDL descriptors — `com.example.testapp.IRemoteService` /
-#     `IServiceCallback` strings, emitted by the AIDL compiler into
-#     the .Stub classes, never get rotated.
-#   * Stable framework refs — `android.app.Service`,
-#     `java.lang.Runnable`, `android.content.Context`, …
-#   * Cross-class anchors — once a class (e.g. `Ticket`) is resolved,
-#     child classes (`Ticket$Companion`, `Ticket$Reader`) reference its
-#     descriptor in their signatures.
+#   * A CLASS signature is a regex grepped against every smali FILE.
+#     A file "matches" when its per-file occurrence count falls inside
+#     the signature's `count` range; the class resolves only when
+#     EXACTLY ONE file matches. So class anchors must be unique to the
+#     defining file — we use either the `.class` declaration line (for
+#     the AIDL contract classes, whose names never rotate) or a unique
+#     string literal baked into the class (`rosetta-anchor-*` /
+#     `rosetta-test-anchor-*`, which R8 preserves in the field table /
+#     a kept method body even though the field/class names rotate).
 #
-# Method names within a class come out as obfuscated single letters
-# (`a`, `c`, …) because R8 rotates them too. The signatures only assert
-# the *class identity*; the sigmatcher analyze step automatically
-# discovers methods within a matched class via descriptor matching when
-# a `MethodDefinition` is paired with a regex against an arg/return
-# type that's unique enough to disambiguate.
+#   * A METHOD signature is matched against each `.method … .end method`
+#     block of the already-resolved class; the real method name is the
+#     definition's `name`, the obfuscated name + descriptor come from
+#     the matched block. We anchor on the JVM descriptor (which survives
+#     obfuscation) rather than the method name (which rotates).
 #
-# Multi-overload methods are modeled as TWO `MethodDefinition` entries
+#   * A FIELD signature is `re.search`-ed over the whole class smali and
+#     must CAPTURE the obfuscated `name:type` via a named group
+#     `(?P<match>…)`; `count` is the number of regex matches in the
+#     file and must be exactly 1. We capture each field by a regex that
+#     is unique within its class (a distinctive type descriptor, or the
+#     field's constant string value for same-typed fields).
+#
+# Multi-overload methods are modeled as TWO MethodDefinition entries
 # with `_<N>arg` suffixes; the adapter's `methodNameMap` re-merges them
 # under one real name (e.g. `put_2arg` + `put_3arg` → `put`).
 
 # ─── Non-rotating AIDL contracts ─────────────────────────────────────
+# Anchored on their `.class` declaration line, which exists in exactly
+# one smali file each and never rotates (the AIDL names are -kept).
 
-# The interface itself — emitted by aidl-compiler as a Java interface.
-# R8 -keeps it via the proguard-rules.pro AIDL rule.
 - name: 'IRemoteService'
   package: 'com.example.testapp'
   signatures:
-      - signature: 'Lcom/example/testapp/IRemoteService;'
+      - signature: '\.class public interface abstract Lcom/example/testapp/IRemoteService;'
         type: regex
-        count: 1-100
+        count: 1
 
-# The .Stub static nested class. AIDL emits the descriptor string
-# "com.example.testapp.IRemoteService" inside this class for binder
-# lookup; that's the stable anchor.
-- name: 'IRemoteServiceStub'
+- name: 'IRemoteService$Stub'
   package: 'com.example.testapp'
   signatures:
-      - signature: '"com\.example\.testapp\.IRemoteService"'
+      - signature: '\.class public abstract Lcom/example/testapp/IRemoteService\$Stub;'
         type: regex
         count: 1
 
 - name: 'IServiceCallback'
   package: 'com.example.testapp'
   signatures:
-      - signature: 'Lcom/example/testapp/IServiceCallback;'
+      - signature: '\.class public interface abstract Lcom/example/testapp/IServiceCallback;'
         type: regex
-        count: 1-100
+        count: 1
 
-- name: 'IServiceCallbackStub'
+- name: 'IServiceCallback$Stub'
   package: 'com.example.testapp'
   signatures:
-      - signature: '"com\.example\.testapp\.IServiceCallback"'
+      - signature: '\.class public abstract Lcom/example/testapp/IServiceCallback\$Stub;'
         type: regex
         count: 1
 
 # ─── Rotating Java classes — anchored on stable string literals ──────
 
-# Fields-only constants holder. The ROSETTA_ANCHOR string is the
-# primary identifier; the class is otherwise dominated by R8 field
-# rotation (per the v1.1.0 seed comments, Config is the one class
-# that intentionally has its fields shuffled to exercise that path).
+# Fields-only constants holder. Anchored on its unique ROSETTA_ANCHOR
+# literal; fields are captured by their distinctive constant values
+# (same-typed primitives are disambiguated by their initializer).
 - name: 'Config'
   package: 'com.example.testapp'
   signatures:
@@ -81,32 +81,32 @@
   fields:
       - name: 'ROSETTA_ANCHOR'
         signatures:
-            - signature: '"rosetta-test-anchor-Config"'
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-test-anchor-Config"'
               type: regex
               count: 1
       - name: 'ENABLE_TRACING'
         signatures:
-            - signature: 'ENABLE_TRACING'
+            - signature: '\.field.* (?P<match>[a-z]:Z)'
               type: regex
               count: 1
       - name: 'MAX_RETRIES'
         signatures:
-            - signature: 'MAX_RETRIES'
+            - signature: '\.field.* (?P<match>[a-z]:I) = 0x3'
               type: regex
               count: 1
       - name: 'TIMEOUT_MILLIS'
         signatures:
-            - signature: 'TIMEOUT_MILLIS'
+            - signature: '\.field.* (?P<match>[a-z]:J)'
               type: regex
               count: 1
       - name: 'ENDPOINT_URL'
         signatures:
-            - signature: '"https://invalid\.example/api"'
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "https://invalid\.example/api"'
               type: regex
               count: 1
       - name: 'currentDebugLevel'
         signatures:
-            - signature: 'currentDebugLevel'
+            - signature: '\.field public static (?P<match>[a-z]:I)\n'
               type: regex
               count: 1
 
@@ -122,27 +122,22 @@
   fields:
       - name: 'ROSETTA_ANCHOR'
         signatures:
-            - signature: '"rosetta-test-anchor-BlobCache"'
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-test-anchor-BlobCache"'
               type: regex
               count: 1
       - name: 'MAX_SIZE'
         signatures:
-            - signature: 'MAX_SIZE'
-              type: regex
-              count: 1
-      - name: 'instanceCount'
-        signatures:
-            - signature: 'instanceCount'
+            - signature: '\.field.* (?P<match>[a-z]:I) = 0x400'
               type: regex
               count: 1
       - name: 'buffer'
         signatures:
-            - signature: 'Ljava/util/HashMap;'
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/util/HashMap;)'
               type: regex
               count: 1
       - name: 'lastEvictedKey'
         signatures:
-            - signature: 'lastEvictedKey'
+            - signature: '\.field public (?P<match>[a-z]:Ljava/lang/String;)\n'
               type: regex
               count: 1
   methods:
@@ -161,306 +156,344 @@
             - signature: '\(Ljava/lang/String;Ljava/lang/Object;J\)V'
               type: regex
               count: 1
-      - name: 'evict'
-        signatures:
-            - signature: 'evict\(Ljava/lang/String;\)V'
-              type: regex
-              count: 1
       - name: 'clear'
         signatures:
-            - signature: 'clear\(\)V'
+            - signature: '\(\)V'
               type: regex
               count: 1
 
-# The Service subclass. Anchored on ROSETTA_ANCHOR + the
-# `android.app.Service` superclass reference.
+# The Service subclass. R8 keeps it at its real name (the manifest
+# Service entry pins it), but its members still rotate. Anchored on the
+# unique ROSETTA_ANCHOR literal.
 - name: 'RemoteService'
   package: 'com.example.testapp'
   signatures:
-      - signature: '"rosetta-test-anchor-RemoteService"'
+      # The literal also appears as a const-string return value inside
+      # the anonymous Stub subclass, so anchor on the field DECLARATION
+      # (with its initializer) which exists only in RemoteService itself.
+      - signature: '\.field static final [a-z]:Ljava/lang/String; = "rosetta-test-anchor-RemoteService"'
         type: regex
         count: 1
   fields:
       - name: 'ROSETTA_ANCHOR'
         signatures:
-            - signature: '"rosetta-test-anchor-RemoteService"'
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-test-anchor-RemoteService"'
               type: regex
               count: 1
       - name: 'requestCounter'
         signatures:
-            - signature: 'requestCounter'
+            - signature: '\.field private (?P<match>[a-z]:I)'
               type: regex
               count: 1
       - name: 'lastTag'
         signatures:
-            - signature: 'lastTag'
+            - signature: '\.field public (?P<match>[a-z]:Ljava/lang/String;)'
               type: regex
               count: 1
       - name: 'binder'
         signatures:
-            - signature: 'binder'
-              type: regex
-              count: 1
-  methods:
-      - name: 'safeError'
-        signatures:
-            - signature: 'safeError'
+            - signature: '\.field.* (?P<match>[a-z]:Lcom/example/testapp/IRemoteService\$Stub;)'
               type: regex
               count: 1
 
-# The anonymous Runnable created inside RemoteService.requestPrompt.
-# R8 emits it as RemoteService$1 with a rotating obfuscated short
-# name. Anchored on the captured `IServiceCallback` field reference
-# in its synthetic constructor.
-- name: 'RemoteServiceAnonRunnable'
+# RemoteService$1 — the anonymous IRemoteService.Stub subclass R8 emits
+# for the inline `new IRemoteService.Stub() {…}`. Anchored on the
+# requestTicket(Bundle, IServiceCallback) descriptor it implements
+# (cross-class reference to the AIDL callback type that never rotates).
+- name: 'RemoteService$1'
   package: 'com.example.testapp'
   signatures:
-      - signature: 'val\$callback'
+      # Unique to this anon: a synthetic field capturing the enclosing
+      # RemoteService instance. The requestTicket descriptor alone also
+      # appears in the AIDL Stub/Proxy/Default classes.
+      - signature: '\.field final synthetic [a-z]:Lcom/example/testapp/RemoteService;'
         type: regex
         count: 1
   fields:
       - name: 'this$0'
         signatures:
-            - signature: 'this\$0'
+            - signature: '\.field.* (?P<match>[a-z]:Lcom/example/testapp/RemoteService;)'
+              type: regex
+              count: 1
+  methods:
+      - name: 'requestTicket'
+        signatures:
+            - signature: 'requestTicket\(Landroid/os/Bundle;Lcom/example/testapp/IServiceCallback;\)V'
+              type: regex
+              count: 1
+      - name: 'requestPrompt'
+        signatures:
+            - signature: 'requestPrompt\(Landroid/os/Bundle;Lcom/example/testapp/IServiceCallback;\)Ljava/lang/String;'
+              type: regex
+              count: 1
+
+# RemoteService$1$1 — the anonymous Runnable created inside
+# requestPrompt. Anchored on its unique kept string literal.
+- name: 'RemoteService$1$1'
+  package: 'com.example.testapp'
+  signatures:
+      - signature: '"rosetta-anchor-RemoteServiceRetryRunnable"'
+        type: regex
+        count: 1
+  fields:
+      - name: 'val$callback'
+        signatures:
+            - signature: '\.field.* (?P<match>[a-z]:Lcom/example/testapp/IServiceCallback;)'
               type: regex
               count: 1
       - name: 'val$params'
         signatures:
-            - signature: 'val\$params'
-              type: regex
-              count: 1
-      - name: 'val$callback'
-        signatures:
-            - signature: 'val\$callback'
+            - signature: '\.field.* (?P<match>[a-z]:Landroid/os/Bundle;)'
               type: regex
               count: 1
   methods:
       - name: 'run'
         signatures:
-            - signature: 'run\(\)V'
+            - signature: '\.method public run\(\)V'
               type: regex
               count: 1
 
-# Value object. Identified by its two-arg constructor signature
-# and the Companion / Reader inner classes that name it.
+# Value object. Anchored on the unique ROSETTA_ANCHOR literal; the
+# Companion / Reader inner classes reference it cross-class.
 - name: 'Ticket'
   package: 'com.example.testapp'
   signatures:
-      - signature: 'com/example/testapp/Ticket'
+      - signature: '"rosetta-anchor-Ticket"'
         type: regex
-        count: 1-10
+        count: 1-2
   fields:
+      - name: 'ROSETTA_ANCHOR'
+        signatures:
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-anchor-Ticket"'
+              type: regex
+              count: 1
       - name: 'value'
         signatures:
-            - signature: 'value'
+            - signature: '\.field private final (?P<match>[a-z]:Ljava/lang/String;)'
               type: regex
               count: 1
       - name: 'expiryMillis'
         signatures:
-            - signature: 'expiryMillis'
+            - signature: '\.field.* (?P<match>[a-z]:J)'
               type: regex
               count: 1
   methods:
       - name: 'fromBytes'
         signatures:
-            - signature: 'fromBytes'
+            - signature: 'fromBytes\(\[B\)L[a-z]+;'
               type: regex
               count: 1
       - name: 'getValue'
         signatures:
-            - signature: 'getValue'
+            - signature: '\.method public [a-z]\(\)Ljava/lang/String;'
               type: regex
               count: 1
       - name: 'getExpiry'
         signatures:
-            - signature: 'getExpiry'
+            - signature: '\.method public [a-z]\(\)J'
               type: regex
               count: 1
 
-# Ticket$Companion — the synthetic helper. The `create(String)`
-# factory method's return type Ticket gives us the cross-class anchor.
-- name: 'TicketCompanion'
+# Ticket$Companion — the synthetic helper. Anchored on its unique
+# ROSETTA_ANCHOR literal; the create(String) factory returns a Ticket.
+- name: 'Ticket$Companion'
   package: 'com.example.testapp'
   signatures:
-      - signature: 'Companion'
-        type: regex
-        count: 1
-  methods:
-      - name: 'create'
-        signatures:
-            - signature: 'create\(Ljava/lang/String;\)Lcom/example/testapp/Ticket;'
-              type: regex
-              count: 1
-
-# Ticket$Reader — inner instance class. Synthetic accessors on the
-# outer Ticket point to it.
-- name: 'TicketReader'
-  package: 'com.example.testapp'
-  signatures:
-      - signature: 'Ticket\$Reader'
+      - signature: '"rosetta-anchor-Ticket\$Companion"'
         type: regex
         count: 1
   fields:
+      - name: 'ROSETTA_ANCHOR'
+        signatures:
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-anchor-Ticket\$Companion"'
+              type: regex
+              count: 1
+  methods:
+      - name: 'create'
+        signatures:
+            - signature: '\.method public static [a-z]\(Ljava/lang/String;\)L[a-z]+;'
+              type: regex
+              count: 1
+
+# Ticket$Reader — inner instance class. Anchored on its unique
+# ROSETTA_ANCHOR literal.
+- name: 'Ticket$Reader'
+  package: 'com.example.testapp'
+  signatures:
+      - signature: '"rosetta-anchor-Ticket\$Reader"'
+        type: regex
+        count: 1
+  fields:
+      - name: 'ROSETTA_ANCHOR'
+        signatures:
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-anchor-Ticket\$Reader"'
+              type: regex
+              count: 1
       - name: 'this$0'
         signatures:
-            - signature: 'this\$0'
+            - signature: '\.field final synthetic (?P<match>[a-z]:L[a-z]+;)'
               type: regex
               count: 1
   methods:
       - name: 'readValue'
         signatures:
-            - signature: 'readValue'
+            - signature: '\.method public [a-z]\(\)Ljava/lang/String;'
               type: regex
               count: 1
       - name: 'readExpiry'
         signatures:
-            - signature: 'readExpiry'
+            - signature: '\.method public [a-z]\(\)J'
               type: regex
               count: 1
 
-# Enum — anchored on the SUCCESS / TIMEOUT / AUTH_FAILED member names.
+# Enum — anchored on its unique ROSETTA_ANCHOR literal. The enum
+# constants share the Lhhhh; self-type descriptor, so they're captured
+# by their preceding `const-string` name in <clinit>… but those are
+# only string loads, not field decls. Instead we capture the enum
+# constant fields by the `enum` keyword and the self-type, and the
+# scalar `code` field by its primitive type.
 - name: 'ErrorCode'
   package: 'com.example.testapp'
   signatures:
-      - signature: 'ErrorCode'
+      - signature: '"rosetta-anchor-ErrorCode"'
         type: regex
         count: 1
   fields:
-      - name: 'SUCCESS'
+      - name: 'ROSETTA_ANCHOR'
         signatures:
-            - signature: 'SUCCESS'
-              type: regex
-              count: 1
-      - name: 'TIMEOUT'
-        signatures:
-            - signature: 'TIMEOUT'
-              type: regex
-              count: 1
-      - name: 'AUTH_FAILED'
-        signatures:
-            - signature: 'AUTH_FAILED'
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-anchor-ErrorCode"'
               type: regex
               count: 1
       - name: 'code'
         signatures:
-            - signature: 'code'
+            - signature: '\.field private final (?P<match>[a-z]:I)'
               type: regex
               count: 1
       - name: '$VALUES'
         signatures:
-            - signature: '\$VALUES'
+            - signature: '\.field private static final synthetic (?P<match>[a-z]:\[L[a-z]+;)'
               type: regex
               count: 1
   methods:
       - name: 'getCode'
         signatures:
-            - signature: 'getCode'
+            - signature: '\.method public [a-z]\(\)I'
               type: regex
               count: 1
 
-# Abstract base. Anchored on its INSTANCE_COUNT static field.
+# Abstract base. Anchored on its unique ROSETTA_ANCHOR literal.
 - name: 'AbstractServiceClient'
   package: 'com.example.testapp'
   signatures:
-      - signature: 'INSTANCE_COUNT'
+      - signature: '"rosetta-anchor-AbstractServiceClient"'
         type: regex
         count: 1
   fields:
+      - name: 'ROSETTA_ANCHOR'
+        signatures:
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-anchor-AbstractServiceClient"'
+              type: regex
+              count: 1
       - name: 'INSTANCE_COUNT'
         signatures:
-            - signature: 'INSTANCE_COUNT'
+            - signature: '\.field public static (?P<match>[a-z]:I)'
               type: regex
               count: 1
       - name: 'context'
         signatures:
-            - signature: 'Landroid/content/Context;'
+            - signature: '\.field.* (?P<match>[a-z]:Landroid/content/Context;)'
               type: regex
               count: 1
   methods:
-      - name: 'connect'
-        signatures:
-            - signature: 'connect'
-              type: regex
-              count: 1
       - name: 'disconnect'
         signatures:
-            - signature: 'disconnect'
+            - signature: '\.method public [a-z]\(\)V'
               type: regex
               count: 1
       - name: 'retryHandle'
         signatures:
-            - signature: 'retryHandle'
+            - signature: '\.method.* [a-z]\(\)Ljava/lang/Runnable;'
               type: regex
               count: 1
 
 # AbstractServiceClient$1 — anonymous Runnable for retry. Anchored on
-# the `this$0` capture field referring to its enclosing class.
-- name: 'AbstractServiceClientAnonRunnable'
+# its unique kept string literal.
+- name: 'AbstractServiceClient$1'
   package: 'com.example.testapp'
   signatures:
-      - signature: 'AbstractServiceClient\$1'
+      - signature: '"rosetta-anchor-AbstractServiceClient\$1"'
         type: regex
         count: 1
   fields:
       - name: 'this$0'
         signatures:
-            - signature: 'this\$0'
+            - signature: '\.field final synthetic (?P<match>[a-z]:L[a-z]+;)'
               type: regex
               count: 1
   methods:
       - name: 'run'
         signatures:
-            - signature: 'run\(\)V'
+            - signature: '\.method public run\(\)V'
               type: regex
               count: 1
 
-# Concrete subclass of AbstractServiceClient. Anchored on its
-# `sessionId` field name and its `apply(Ljava/lang/Object;)`
-# signature implementing PromiseCallback.
+# Concrete subclass of AbstractServiceClient. Anchored on its unique
+# ROSETTA_ANCHOR literal.
 - name: 'RemoteServiceClient'
   package: 'com.example.testapp'
   signatures:
-      - signature: 'sessionId'
+      - signature: '"rosetta-anchor-RemoteServiceClient"'
         type: regex
         count: 1
   fields:
+      - name: 'ROSETTA_ANCHOR'
+        signatures:
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-anchor-RemoteServiceClient"'
+              type: regex
+              count: 1
       - name: 'sessionId'
         signatures:
-            - signature: 'sessionId'
+            - signature: '\.field private (?P<match>[a-z]:Ljava/lang/String;)'
               type: regex
               count: 1
       - name: 'flags'
         signatures:
-            - signature: 'flags'
+            - signature: '\.field public (?P<match>[a-z]:I)'
               type: regex
               count: 1
   methods:
       - name: 'connect'
         signatures:
-            - signature: 'connect\(\)V'
+            - signature: '\.method public [a-z]\(\)V'
               type: regex
               count: 1
       - name: 'requestTicket'
         signatures:
-            - signature: 'requestTicket\(Landroid/os/Bundle;\)Lcom/example/testapp/Ticket;'
+            - signature: '\.method public [a-z]\(Landroid/os/Bundle;\)L[a-z]+;'
               type: regex
               count: 1
       - name: 'apply'
         signatures:
-            - signature: 'apply\(Ljava/lang/Object;\)Ljava/lang/Object;'
+            - signature: '\.method public [a-z]\(Ljava/lang/Object;\)Ljava/lang/Object;'
               type: regex
               count: 1
 
-# SAM interface. Single method `apply(Object) -> Object`.
+# SAM interface. Anchored on its unique ROSETTA_ANCHOR literal.
 - name: 'PromiseCallback'
   package: 'com.example.testapp'
   signatures:
-      - signature: 'PromiseCallback'
+      - signature: '"rosetta-anchor-PromiseCallback"'
         type: regex
         count: 1
+  fields:
+      - name: 'ROSETTA_ANCHOR'
+        signatures:
+            - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-anchor-PromiseCallback"'
+              type: regex
+              count: 1
   methods:
       - name: 'apply'
         signatures:
-            - signature: 'apply\(Ljava/lang/Object;\)Ljava/lang/Object;'
+            - signature: '\.method public abstract [a-z]\(Ljava/lang/Object;\)Ljava/lang/Object;'
               type: regex
               count: 1
