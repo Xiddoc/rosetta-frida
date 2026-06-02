@@ -204,6 +204,14 @@ tests/fixtures/test-app/
   `RemoteService` survive R8 because they're `static final String`
   initializers reached by live code; sigmatcher uses them as discovery
   anchors per the schema's `anchors` array.
+- `PromiseCallback`'s anchor is deliberately named `PROMISE_ANCHOR`, not
+  `ROSETTA_ANCHOR`. `RemoteServiceClient` implements the interface and
+  declares its own `ROSETTA_ANCHOR` field; a same-named static field
+  _hides_ the inherited interface constant, and R8 then collapses the
+  implementor's field onto the interface field's obfuscated slot
+  non-deterministically (it honoured the seed's `-> h` in v1.0.0 but
+  reused the interface's `e` in v1.1.0). Distinct names remove the hide,
+  so each anchor rotates on its own pinned slot (`-> h` and `-> e`).
 
 ## Pipeline CI
 

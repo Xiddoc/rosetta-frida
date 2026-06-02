@@ -356,7 +356,7 @@
                 }
             },
             "fields": {
-                "ROSETTA_ANCHOR": {
+                "PROMISE_ANCHOR": {
                     "obfuscated": "e",
                     "type": "Ljava/lang/String;"
                 }

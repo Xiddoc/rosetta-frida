@@ -489,7 +489,7 @@
         type: regex
         count: 1
   fields:
-      - name: 'ROSETTA_ANCHOR'
+      - name: 'PROMISE_ANCHOR'
         signatures:
             - signature: '\.field.* (?P<match>[a-z]:Ljava/lang/String;) = "rosetta-anchor-PromiseCallback"'
               type: regex

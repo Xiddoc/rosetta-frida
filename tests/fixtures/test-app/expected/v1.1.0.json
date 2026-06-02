@@ -332,7 +332,7 @@
             },
             "fields": {
                 "ROSETTA_ANCHOR": {
-                    "obfuscated": "e",
+                    "obfuscated": "h",
                     "type": "Ljava/lang/String;"
                 },
                 "sessionId": {
@@ -356,7 +356,7 @@
                 }
             },
             "fields": {
-                "ROSETTA_ANCHOR": {
+                "PROMISE_ANCHOR": {
                     "obfuscated": "e",
                     "type": "Ljava/lang/String;"
                 }

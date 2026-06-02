@@ -123,5 +123,5 @@ com.example.testapp.RemoteServiceClient -> kkkk:
 
 # ── PromiseCallback interface — pins to `llll` ────────────────────────
 com.example.testapp.PromiseCallback -> llll:
-    java.lang.String ROSETTA_ANCHOR -> e
+    java.lang.String PROMISE_ANCHOR -> e
     java.lang.Object apply(java.lang.Object) -> a
