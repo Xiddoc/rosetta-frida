@@ -18,6 +18,7 @@ interface SessionOptions {
     map: RosettaMap | RosettaMapRegistry;
     app?: string;
     version?: string;
+    versionCode?: number;                     // authoritative selection key; auto-detected if omitted
     failurePolicy?: 'strict' | 'warn';        // default: 'warn'
     versionMatch?: 'exact' | 'fuzzy';         // default: 'exact'
     trace?: boolean;                          // default: false
@@ -43,21 +44,33 @@ with [`loadMap(...)`](../maps/format.md#loading-maps-loadmap) in
 environments that have filesystem access (typically the CLI, not the
 Frida runtime).
 
-### `app`, `version`
+### `app`, `version`, `versionCode` { #app-version }
 
-Optional overrides. If both are omitted, the session auto-detects via
-the in-process `PackageManager` chain:
+Optional overrides. If `app` and `version` are both omitted, the
+session auto-detects via the in-process `PackageManager` chain, which
+also reads the authoritative `version_code`:
 
 ```typescript
 const ActivityThread = Java.use('android.app.ActivityThread');
 const app = ActivityThread.currentApplication();
 const ctx = app.getApplicationContext();
 const pkg = app.getPackageName();
-const ver = ctx.getPackageManager().getPackageInfo(pkg, 0).versionName.value;
+const info = ctx.getPackageManager().getPackageInfo(pkg, 0);
+const ver = info.versionName.value;
+const code = info.getLongVersionCode();   // API 28+; falls back to int versionCode
 ```
 
-If you set only one, the other is auto-detected. Mixed
-override/auto-detect emits a `detect` event with `source: 'override'`.
+If you set only one of `app` / `version`, the other is auto-detected.
+Mixed override/auto-detect emits a `detect` event with
+`source: 'override'`.
+
+`versionCode` is the **authoritative selection key**. When set — or
+when auto-detected — it is matched first against a registry's
+`version_code` entries; the `version` label is only the fuzzy-match
+fallback. A detected `version_code` that mismatches the loaded map's
+`version_code` fails (unless `versionMatch: 'fuzzy'`). Set
+`versionCode` explicitly only when you need to force a specific build
+in tests or when auto-detect can't read it.
 
 ### `failurePolicy`
 
@@ -79,12 +92,15 @@ The failure policy also gates the health-check escalation: in
 
 ### `versionMatch`
 
-How strictly the registry-bundle picker matches versions.
+How strictly the registry-bundle picker matches versions. Note this
+only governs the **`version` label** fallback — selection always tries
+the authoritative `version_code` first, and a `version_code` match is
+always exact (never fuzzy).
 
 | Value | Behavior |
 |---|---|
-| `'exact'` (default) | Registry must contain an entry whose key equals the detected version. No match → throw. |
-| `'fuzzy'` | Fall back to the closest available map by semver distance (`major × 10_000 + minor × 100 + patch`). Ties broken by lower version. |
+| `'exact'` (default) | After the `version_code` lookup, the registry must contain an entry whose key equals the detected version label. No match → throw. |
+| `'fuzzy'` | Fall back to the closest available map by semver distance (`major × 10_000 + minor × 100 + patch`). Ties broken by lower version. Also relaxes the `version_code` mismatch check. |
 
 Fuzzy fallback is intentionally opt-in. Wrong-version maps silently
 corrupt hooks; the default failure mode is "tell the user to ship a
@@ -101,7 +117,7 @@ as a single readable line:
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=1 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.IRemoteService$Stub ← aaaa (map)
 [rosetta] com.example.app.IRemoteService$Stub.requestTicket ← c (map) (Landroid/os/Bundle;Lbbbb;)V
@@ -160,11 +176,11 @@ sequenceDiagram
 
     U->>S: rosetta.session({ map, ... })
     S->>D: detect (if no override)
-    D-->>S: { app, version }
+    D-->>S: { app, version, versionCode? }
     Note over S: emit 'detect' event
-    S->>P: pick map for version
+    S->>P: pick map (version_code first, then label)
     P-->>S: { map, fuzzy?, registryKey? }
-    Note over S: cross-check map.app, map.version
+    Note over S: cross-check map.app; version_code (or label) acceptable
     Note over S: emit 'map-load' event
     alt skipHealthCheck=false
         S->>H: runHealthCheck(map, threshold)

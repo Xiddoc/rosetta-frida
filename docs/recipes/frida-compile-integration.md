@@ -84,7 +84,7 @@ The result is a 4-line JS snippet that looks like:
 
 ```js
 /*! -----BEGIN ROSETTA MAP----- */
-/*! app: com.example.app | version: 3.4.5 | schema: 1 | classes: 15 */
+/*! app: com.example.app | version: 3.4.5 | schema: 2 | classes: 15 */
 const __rosetta_map = { /* ... pretty-printed JSON ... */ };
 /*! -----END ROSETTA MAP----- */
 ```
@@ -103,7 +103,7 @@ conventional.
 
 ```sh
 npx rosetta inspect hook.bundle.js
-# com.example.app@3.4.5, schema_version 1, 15 classes
+# com.example.app@3.4.5, schema_version 2, 15 classes
 ```
 
 The marker is there. `extract` and `patch` work too.

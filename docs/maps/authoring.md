@@ -28,10 +28,11 @@ do **not** try to enumerate the whole app's surface up front.
 npx rosetta init com.example.app 3.4.5
 ```
 
-This writes `maps/com.example.app/3.4.5.json` — a strict-JSON skeleton
-with header comments documenting each field, all top-level metadata
-filled in, an empty `classes: {}`, and a single commented-out example
-entry to copy-paste from.
+This writes `maps/com.example.app/3.4.5.json` — a plain strict-JSON
+skeleton (no comments; field documentation lives in
+[Map format](format.md)) with all top-level metadata filled in (a
+`version_code: 0` placeholder for you to replace) and a single worked
+example class entry under `classes` to edit in place.
 
 By default the path is `maps/<app>/<version>.json`. Override with
 `-o <path>`:
@@ -153,7 +154,7 @@ npx rosetta validate maps/com.example.app/3.4.5.json
 Success:
 
 ```text
-OK: maps/com.example.app/3.4.5.json — com.example.app@3.4.5, 15 class(es), schema_version=1
+OK: maps/com.example.app/3.4.5.json — com.example.app@3.4.5, 15 class(es), schema_version=2
 ```
 
 Failure surfaces specific issues:
@@ -186,7 +187,7 @@ and any `anchors` strings are present. With `trace: true` in the
 session options:
 
 ```text
-[rosetta] map-load com.example.app@3.4.5 schema=1 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 ```
 
@@ -237,7 +238,9 @@ When the next release ships:
 
 1. Copy the previous version's map to a new file:
    `cp maps/com.example.app/3.4.5.json maps/com.example.app/3.5.0.json`
-2. Update the top-level `version` field.
+2. Update the top-level `version` label **and** `version_code` — the
+   latter is the authoritative key the runtime selects by, so a stale
+   `version_code` makes the session reject the map.
 3. Re-run sigmatcher to refresh class anchors.
 4. For classes sigmatcher couldn't find, jadx them by hand using the
    anchors that survived (AIDL descriptors, stable strings).
@@ -276,8 +279,9 @@ docs.
   Signatures always use obfuscated refs (`Lbbbb;`, not
   `Lcom/example/app/IServiceCallback;`). The resolver handles the
   translation in the other direction at lookup time.
-- **Forgetting to bump `version`** when copying a map for a new
-  release. The session's app/version check catches this loudly, but
+- **Forgetting to bump `version_code` (and `version`)** when copying a
+  map for a new release. `version_code` is the authoritative selection
+  key — the session's version check catches a stale code loudly, but
   it's still confusing if you have to figure out why.
 - **Adding entries with no `source`.** Not fatal — `source` is
   optional — but tracking provenance pays off when you're debugging

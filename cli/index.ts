@@ -42,7 +42,7 @@ function printUsage(stderr: (line: string) => void): void {
     stderr('Commands:');
     stderr('  init <app> <version>                 Scaffold a new map skeleton');
     stderr('  validate <map>                       Schema + sanity check (auto-detect format)');
-    stderr('  convert <in> -o <out>                Convert YAML/TS module to canonical JSONC');
+    stderr('  convert <in> -o <out>                Convert YAML/TS module to canonical JSON');
     stderr('  patch <bundle.js> --map <new.json>   Replace embedded map in bundle');
     stderr('  extract <bundle.js> -o <out.json>    Pull embedded map out of bundle');
     stderr('  inspect <bundle.js>                  One-line summary of embedded map');

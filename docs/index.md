@@ -22,9 +22,9 @@ every time the obfuscator rotates.
 
     ---
 
-    On-disk JSON — human-readable, comment-supporting, machine-
-    round-trippable. Supports YAML and TypeScript-module input formats
-    via a CLI converter.
+    On-disk strict JSON — human-readable and machine-
+    round-trippable. Comment-bearing YAML and TypeScript-module
+    authoring inputs convert to canonical JSON via the CLI.
 
 -   :material-shield-check: __Health-checked at attach__
 
@@ -121,7 +121,7 @@ the full motivating story.
 - **Sample map and sample hook.** A 15-class anonymized example map
   covering AIDL stubs, callbacks, overloads, fields, enums, anonymous
   inner classes.
-- **595 tests, 100% coverage.** Every line of the runtime exercised.
+- **611 tests, 100% coverage.** Every line of the runtime exercised.
 
 What is **not** in V1.0:
 

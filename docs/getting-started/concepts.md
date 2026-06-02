@@ -104,7 +104,6 @@ A **map** is a single strict-JSON file describing the real → obfuscated
 translation for one `(app, version)` pair. The on-disk format:
 
 ```json
-// rosetta-frida/maps/com.example.app/3.4.5.json
 {
     "schema_version": 2,
     "app": "com.example.app",
@@ -144,7 +143,7 @@ block:
 
 ```js
 /*! -----BEGIN ROSETTA MAP----- */
-/*! app: com.example.app | version: 3.4.5 | schema: 1 | classes: 15 */
+/*! app: com.example.app | version: 3.4.5 | schema: 2 | classes: 15 */
 const __rosetta_map = {
     "schema_version": 2,
     "app": "com.example.app",

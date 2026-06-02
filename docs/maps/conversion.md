@@ -183,22 +183,19 @@ The canonical strict-JSON writer. Takes an in-memory `RosettaMap`, returns
 a string with:
 
 - 4-space indent.
-- Sorted top-level keys (`schema_version` first, then `app`,
-  `version`, `captured_at`, ..., `classes` last).
+- Top-level keys in insertion order (`schema_version` first, then
+  `app`, `version`, `version_code`, `captured_at`, ..., `classes`
+  last).
 - Stable class ordering (insertion order preserved).
-- No header comments — those are an authoring concern, not a
-  serialization concern.
+- No comments — the artifact is pure strict JSON. (`rosetta init`
+  likewise emits a plain-JSON skeleton; field documentation lives in
+  [Map format](format.md), not inline.)
 
 ```typescript
 import { renderJson } from 'rosetta-frida';
 
 const json = renderJson(map);
 ```
-
-For pretty-printing with header comments (e.g. the `rosetta init`
-output), build the comment string yourself and concatenate. The
-[init command implementation](https://github.com/rosetta-frida/rosetta-frida/blob/master/cli/commands/init.ts)
-is a worked example.
 
 ## `convertToJson` — one-stop entry point
 

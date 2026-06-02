@@ -32,7 +32,7 @@ version-specific maps per environment without ever touching
 
 ```js
 /*! -----BEGIN ROSETTA MAP----- */
-/*! app: com.example.app | version: 3.4.5 | schema: 1 | classes: 15 */
+/*! app: com.example.app | version: 3.4.5 | schema: 2 | classes: 15 */
 const __rosetta_map = {
     "schema_version": 2,
     "app": "com.example.app",
@@ -134,7 +134,7 @@ const markerSrc = emitMarkerBlock(map);
 
 // markerSrc is:
 //   /*! -----BEGIN ROSETTA MAP----- */
-//   /*! app: com.example.app | version: 3.4.5 | schema: 1 | classes: 15 */
+//   /*! app: com.example.app | version: 3.4.5 | schema: 2 | classes: 15 */
 //   const __rosetta_map = { ... };
 //   /*! -----END ROSETTA MAP----- */
 ```
