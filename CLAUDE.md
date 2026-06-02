@@ -119,6 +119,17 @@ the same way. See `docs/api/` for the full surface.
 
 ## Mapping file format
 
+**Schema ownership (inverted):** the canonical, language-neutral map
+schema now lives in the separate
+[`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo
+(`schema/rosetta-map.schema.json` — the source of truth for the
+`schema_version: 2` format). rosetta-frida is the **first-class
+client** of that schema: its Zod validator (`src/validate/schema.ts`)
+*tracks* the canonical schema rather than defining it.
+`rosetta-xposed` (Kotlin) is the other client. (There is no cross-repo
+or git-URL dependency yet — that waits for an npm phase; the Zod
+validator simply mirrors the canonical shape.)
+
 **Resolved (post-RFC-0001):** the canonical on-disk artifact is
 **strict JSON** (`schema_version: 2`), one file per
 `(app, version_code)`, stored under a maps directory loaded at attach
@@ -197,11 +208,15 @@ Two repos at maturity:
 
 - **`rosetta-frida/`** (this repo) — library + bridge code.
 - **[`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps)** (separate
-  repo, **scaffolded**) — contributed maps + the sigmatcher signatures
-  they're generated from. PR-gated by automated schema validation (which
-  reuses this repo's `rosetta validate`); no code review required. Each PR
+  repo, **scaffolded**) — **owns the canonical, language-neutral map
+  schema** (`schema/rosetta-map.schema.json`, the source of truth for the
+  `schema_version: 2` format) plus contributed maps and the sigmatcher
+  signatures they're generated from. PR-gated by automated schema
+  validation (which reuses this repo's `rosetta validate`, whose Zod
+  schema tracks the canonical one); no code review required. Each PR
   adds or updates a single `maps/<app>/<version_code>.json` (authored in
-  YAML/TS, rendered via `rosetta convert`).
+  YAML/TS, rendered via `rosetta convert`). rosetta-frida is the
+  first-class **client** of that schema, not its home.
 
 The library, at attach time, can optionally fetch from the maps repo
 if no local override exists. Caching keyed by `(app, version_code)`.

@@ -7,6 +7,21 @@
 | **Supersedes** | nothing (companion to [Design](../reference/design.md)) |
 | **Branch** | `claude/rosetta-unified-signatures-8WKsz` |
 
+!!! note "Update — schema ownership has since inverted"
+
+    This RFC originally placed the canonical map schema (layer 2) in
+    this repo at `src/validate/schema.ts`. That ownership has since been
+    **inverted**: the separate
+    [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo now
+    owns the canonical, language-neutral schema
+    (`schema/rosetta-map.schema.json`, the source of truth for the
+    `schema_version: 2` format). rosetta-frida is the first-class
+    **client** of that schema — `src/validate/schema.ts` is a Zod
+    validator that *tracks* the canonical schema rather than defining
+    it. rosetta-frida remains the home of this RFC; `rosetta-xposed`
+    (Kotlin) is the other client. Read the layer-2 references below with
+    that inversion in mind.
+
 ## Summary
 
 `rosetta-frida` is a complete, tested V1.0 Frida library: hook by **real**
