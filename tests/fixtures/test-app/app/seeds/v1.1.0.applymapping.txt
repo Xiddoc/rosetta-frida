@@ -66,17 +66,20 @@ com.example.testapp.Config -> ddde:
 com.example.testapp.Ticket -> eeef:
     java.lang.String value -> a
     long expiryMillis -> b
+    java.lang.String ROSETTA_ANCHOR -> c
     com.example.testapp.Ticket fromBytes(byte[]) -> a
     java.lang.String getValue() -> b
     long getExpiry() -> c
 
 # ── Ticket$Companion — `ffff` → `fffg` ─────────────────────────────────
 com.example.testapp.Ticket$Companion -> fffg:
+    java.lang.String ROSETTA_ANCHOR -> a
     com.example.testapp.Ticket create(java.lang.String) -> a
 
 # ── Ticket$Reader — `gggg` → `gggh` ────────────────────────────────────
 com.example.testapp.Ticket$Reader -> gggh:
     com.example.testapp.Ticket this$0 -> a
+    java.lang.String ROSETTA_ANCHOR -> b
     java.lang.String readValue() -> a
     long readExpiry() -> b
 
@@ -87,12 +90,15 @@ com.example.testapp.ErrorCode -> hhhi:
     com.example.testapp.ErrorCode AUTH_FAILED -> c
     int code -> d
     com.example.testapp.ErrorCode[] $VALUES -> e
+    java.lang.String ROSETTA_ANCHOR -> f
     int getCode() -> a
 
 # ── AbstractServiceClient — `iiii` → `iiij` ───────────────────────────
 com.example.testapp.AbstractServiceClient -> iiij:
     int INSTANCE_COUNT -> a
     android.content.Context context -> b
+    java.lang.String ROSETTA_ANCHOR -> f
+    java.lang.String anchorSink -> g
     void connect() -> a
     void disconnect() -> b
     java.lang.Runnable retryHandle() -> c
@@ -108,10 +114,12 @@ com.example.testapp.AbstractServiceClient$1 -> jjjk:
 com.example.testapp.RemoteServiceClient -> kkkl:
     java.lang.String sessionId -> c
     int flags -> d
+    java.lang.String ROSETTA_ANCHOR -> h
     void connect() -> a
     com.example.testapp.Ticket requestTicket(android.os.Bundle) -> c
     java.lang.Object apply(java.lang.Object) -> f
 
 # ── PromiseCallback interface — `llll` → `lllm` ───────────────────────
 com.example.testapp.PromiseCallback -> lllm:
+    java.lang.String ROSETTA_ANCHOR -> e
     java.lang.Object apply(java.lang.Object) -> a
