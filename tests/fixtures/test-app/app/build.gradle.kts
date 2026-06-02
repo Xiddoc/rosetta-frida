@@ -56,54 +56,33 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = false
+
+            // Point R8 at the pinned obfuscation seed via a tiny generated
+            // proguard fragment. It is written EAGERLY here (configuration
+            // time), NOT as a task output: if it were a task output, the
+            // tasks that read the proguardFiles list (R8, the lint-vital
+            // model writer, …) would have an undeclared implicit dependency
+            // on it, which Gradle 8.7 rejects as a validation error.
+            val applyMappingFragment =
+                layout.buildDirectory
+                    .file("intermediates/rosetta-applymapping/applymapping.pro")
+                    .get()
+                    .asFile
+            applyMappingFragment.parentFile.mkdirs()
+            applyMappingFragment.writeText(
+                "# Auto-generated: points R8 at the pinned obfuscation seed.\n" +
+                    "-applymapping ${applyMappingFile.absolutePath}\n",
+            )
+
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
+                applyMappingFragment,
             )
         }
         debug {
             // Debug build keeps real names — useful for local poking.
             isMinifyEnabled = false
-        }
-    }
-
-    // R8 reads the applymapping seed via a generated proguard file —
-    // we emit a tiny proguard fragment pointing at the chosen seed and
-    // include it in the release proguardFiles list.
-    applicationVariants.configureEach {
-        if (buildType.name == "release") {
-            val variant = this
-            val seedDir = layout.buildDirectory.dir(
-                "intermediates/rosetta-applymapping/${variant.name}"
-            )
-            val seedTask = tasks.register(
-                "writeApplyMapping${variant.name.replaceFirstChar { it.uppercase() }}"
-            ) {
-                val outDir = seedDir
-                val inputSeed = applyMappingFile
-                inputs.file(inputSeed)
-                outputs.dir(outDir)
-                doLast {
-                    val dir = outDir.get().asFile
-                    dir.mkdirs()
-                    val pgFragment = File(dir, "applymapping.pro")
-                    pgFragment.writeText(
-                        "# Auto-generated: points R8 at the pinned obfuscation seed.\n" +
-                            "-applymapping ${inputSeed.absolutePath}\n",
-                    )
-                }
-            }
-            // Hook the generated fragment into R8's input list.
-            val buildTypeObj = android.buildTypes.getByName("release")
-            buildTypeObj.proguardFile(
-                seedDir.map { it.file("applymapping.pro").asFile }.get()
-            )
-            // Make minification depend on the seed-writing task.
-            tasks.matching {
-                it.name == "minify${variant.name.replaceFirstChar { it.uppercase() }}WithR8"
-            }.configureEach {
-                dependsOn(seedTask)
-            }
         }
     }
 }
