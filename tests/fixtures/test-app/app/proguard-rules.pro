@@ -40,10 +40,19 @@
 -keep class com.example.testapp.IServiceCallback { *; }
 -keep class com.example.testapp.IServiceCallback$Stub { *; }
 
-# ── Service registration anchors ──────────────────────────────────────
-# AndroidManifest names the Service entry point, so its class name
-# must survive obfuscation (otherwise the manifest reference dangles).
--keep public class com.example.testapp.RemoteService
+# ── Keep all test-app classes PRESENT, but RENAMEABLE ─────────────────
+# The fixture exists to analyze OBFUSCATED classes, so they must first
+# survive R8's tree-shaker. Nothing in the app references most of them
+# (there is no launcher Activity), so by default R8 strips them and the
+# analysis has nothing to find. `allowobfuscation` keeps them present
+# while still letting the `-applymapping` seeds pin each class/member to
+# its rotated name — which is the entire point of the fixture. The AIDL
+# contract classes above are hard-kept separately, so they stay at their
+# real names.
+#
+# RemoteService is the manifest Service entry point; R8 keeps it and
+# rewrites the manifest reference when it renames it (→ `aaaa`).
+-keep,allowobfuscation class com.example.testapp.** { *; }
 
 # ── Enum shape ───────────────────────────────────────────────────────
 # Standard Android enum rule — keeps values()/valueOf() so reflection
