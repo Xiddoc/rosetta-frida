@@ -135,12 +135,12 @@ want to try it now.
 
 ### Roadmap
 
-| Version        | Focus                                                                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| V1.0 (current) | Java-only runtime + CLI. Maps live in this repo.                                                                                            |
-| V1.5           | `rosetta diff` / `merge` / `types` / `verify` CLI commands. Multi-version registry bundles. Fuzzy version matching.                         |
-| V2             | Self-healing runtime discovery. Separate `rosetta-frida-maps/` community repo. Frida-compile plugin for transparent marker-block injection. |
-| V3             | Native (JNI / ELF) symbol mapping. Non-Frida runtimes (Xposed, LSPosed). Hosted resolution service.                                         |
+| Version        | Focus                                                                                                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V1.0 (current) | Java-only runtime + CLI. Maps live in this repo.                                                                                                                                            |
+| V1.5           | `rosetta diff` / `merge` / `types` / `verify` CLI commands. Multi-version registry bundles. Fuzzy version matching.                                                                         |
+| V2             | Self-healing runtime discovery. Separate [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) community repo (scaffolded). Frida-compile plugin for transparent marker-block injection. |
+| V3             | Native (JNI / ELF) symbol mapping. Non-Frida runtimes — [`rosetta-xposed`](https://github.com/Xiddoc/rosetta-xposed) (Xposed / LSPosed / LSPatch, scaffolded). Hosted resolution service.   |
 
 ## Documentation
 
