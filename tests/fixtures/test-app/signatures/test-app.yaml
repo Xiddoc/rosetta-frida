@@ -346,12 +346,15 @@
               type: regex
               count: 1
 
-# Enum — anchored on its unique ROSETTA_ANCHOR literal. The enum
-# constants share the Lhhhh; self-type descriptor, so they're captured
-# by their preceding `const-string` name in <clinit>… but those are
-# only string loads, not field decls. Instead we capture the enum
-# constant fields by the `enum` keyword and the self-type, and the
-# scalar `code` field by its primitive type.
+# Enum — anchored on its unique ROSETTA_ANCHOR literal. NOTE: the three
+# enum CONSTANTS (SUCCESS/TIMEOUT/AUTH_FAILED) are intentionally NOT
+# captured as fields. They share the identical self-type descriptor
+# (Lhhhh;) at their `.field` declarations, and sigmatcher's single
+# `(?P<match>…)` capture has no per-constant disambiguator — their only
+# distinguisher is the preceding `const-string` name in <clinit>, which
+# is a string load, not a field decl. So we resolve the *non-constant*
+# members instead: ROSETTA_ANCHOR, the scalar `code`, `$VALUES`, and
+# getCode(). (The emitted golden therefore omits the three constants.)
 - name: 'ErrorCode'
   package: 'com.example.testapp'
   signatures:

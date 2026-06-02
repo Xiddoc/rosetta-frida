@@ -23,7 +23,11 @@
 # IRemoteService, IRemoteService$Stub, IServiceCallback, IServiceCallback$Stub
 # are not listed here — they aren't obfuscated at all.
 
-# ── RemoteService — pins to `aaaa` ────────────────────────────────────
+# ── RemoteService — the class rename is a NO-OP ──────────────────────
+# This `-> aaaa` class pin is effectively dead: RemoteService is the
+# manifest `<service>` entry, so R8 keeps the real class name (and
+# rewrites the manifest in lock-step) regardless of this line. The
+# member pins below still apply. See README's rotation matrix.
 com.example.testapp.RemoteService -> aaaa:
     java.lang.String ROSETTA_ANCHOR -> a
     int requestCounter -> b

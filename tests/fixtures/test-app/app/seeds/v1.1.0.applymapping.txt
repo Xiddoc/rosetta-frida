@@ -19,7 +19,11 @@
 
 # ── AIDL-anchored classes (stay at real names; -keep in proguard-rules) ──
 
-# ── RemoteService — `aaaa` → `aaab` (class rotates; methods STABLE) ──
+# ── RemoteService — the class rename is a NO-OP (methods STABLE) ─────
+# This `-> aaab` class pin is dead: RemoteService is the manifest
+# `<service>` entry, so R8 keeps the real class name across BOTH builds
+# (no v1.0.0→v1.1.0 rotation for this class). The member pins still
+# apply. See README's rotation matrix.
 com.example.testapp.RemoteService -> aaab:
     java.lang.String ROSETTA_ANCHOR -> a
     int requestCounter -> b

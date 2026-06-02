@@ -20,7 +20,7 @@ This table is the **actual** R8 output for the two seeds (verified by
 | `Ticket`                  | `eeee`                  | `eeef`                  | class rotates; methods stable                       |
 | `Ticket$Companion`        | `ffff`                  | `fffg`                  | nested synthetic rotates                            |
 | `Ticket$Reader`           | `gggg`                  | `gggh`                  | inner-instance rotates                              |
-| `ErrorCode`               | `hhhh`                  | `hhhi`                  | enum rotates; values stable                         |
+| `ErrorCode`               | `hhhh`                  | `hhhi`                  | enum rotates; constants not mapped (see gaps note)  |
 | `AbstractServiceClient`   | `iiii`                  | `iiij`                  | abstract base rotates                               |
 | `AbstractServiceClient$1` | `jjjj`                  | `jjjk`                  | anonymous Runnable rotates                          |
 | `RemoteServiceClient`     | `kkkk`                  | `kkkl`                  | class rotates; **`apply` method rotates**           |
@@ -43,6 +43,22 @@ keeps the name and rewrites the manifest in lock-step. The fixture
 embraces this (determinism + the cross-version signal matter more than
 hitting a specific letter); the anonymous `RemoteService$1` /
 `RemoteService$1$1` subclasses underneath it still rotate normally.
+
+### Known member-resolution gaps
+
+Two members are intentionally **not** emitted in the goldens, because
+they can't be anchored under sigmatcher 1.9.2's matching model. They are
+documented here so the omissions read as deliberate, not as bugs:
+
+- **`ErrorCode` enum constants (`SUCCESS` / `TIMEOUT` / `AUTH_FAILED`).**
+  All three share the identical self-type descriptor (`Lhhhh;`) at their
+  `.field` declarations, and a single capture has no per-constant
+  disambiguator. `ErrorCode` still resolves with `code`, `$VALUES`,
+  `ROSETTA_ANCHOR`, and `getCode()`.
+- **`RemoteService.safeError`.** R8 splits the private static helper into
+  a renamed method plus synthetic `-$$Nest$` access bridges, leaving no
+  clean, file-unique descriptor anchor. `RemoteService` still resolves
+  richly (its four fields).
 
 ## What this is for
 
