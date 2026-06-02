@@ -7,30 +7,42 @@ specific obfuscated names.
 
 The pair simulates a realistic minor-version rotation:
 
-|                           | v1.0.0                  | v1.1.0                  | Pattern                                   |
-| ------------------------- | ----------------------- | ----------------------- | ----------------------------------------- |
-| `RemoteService`           | `aaaa`                  | `aaab`                  | class rotates; methods stable             |
-| `RemoteService$1`         | `bbbb`                  | `bbbc`                  | anonymous Runnable rotates                |
-| `BlobCache`               | `cccc`                  | `cccc`                  | class stays (uncommon but real)           |
-| `Config`                  | `dddd`                  | `ddde`                  | class rotates; **fields shuffle**         |
-| `Ticket`                  | `eeee`                  | `eeef`                  | class rotates; methods stable             |
-| `Ticket$Companion`        | `ffff`                  | `fffg`                  | nested synthetic rotates                  |
-| `Ticket$Reader`           | `gggg`                  | `gggh`                  | inner-instance rotates                    |
-| `ErrorCode`               | `hhhh`                  | `hhhi`                  | enum rotates; values stable               |
-| `AbstractServiceClient`   | `iiii`                  | `iiij`                  | abstract base rotates                     |
-| `AbstractServiceClient$1` | `jjjj`                  | `jjjk`                  | anonymous Runnable rotates                |
-| `RemoteServiceClient`     | `kkkk`                  | `kkkl`                  | class rotates; **`apply` method rotates** |
-| `PromiseCallback`         | `llll`                  | `lllm`                  | interface rotates                         |
-| `IRemoteService`          | `IRemoteService`        | `IRemoteService`        | **AIDL-anchored — never rotates**         |
-| `IRemoteService$Stub`     | `IRemoteService$Stub`   | `IRemoteService$Stub`   | AIDL-anchored                             |
-| `IServiceCallback`        | `IServiceCallback`      | `IServiceCallback`      | AIDL-anchored                             |
-| `IServiceCallback$Stub`   | `IServiceCallback$Stub` | `IServiceCallback$Stub` | AIDL-anchored                             |
+This table is the **actual** R8 output for the two seeds (verified by
+`regenerate-goldens.sh`), not an aspiration:
+
+|                           | v1.0.0                  | v1.1.0                  | Pattern                                             |
+| ------------------------- | ----------------------- | ----------------------- | --------------------------------------------------- |
+| `RemoteService`           | `RemoteService`         | `RemoteService`         | manifest `Service` entry — R8 keeps the name        |
+| `RemoteService$1`         | `bbbb`                  | `bbbc`                  | anonymous `IRemoteService.Stub` subclass rotates    |
+| `RemoteService$1$1`       | `bbbb$a`                | `bbbc$a`                | nested anonymous `Runnable` rotates with its parent |
+| `BlobCache`               | `cccc`                  | `cccc`                  | class stays (uncommon but real)                     |
+| `Config`                  | `dddd`                  | `ddde`                  | class rotates; **fields shuffle**                   |
+| `Ticket`                  | `eeee`                  | `eeef`                  | class rotates; methods stable                       |
+| `Ticket$Companion`        | `ffff`                  | `fffg`                  | nested synthetic rotates                            |
+| `Ticket$Reader`           | `gggg`                  | `gggh`                  | inner-instance rotates                              |
+| `ErrorCode`               | `hhhh`                  | `hhhi`                  | enum rotates; values stable                         |
+| `AbstractServiceClient`   | `iiii`                  | `iiij`                  | abstract base rotates                               |
+| `AbstractServiceClient$1` | `jjjj`                  | `jjjk`                  | anonymous Runnable rotates                          |
+| `RemoteServiceClient`     | `kkkk`                  | `kkkl`                  | class rotates; **`apply` method rotates**           |
+| `PromiseCallback`         | `llll`                  | `lllm`                  | interface rotates                                   |
+| `IRemoteService`          | `IRemoteService`        | `IRemoteService`        | **AIDL-anchored — never rotates**                   |
+| `IRemoteService$Stub`     | `IRemoteService$Stub`   | `IRemoteService$Stub`   | AIDL-anchored                                       |
+| `IServiceCallback`        | `IServiceCallback`      | `IServiceCallback`      | AIDL-anchored                                       |
+| `IServiceCallback$Stub`   | `IServiceCallback$Stub` | `IServiceCallback$Stub` | AIDL-anchored                                       |
 
 Most classes rotate. Most method _letters_ stay (matching the design-
 doc §0.2 finding that method names rotate slower than class names).
 A couple of intentional outliers cover the "method moved within a
 stable class" pattern (`apply` on `RemoteServiceClient`) and the
 "class kept the same letter" pattern (`BlobCache`).
+
+Two classes stay at their **real** names rather than a four-letter
+obfuscation: the AIDL contract surface (`-keep`-pinned) and
+`RemoteService` itself — it's the manifest `<service>` entry, so R8
+keeps the name and rewrites the manifest in lock-step. The fixture
+embraces this (determinism + the cross-version signal matter more than
+hitting a specific letter); the anonymous `RemoteService$1` /
+`RemoteService$1$1` subclasses underneath it still rotate normally.
 
 ## What this is for
 
