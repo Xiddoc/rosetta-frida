@@ -64,6 +64,11 @@ require_cmd() {
     fi
 }
 
+# Tool versions matter: the goldens are reproducible only against the same
+# toolchain CI pins — Temurin JDK 17, sigmatcher 1.9.2, and apktool 3.0.2.
+# A different apktool emits different smali (and ≥2.12.0 vs older changes
+# sigmatcher's unpack flags), which shifts the resolved map. Match those
+# versions when regenerating, or the diff against CI's goldens will differ.
 require_cmd java
 require_cmd sigmatcher
 require_cmd npx
@@ -92,6 +97,7 @@ cat >"$CLASS_KIND_MAP_FILE" <<'EOF'
     "com.example.testapp.BlobCache": "class",
     "com.example.testapp.RemoteService": "class",
     "com.example.testapp.RemoteService$1": "anonymous",
+    "com.example.testapp.RemoteService$1$1": "anonymous",
     "com.example.testapp.Ticket": "class",
     "com.example.testapp.Ticket$Companion": "synthetic",
     "com.example.testapp.Ticket$Reader": "class",

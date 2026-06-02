@@ -18,6 +18,9 @@ public enum ErrorCode {
     TIMEOUT(1),
     AUTH_FAILED(2);
 
+    /** Stable cross-version anchor — survives R8 in the field table. */
+    public static final String ROSETTA_ANCHOR = "rosetta-anchor-ErrorCode";
+
     private final int code;
 
     ErrorCode(int code) {

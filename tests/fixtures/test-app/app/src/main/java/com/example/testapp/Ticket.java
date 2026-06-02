@@ -22,6 +22,9 @@ import java.nio.charset.StandardCharsets;
  */
 public class Ticket {
 
+    /** Stable cross-version anchor — survives R8 in the field table. */
+    public static final String ROSETTA_ANCHOR = "rosetta-anchor-Ticket";
+
     private final String value;
     private final long expiryMillis;
 
@@ -59,6 +62,9 @@ public class Ticket {
      * shape rosetta-frida's schema represents.
      */
     public final class Reader {
+        /** Stable cross-version anchor for the inner Reader class. */
+        public static final String ROSETTA_ANCHOR = "rosetta-anchor-Ticket$Reader";
+
         /** Reads the outer's private value via a javac-emitted accessor. */
         public String readValue() {
             return Ticket.this.value;
@@ -76,6 +82,9 @@ public class Ticket {
      * class of {@link Ticket}.  Stand-in for a Kotlin-style {@code Companion}.
      */
     public static final class Companion {
+        /** Stable cross-version anchor for the synthetic Companion. */
+        public static final String ROSETTA_ANCHOR = "rosetta-anchor-Ticket$Companion";
+
         /**
          * Cross-class return type — exercises the resolver's reverse
          * index for signatures that reference other mapped classes.
