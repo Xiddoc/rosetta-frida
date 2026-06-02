@@ -332,16 +332,18 @@ The theme: turn rosetta-frida from a library into an ecosystem.
 - **Purpose.** A separate, community-contributed repository of map
   files, PR-gated by automated schema validation (no code review), keyed
   by `(app, version_code)` with the `signer_sha256` authenticity guard.
-  The library can optionally fetch the latest map for the installed
-  version at attach time, cached by `(app, version_code)`.
+  At **build time**, a developer pulls the map for the version they want
+  to support and bundles it into their script — the device never fetches
+  a map from the cloud.
 - **Benefit.** **The killer feature.** A hook works against a version its
   author never tested, because someone else contributed that version's
   map — an obfuscation-map "CVE database." Schema v2 was deliberately
   shaped (authoritative `version_code` key, signer guard) to make this
   selection and trust model sound.
 - **Scope / dependencies.** A new repo with CI validation using this
-  library's validator; a fetch/cache client in the runtime (gated behind
-  config); a contribution + provenance workflow. Depends on
+  library's validator; a build-time `rosetta pull` verb that fetches a
+  single verified map into the developer's project (no device-side
+  client); a contribution + provenance workflow. Depends on
   `signer_sha256` enforcement and `migrate` for long-term map
   durability.
 - **Status.** in progress — **scaffolded at
@@ -350,7 +352,7 @@ The theme: turn rosetta-frida from a library into an ecosystem.
   artifacts), the structural validation CI (reusing this library's
   `rosetta validate`, no APK hosted), the filename↔`version_code`
   convention check, a JSON-Schema editor aid, and a worked example are in
-  place. Remaining: the runtime fetch/cache client here, plus the
+  place. Remaining: the build-time `rosetta pull` verb here, plus the
   attestation / trusted-runner / device-telemetry trust tiers there.
 
 ### Runtime map injection
@@ -358,9 +360,10 @@ The theme: turn rosetta-frida from a library into an ecosystem.
 - **Purpose.** Populate the marker block's reserved placeholder form
   (`let __rosetta_map = null;`) at attach time via
   `rosetta.injectMap(...)`, rather than only at compile time.
-- **Benefit.** Hot-swap and remote maps without recompiling the bundle —
-  the mechanism behind fleet management and "fetch the latest map from
-  the maps repo" workflows.
+- **Benefit.** Hot-swap a map without recompiling the bundle — the map
+  is supplied by the controlling Frida host (on the developer's machine),
+  not fetched by the device. The mechanism behind fleet-management
+  workflows where the host pushes an updated map into a live session.
 - **Scope / dependencies.** The marker-block placeholder seam already
   exists in the spec; needs the injection API + lifecycle handling
   (re-binding the resolver mid-session). Pairs with the maps repo.
