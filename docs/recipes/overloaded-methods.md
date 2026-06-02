@@ -10,7 +10,7 @@ types.
 
 From the sample map:
 
-```jsonc
+```json
 "com.example.app.BlobCache": {
     "obfuscated": "hhhh",
     "methods": {
@@ -131,7 +131,7 @@ Same disambiguation. Add `static: true` to the map entry so the
 resolver knows the receiver shape; the hook surface itself is
 unchanged:
 
-```jsonc
+```json
 "valueOf": {
     "obfuscated": "valueOf",
     "signature": "(Ljava/lang/String;)Ljjjj;",
@@ -158,7 +158,7 @@ rosetta.hook(
 Constructors are written `<init>` and almost always overload-array
 form:
 
-```jsonc
+```json
 "<init>": [
     {
         "obfuscated": "<init>",

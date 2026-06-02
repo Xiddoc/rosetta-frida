@@ -180,13 +180,16 @@ The session is the glue that wires the four subsystems together.
 Construction order (per `src/session/session.ts`):
 
 1. **Build the EventBus.** Honor `trace: true`.
-2. **Resolve `(app, version)`.** User overrides first; auto-detect
-   otherwise. Emit `detect` event.
-3. **Pick the map.** Single-map: use as-is. Registry: pick via
-   exact-version or fuzzy. Emit `map-load` event.
-4. **Cross-check.** `map.app === detectedApp`, `map.version ===
-   detectedVersion` (or the pick was fuzzy). Throw
-   `MapVersionMismatchError` on mismatch.
+2. **Resolve `(app, version, version_code)`.** User overrides first;
+   auto-detect otherwise (versionName + `getLongVersionCode()`). Emit
+   `detect` event.
+3. **Pick the map.** Single-map: use as-is. Registry: select by the
+   authoritative `version_code` first, falling back to the version
+   label (exact, then fuzzy). Emit `map-load` event.
+4. **Cross-check.** `map.app === detectedApp`, and the detected
+   `version_code` equals `map.version_code` (authoritative) — or the
+   version label matches when no code was detected, or the pick was
+   fuzzy. Throw `MapVersionMismatchError` on mismatch.
 5. **Run the attach-time health check** (unless skipped). Emit
    `health-check` event. Throw `HealthCheckFailedError` in `strict`
    mode if it fails.
@@ -206,8 +209,8 @@ What landed in V1.0:
 - Tier 2 (`rosetta.use(...)`, `rosetta.type(...)`).
 - Tier 3 (`rosetta.map.*`, `rosetta.events.*`).
 - Methods + fields + classes all covered.
-- Schema v1 (`schema_version: 1`), no migrators yet.
-- JSONC loader + Zod schema validator. YAML and TS-module converters.
+- Schema v2 (`schema_version: 2`), no migrators yet (1→2 was a hard cutover).
+- JSON loader + Zod schema validator. YAML and TS-module converters.
 - Marker-block embedding in the compiled bundle (manual wrapping;
   `frida-compile` plugin deferred to V1.5).
 - Attach-time health check.
@@ -258,16 +261,15 @@ For multi-session scripts (rare but real), the explicit composition
 form is documented. The shape is identical; only the
 session-injection point moves.
 
-### JSONC not YAML, plus YAML/TS converters
+### Strict JSON (not YAML) as the artifact, plus YAML/TS authoring converters
 
-JSONC (JSON with Comments) is the canonical on-disk format: comments
-preserve authoring intent, the data underneath round-trips
-machine-cleanly, and the on-disk shape matches the runtime shape
-exactly after a one-line comment strip. JS bundlers consume the
-comment-stripped `.json` sibling natively (V1.0 build step; V1.5 will
-ship a `frida-compile` plugin so `.jsonc` works directly). YAML and
-TS-module input exist via converters for authors who prefer them, but
-the *runtime* only sees the canonical shape.
+Strict JSON (no comments, no trailing commas) is the canonical on-disk
+format: the data round-trips machine-cleanly, the on-disk shape matches
+the runtime shape exactly, and JS bundlers / `frida-compile` consume
+the `.json` import natively with no conversion step. Comment-bearing
+YAML and TS-module input exist via converters for authors who prefer
+them — `rosetta convert` renders those to the canonical JSON artifact —
+but the *runtime* only ever sees strict JSON.
 
 ### PEM-style marker block
 

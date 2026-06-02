@@ -1,12 +1,14 @@
 /**
  * `rosetta init <app> <version> [-o <path>] [--force]`
  *
- * Writes a skeleton JSONC map to disk. The skeleton has:
- *   - Header comments documenting each required field.
- *   - All required top-level metadata filled in.
- *   - An empty `classes: {}`.
- *   - A single example class entry that's commented out (kept short, so
- *     a new user reads the comment, uncomments, and edits inline).
+ * Writes a skeleton strict-JSON map to disk. The skeleton has:
+ *   - All required top-level metadata filled in (with placeholder
+ *     `version_code: 0` for the author to replace).
+ *   - A single worked example class entry under `classes` so a new
+ *     author sees the shape and edits it in place.
+ *
+ * The artifact is plain JSON (no comments). Field documentation lives in
+ * `docs/maps/format.md`, not inline — keeping the artifact machine-clean.
  *
  * Refuses to overwrite an existing file unless `--force` is passed.
  */
@@ -59,65 +61,55 @@ export function parseInitArgs(argv: readonly string[]): InitOptions {
     };
 }
 
-/** Generate the skeleton JSONC content for an (app, version) pair. */
+/**
+ * Generate the skeleton strict-JSON content for an (app, version) pair.
+ *
+ * The output is valid against the schema except for `version_code: 0`
+ * and the example obfuscated names, which the author replaces. See
+ * `docs/maps/format.md` for field documentation, and
+ * `maps/com.example.app/3.4.5.json` for a fully-worked example.
+ */
 export function renderSkeleton(app: string, version: string): string {
-    return `// rosetta-frida map — skeleton scaffold.
-//
-// Edit this file to fill in real-name → obfuscated-name mappings for
-// each class, method, and field you want to hook in
-// ${app}@${version}.
-//
-// Top-level fields:
-//   schema_version: integer — must be 1 (current schema).
-//   app:            string  — Android package name.
-//   version:        string  — app version.
-//   captured_at:    string  — ISO date this map was captured.
-//   sources:        array   — provenance (which tool produced which entries).
-//   classes:        object  — keyed by real fully-qualified class name.
-//
-// See maps/com.example.app/3.4.5.jsonc for a fully-worked example
-// demonstrating every supported field.
-{
-    "schema_version": 1,
-    "app": "${app}",
-    "version": "${version}",
-    "captured_at": "",
-    "sources": [
-        {
-            "tool": "hand-authored",
-            "classes": 0,
-            "notes": "initial scaffold"
-        }
-    ],
-    "classes": {
-        // Example class entry (uncomment + edit to use):
-        //
-        // "com.example.app.IRemoteService$Stub": {
-        //     "obfuscated": "aaaa",
-        //     "kind": "aidl_stub",
-        //     "aidl_descriptor": "com.example.app.IRemoteService",
-        //     "methods": {
-        //         "requestTicket": {
-        //             "obfuscated": "c",
-        //             "signature": "(Landroid/os/Bundle;Lbbbb;)V",
-        //             "aidl_txn": 2
-        //         }
-        //     },
-        //     "fields": {
-        //         "sessionId": {
-        //             "obfuscated": "a",
-        //             "type": "Ljava/lang/String;"
-        //         }
-        //     }
-        // }
-    }
-}
-`;
+    const skeleton = {
+        schema_version: 2,
+        app,
+        version,
+        version_code: 0,
+        captured_at: '',
+        sources: [
+            {
+                tool: 'hand-authored',
+                classes: 1,
+                notes: 'initial scaffold',
+            },
+        ],
+        classes: {
+            'com.example.app.IRemoteService$Stub': {
+                obfuscated: 'aaaa',
+                kind: 'aidl_stub',
+                aidl_descriptor: 'com.example.app.IRemoteService',
+                methods: {
+                    requestTicket: {
+                        obfuscated: 'c',
+                        signature: '(Landroid/os/Bundle;Lbbbb;)V',
+                        aidl_txn: 2,
+                    },
+                },
+                fields: {
+                    sessionId: {
+                        obfuscated: 'a',
+                        type: 'Ljava/lang/String;',
+                    },
+                },
+            },
+        },
+    };
+    return JSON.stringify(skeleton, null, 4) + '\n';
 }
 
-/** Resolve the default output path: `maps/<app>/<version>.jsonc`. */
+/** Resolve the default output path: `maps/<app>/<version>.json`. */
 export function defaultOutputPath(app: string, version: string): string {
-    return path.join('maps', app, `${version}.jsonc`);
+    return path.join('maps', app, `${version}.json`);
 }
 
 /**

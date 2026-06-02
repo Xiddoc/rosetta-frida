@@ -163,12 +163,12 @@ Every exported name from `rosetta-frida`, grouped:
 | `createMapApi`, `createEventsApi` | Function | [Tier 3](tier-3.md) |
 | `makeClassProxy`, `makeMethodHandle`, `makeFieldAccessor`, `makeInstanceProxy` | Function | [Tier 3](tier-3.md), [proxy types](../reference/types.md#proxy-types) |
 | `createResolver`, `ResolverImpl`, `makeSentinel`, `isSentinel` | Function, class | [Tier 3](tier-3.md), [design](../reference/design.md#resolver) |
-| `loadMap`, `parseJsonc`, `stripCommentsAndTrailingCommas`, `looksLikeJsoncSource` | Function | [Maps — format](../maps/format.md) |
+| `loadMap`, `parseJson`, `looksLikeJsonSource` | Function | [Maps — format](../maps/format.md) |
 | `validateMap`, `rosettaMapSchema` | Function, schema | [Maps — format](../maps/format.md) |
-| `yamlToMap`, `tsModuleToMap`, `convertToJsonc`, `renderJsonc` | Function | [Maps — conversion](../maps/conversion.md) |
+| `yamlToMap`, `tsModuleToMap`, `convertToJson`, `renderJson` | Function | [Maps — conversion](../maps/conversion.md) |
 | `BEGIN_MARKER`, `END_MARKER`, `BEGIN_REGISTRY`, `END_REGISTRY`, `MARKER_REGEX`, `emitMarkerBlock`, `emitMarkerRegistry`, `parseMarkerBlock`, `patchMarkerBlock` | Constants, function | [Marker block](../maps/marker-block.md) |
 | `EventBus`, `formatEvent`, `createSilentBus` | Class, function | [Events reference](../reference/events.md) |
-| `RosettaError`, `ResolveError`, `AmbiguousOverloadError`, `MapValidationError`, `JsoncParseError`, `MapVersionMismatchError`, `HealthCheckFailedError`, `MarkerBlockError`, `UnresolvedAccessError` | Error classes | [Errors](../reference/errors.md) |
+| `RosettaError`, `ResolveError`, `AmbiguousOverloadError`, `MapValidationError`, `JsonParseError`, `MapVersionMismatchError`, `HealthCheckFailedError`, `MarkerBlockError`, `UnresolvedAccessError` | Error classes | [Errors](../reference/errors.md) |
 
 All [type aliases](../reference/types.md) are also re-exported from
 the package root.

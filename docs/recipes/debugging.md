@@ -149,12 +149,12 @@ list. Either:
    `failurePolicy: 'warn'`. The session still emits the event but
    doesn't throw.
 
-### `JsoncParseError`
+### `JsonParseError`
 
-> "rosetta-frida: JSONC parse error at line 12 col 4: unexpected
+> "rosetta-frida: JSON parse error at line 12 col 4: unexpected
 > token"
 
-The JSONC source doesn't parse. The error carries `line` and
+The JSON source doesn't parse. The error carries `line` and
 `column`. Find the location, fix the syntax (usually a missing
 comma or quote), retry.
 

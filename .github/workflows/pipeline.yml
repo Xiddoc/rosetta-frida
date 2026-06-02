@@ -160,16 +160,17 @@ jobs:
                       /tmp/pipeline/v1.0.0.raw.json \
                       --app com.example.testapp \
                       --version 1.0.0 \
+                      --version-code 1 \
                       --method-name-map /tmp/pipeline/methodNameMap.json \
                       --class-kind-map  /tmp/pipeline/classKindMap.json \
-                      -o /tmp/pipeline/v1.0.0.actual.jsonc
+                      -o /tmp/pipeline/v1.0.0.actual.json
 
             - name: Validate emitted map (v1.0.0)
-              run: npm run --silent cli -- validate /tmp/pipeline/v1.0.0.actual.jsonc
+              run: npm run --silent cli -- validate /tmp/pipeline/v1.0.0.actual.json
 
             - name: Diff vs golden (v1.0.0)
               run: |
-                  if ! diff -u tests/fixtures/test-app/expected/v1.0.0.jsonc /tmp/pipeline/v1.0.0.actual.jsonc; then
+                  if ! diff -u tests/fixtures/test-app/expected/v1.0.0.json /tmp/pipeline/v1.0.0.actual.json; then
                       echo "::error::v1.0.0 emitted map does not match the golden"
                       exit 1
                   fi
@@ -190,16 +191,17 @@ jobs:
                       /tmp/pipeline/v1.1.0.raw.json \
                       --app com.example.testapp \
                       --version 1.1.0 \
+                      --version-code 2 \
                       --method-name-map /tmp/pipeline/methodNameMap.json \
                       --class-kind-map  /tmp/pipeline/classKindMap.json \
-                      -o /tmp/pipeline/v1.1.0.actual.jsonc
+                      -o /tmp/pipeline/v1.1.0.actual.json
 
             - name: Validate emitted map (v1.1.0)
-              run: npm run --silent cli -- validate /tmp/pipeline/v1.1.0.actual.jsonc
+              run: npm run --silent cli -- validate /tmp/pipeline/v1.1.0.actual.json
 
             - name: Diff vs golden (v1.1.0)
               run: |
-                  if ! diff -u tests/fixtures/test-app/expected/v1.1.0.jsonc /tmp/pipeline/v1.1.0.actual.jsonc; then
+                  if ! diff -u tests/fixtures/test-app/expected/v1.1.0.json /tmp/pipeline/v1.1.0.actual.json; then
                       echo "::error::v1.1.0 emitted map does not match the golden"
                       exit 1
                   fi
@@ -217,5 +219,5 @@ jobs:
                       /tmp/v1.1.0.apk
                       /tmp/pipeline/v1.0.0.raw.json
                       /tmp/pipeline/v1.1.0.raw.json
-                      /tmp/pipeline/v1.0.0.actual.jsonc
-                      /tmp/pipeline/v1.1.0.actual.jsonc
+                      /tmp/pipeline/v1.0.0.actual.json
+                      /tmp/pipeline/v1.1.0.actual.json

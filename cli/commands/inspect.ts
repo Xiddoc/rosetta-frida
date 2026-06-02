@@ -3,7 +3,7 @@
  * embedded map.
  *
  * For a single-map bundle:
- *   "com.example.app@1.2.3, schema_version 1, 47 classes"
+ *   "com.example.app@1.2.3, schema_version 2, 47 classes"
  *
  * For a registry bundle:
  *   "registry: com.example.app, versions=[1.2.3, 1.2.4], 94 classes total"

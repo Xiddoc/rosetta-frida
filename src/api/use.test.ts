@@ -15,7 +15,8 @@ import type { RosettaMap } from '../types/map.js';
 import { use } from './use.js';
 
 const map: RosettaMap = {
-    schema_version: 1,
+    schema_version: 2,
+    version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
     classes: {

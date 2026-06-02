@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# regenerate-goldens.sh — rebuild the expected/<version>.jsonc maps
+# regenerate-goldens.sh — rebuild the expected/<version>.json maps
 # from a fresh sigmatcher pass against newly-built APKs.
 #
 # Run this AFTER an intentional change to either:
@@ -14,7 +14,7 @@
 #   1. The script builds both APKs (v1.0.0 + v1.1.0).
 #   2. Runs sigmatcher against each, capturing the raw JSON output.
 #   3. Pipes the raw JSON through the adapter to produce
-#      expected/v1.0.0.jsonc + expected/v1.1.0.jsonc.
+#      expected/v1.0.0.json + expected/v1.1.0.json.
 #   4. Prints `git diff` against the previous goldens.
 #   5. Asks you to manually `git add` + commit the new files.
 #
@@ -31,6 +31,14 @@ ADAPTER_CLI="$REPO_ROOT/tools/adapters/sigmatcher-cli.ts"
 
 # ── Tunables ─────────────────────────────────────────────────────────
 VERSIONS=("v1.0.0" "v1.1.0")
+# Authoritative version_code per build — must mirror app/build.gradle.kts
+# (`versionCode = if (applyMappingVersion == "v1.1.0") 2 else 1`).
+version_code_for() {
+    case "$1" in
+        v1.1.0) echo 2 ;;
+        *) echo 1 ;;
+    esac
+}
 APP_PKG="com.example.testapp"
 WORK_DIR="${WORK_DIR:-/tmp/rosetta-pipeline}"
 CACHE_DIR="${WORK_DIR}/sigmatcher-cache"
@@ -62,7 +70,7 @@ require_cmd npx
 
 warn "WARNING: this script is about to OVERWRITE the following files:"
 for v in "${VERSIONS[@]}"; do
-    warn "  $EXPECTED/$v.jsonc"
+    warn "  $EXPECTED/$v.json"
 done
 warn "Review the resulting git diff before committing."
 
@@ -121,13 +129,15 @@ for v in "${VERSIONS[@]}"; do
         --no-progress \
         --cache-dir "$CACHE_DIR"
 
-    OUT="$EXPECTED/$v.jsonc"
+    OUT="$EXPECTED/$v.json"
     warn "── running adapter to produce $OUT ──"
     # Strip the leading "v" to get a clean semver in the `version`
-    # field of the emitted map (e.g. "v1.0.0" → "1.0.0").
+    # field of the emitted map (e.g. "v1.0.0" → "1.0.0"). The
+    # authoritative version_code comes from version_code_for().
     npx tsx "$ADAPTER_CLI" "$RAW" \
         --app "$APP_PKG" \
         --version "${v#v}" \
+        --version-code "$(version_code_for "$v")" \
         --method-name-map "$METHOD_NAME_MAP_FILE" \
         --class-kind-map "$CLASS_KIND_MAP_FILE" \
         -o "$OUT"

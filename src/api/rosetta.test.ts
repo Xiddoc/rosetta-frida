@@ -6,7 +6,8 @@ import { _resetCurrentSession, getCurrentSession, rosetta } from './rosetta.js';
 
 function makeMap(): RosettaMap {
     return {
-        schema_version: 1,
+        schema_version: 2,
+        version_code: 1,
         app: 'com.example.app',
         version: '3.4.5',
         classes: {
@@ -75,7 +76,7 @@ describe('rosetta ambient namespace', () => {
         });
         expect(s.app).toBe('com.example.app');
         expect(s.version).toBe('3.4.5');
-        expect(s.map.schema_version).toBe(1);
+        expect(s.map.schema_version).toBe(2);
     });
 
     it('getCurrentSession returns the latest session set via session()', () => {

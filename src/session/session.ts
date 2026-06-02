@@ -97,8 +97,10 @@ export class RosettaSession implements Session {
         });
 
         // 2. Pick the right map from the registry (or take the single map).
+        //    version_code, when known, is the authoritative selection key.
         const picked = pickMapForVersion(options.map, {
             version: detection.version,
+            versionCode: detection.versionCode,
             versionMatch: this.versionMatch,
         });
         this.map = picked.map;
@@ -113,9 +115,22 @@ export class RosettaSession implements Session {
                 this.map.version,
             );
         }
-        if (!this.isVersionAcceptable(this.map.version, detection.version, picked.fuzzy)) {
+        if (
+            !this.isVersionAcceptable(
+                this.map.version_code,
+                detection.version,
+                detection.versionCode,
+                this.map.version,
+                picked.fuzzy,
+            )
+        ) {
+            const detectedLabel =
+                detection.versionCode === undefined
+                    ? detection.version
+                    : `${detection.version} (code ${detection.versionCode})`;
+            const mapLabel = `${this.map.version} (code ${this.map.version_code})`;
             throw new MapVersionMismatchError(
-                `rosetta-frida: loaded map is for ${this.map.app}@${this.map.version} but the running process is ${detection.app}@${detection.version}. Provide a map for ${detection.version} or pass versionMatch: 'fuzzy'.`,
+                `rosetta-frida: loaded map is for ${this.map.app}@${mapLabel} but the running process is ${detection.app}@${detectedLabel}. Provide a map for ${detectedLabel} or pass versionMatch: 'fuzzy'.`,
                 detection.app,
                 detection.version,
                 this.map.app,
@@ -169,14 +184,24 @@ export class RosettaSession implements Session {
     }
 
     /**
-     * A version is acceptable if it equals the detected version OR the
-     * pick was an explicit fuzzy match (which is the user's opt-in).
+     * Decide whether the picked map is acceptable for the running build.
+     *
+     * When a version *code* was detected it is authoritative: the map's
+     * `version_code` must equal it (the RFC 0001 Decision 3 contract),
+     * unless the user opted into a fuzzy pick. Otherwise we fall back to
+     * the legacy version-*label* equality check (or fuzzy opt-in).
      */
     private isVersionAcceptable(
-        mapVersion: string,
+        mapVersionCode: number,
         detectedVersion: string,
+        detectedVersionCode: number | undefined,
+        mapVersion: string,
         fuzzy: boolean,
     ): boolean {
+        if (detectedVersionCode !== undefined) {
+            if (mapVersionCode === detectedVersionCode) return true;
+            return fuzzy;
+        }
         if (mapVersion === detectedVersion) return true;
         return fuzzy;
     }
@@ -185,22 +210,32 @@ export class RosettaSession implements Session {
 interface ResolvedDetection {
     app: string;
     version: string;
+    versionCode?: number;
     source: 'auto' | 'override';
 }
 
 function resolveAppAndVersion(options: InternalSessionOptions): ResolvedDetection {
     // If BOTH app and version are explicitly supplied, no auto-detect needed.
     if (options.app !== undefined && options.version !== undefined) {
-        return { app: options.app, version: options.version, source: 'override' };
+        const overridden: ResolvedDetection = {
+            app: options.app,
+            version: options.version,
+            source: 'override',
+        };
+        if (options.versionCode !== undefined) overridden.versionCode = options.versionCode;
+        return overridden;
     }
     // Otherwise run the in-process chain; user-supplied fields then
     // override the detected ones (e.g. force a specific version for tests).
     const detected = detectAppAndVersion(options.autoDetectJavaApi);
-    return {
+    const resolved: ResolvedDetection = {
         app: options.app ?? detected.app,
         version: options.version ?? detected.version,
         source: options.app !== undefined || options.version !== undefined ? 'override' : 'auto',
     };
+    const versionCode = options.versionCode ?? detected.versionCode;
+    if (versionCode !== undefined) resolved.versionCode = versionCode;
+    return resolved;
 }
 
 /**

@@ -46,10 +46,19 @@ export interface SessionOptions {
     app?: string;
 
     /**
-     * Override app version. If omitted, auto-detected in-process via
+     * Override app version label. If omitted, auto-detected in-process via
      * PackageManager.getPackageInfo().versionName.
      */
     version?: string;
+
+    /**
+     * Override the authoritative version code (PackageInfo.versionCode /
+     * longVersionCode). When set — or when auto-detected — this is the
+     * primary key used to select a map from a registry; the version label
+     * is only the fuzzy-match fallback. If omitted and not auto-detectable,
+     * selection falls back to matching on the version label.
+     */
+    versionCode?: number;
 
     /** Failure policy when a real name isn't in the map. Default: 'warn'. */
     failurePolicy?: FailurePolicy;

@@ -61,7 +61,7 @@ flowchart LR
     H["hook source<br/><code>rosetta.use('IRemoteService$Stub')</code>"]
     R["Resolver<br/>(real → obf)"]
     F["Frida<br/><code>Java.use('aaaa')</code>"]
-    M["map for 3.4.5<br/>(JSONC)"]
+    M["map for 3.4.5<br/>(JSON)"]
 
     H -- "real name" --> R
     M -. "feeds" .-> R
@@ -100,15 +100,16 @@ See [Session API](../api/session.md) for the full surface.
 
 ## Maps
 
-A **map** is a single JSONC file describing the real → obfuscated
+A **map** is a single strict-JSON file describing the real → obfuscated
 translation for one `(app, version)` pair. The on-disk format:
 
-```jsonc
-// rosetta-frida/maps/com.example.app/3.4.5.jsonc
+```json
+// rosetta-frida/maps/com.example.app/3.4.5.json
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "app": "com.example.app",
     "version": "3.4.5",
+    "version_code": 30405,
     "captured_at": "2026-05-13",
     "classes": {
         "com.example.app.IRemoteService$Stub": {
@@ -131,7 +132,7 @@ the obfuscated short name plus methods, fields, and optional metadata
 provenance).
 
 YAML and TypeScript-module input formats are supported via the
-[`rosetta convert`](../cli/convert.md) CLI. JSONC is the canonical
+[`rosetta convert`](../cli/convert.md) CLI. Strict JSON is the canonical
 on-disk and on-wire format.
 
 See [Maps — format reference](../maps/format.md) for every field.
@@ -145,9 +146,10 @@ block:
 /*! -----BEGIN ROSETTA MAP----- */
 /*! app: com.example.app | version: 3.4.5 | schema: 1 | classes: 15 */
 const __rosetta_map = {
-    "schema_version": 1,
+    "schema_version": 2,
     "app": "com.example.app",
     "version": "3.4.5",
+    "version_code": 30405,
     "classes": { /* ... */ }
 };
 /*! -----END ROSETTA MAP----- */

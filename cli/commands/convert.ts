@@ -2,20 +2,20 @@
  * `rosetta convert <in> -o <out.json>`
  *
  * Auto-detects the input format by extension and writes canonical
- * JSONC to the output path.
+ * strict JSON to the output path.
  *
  * Recognized inputs:
  *   - `.yaml` / `.yml`         → YAML source.
  *   - `.ts` / `.js` / `.mjs` / `.cjs` → TS/JS module exporting a RosettaMap.
  *
- * JSONC input (`.json` / `.jsonc`) is rejected here: it's already in
- * the canonical format, so there's nothing to convert.
+ * JSON input (`.json`) is rejected here: it's already in the canonical
+ * format, so there's nothing to convert.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
-import { convertToJsonc, yamlToMap, tsModuleToMap, renderJsonc } from '../../src/convert/index.js';
+import { convertToJson, yamlToMap, tsModuleToMap, renderJson } from '../../src/convert/index.js';
 
 export interface ConvertOptions {
     inputPath: string;
@@ -68,23 +68,23 @@ export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs
         );
     }
 
-    let jsonc: string;
+    let json: string;
     if (ext === '.yaml' || ext === '.yml') {
         const raw = await fsImpl.readFile(opts.inputPath, 'utf8');
-        jsonc = await convertToJsonc(raw, 'yaml');
+        json = await convertToJson(raw, 'yaml');
     } else if (ext === '.ts' || ext === '.js' || ext === '.mjs' || ext === '.cjs') {
         // For TS modules we go through the module-loader directly, since the
         // path-vs-source disambiguation is explicit here.
         const map = await tsModuleToMap(opts.inputPath);
-        jsonc = renderJsonc(map);
-    } else if (ext === '.json' || ext === '.jsonc') {
+        json = renderJson(map);
+    } else if (ext === '.json') {
         throw new RosettaError(`input is already in canonical format (${ext}); nothing to convert`);
     } else {
         throw new RosettaError(`unsupported input format: ${ext} (path: ${opts.inputPath})`);
     }
 
     await fsImpl.mkdir(path.dirname(opts.outputPath), { recursive: true });
-    await fsImpl.writeFile(opts.outputPath, jsonc, 'utf8');
+    await fsImpl.writeFile(opts.outputPath, json, 'utf8');
     return opts.outputPath;
 }
 

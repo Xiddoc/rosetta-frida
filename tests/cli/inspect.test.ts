@@ -17,7 +17,8 @@ import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import { makeCaptured, makeFakeFs, makeIo } from './helpers.js';
 
 const map = (version = '1.2.3', app = 'com.example.app'): RosettaMap => ({
-    schema_version: 1,
+    schema_version: 2,
+    version_code: 1,
     app,
     version,
     classes: { IFoo: { obfuscated: 'aaaa' } },
@@ -51,7 +52,7 @@ describe('runInspect', () => {
         const captured = makeCaptured();
         const code = await runInspect(['b.js'], makeIo(fs, captured));
         expect(code).toBe(0);
-        expect(captured.stdout[0]).toBe('com.example.app@1.2.3, schema_version 1, 2 classes');
+        expect(captured.stdout[0]).toBe('com.example.app@1.2.3, schema_version 2, 2 classes');
     });
 
     it('prints a registry summary for a single-app registry', async () => {

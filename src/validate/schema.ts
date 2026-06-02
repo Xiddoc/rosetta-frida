@@ -1,7 +1,7 @@
 /**
  * Zod schemas mirroring `src/types/map.ts`.
  *
- * The on-disk JSONC is parsed into a plain JS value (`unknown`) and
+ * The on-disk JSON is parsed into a plain JS value (`unknown`) and
  * then validated through these schemas. A successful validation
  * returns a `RosettaMap` exactly matching the locked TypeScript
  * contract.
@@ -105,11 +105,12 @@ export const classMapSchema = z.record(z.string(), classEntrySchema);
 // ---------------------------------------------------------------------------
 
 export const rosettaMapSchema: z.ZodType<RosettaMap> = z.object({
-    schema_version: z.literal(1),
+    schema_version: z.literal(2),
     app: z.string().min(1),
     version: z.string().min(1),
+    version_code: z.number().int().nonnegative(),
     captured_at: z.string().optional(),
-    apk_sha256: z.string().optional(),
+    signer_sha256: z.string().optional(),
     frida_min_version: z.string().optional(),
     frida_max_version: z.string().optional(),
     sources: z.array(mapSourceSchema).optional(),

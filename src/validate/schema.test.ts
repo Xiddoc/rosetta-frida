@@ -184,9 +184,10 @@ describe('classEntrySchema', () => {
 describe('rosettaMapSchema', () => {
     it('accepts a minimal map', () => {
         const m = {
-            schema_version: 1 as const,
+            schema_version: 2 as const,
             app: 'com.example.app',
             version: '1.2.3',
+            version_code: 10203,
             classes: {},
         };
         expect(rosettaMapSchema.parse(m)).toEqual(m);
@@ -194,11 +195,12 @@ describe('rosettaMapSchema', () => {
 
     it('accepts a fully-populated map', () => {
         const m = {
-            schema_version: 1 as const,
+            schema_version: 2 as const,
             app: 'com.example.app',
             version: '3.4.5',
+            version_code: 30405,
             captured_at: '2026-05-11',
-            apk_sha256: 'a'.repeat(64),
+            signer_sha256: 'a'.repeat(64),
             frida_min_version: '16.0.0',
             frida_max_version: '17.99.99',
             sources: [
@@ -217,7 +219,19 @@ describe('rosettaMapSchema', () => {
         expect(rosettaMapSchema.parse(m)).toEqual(m);
     });
 
-    it('rejects schema_version other than 1', () => {
+    it('rejects schema_version other than 2', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 1,
+                app: 'a',
+                version: 'b',
+                version_code: 1,
+                classes: {},
+            }),
+        ).toThrow();
+    });
+
+    it('rejects a missing version_code', () => {
         expect(() =>
             rosettaMapSchema.parse({
                 schema_version: 2,
@@ -228,27 +242,45 @@ describe('rosettaMapSchema', () => {
         ).toThrow();
     });
 
+    it('rejects a non-integer version_code', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                app: 'a',
+                version: 'b',
+                version_code: 1.5,
+                classes: {},
+            }),
+        ).toThrow();
+    });
+
     it('rejects missing app', () => {
         expect(() =>
-            rosettaMapSchema.parse({ schema_version: 1, version: '1', classes: {} }),
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                version_code: 1,
+                version: '1',
+                classes: {},
+            }),
         ).toThrow();
     });
 
     it('rejects missing version', () => {
         expect(() =>
-            rosettaMapSchema.parse({ schema_version: 1, app: 'a', classes: {} }),
+            rosettaMapSchema.parse({ schema_version: 2, version_code: 1, app: 'a', classes: {} }),
         ).toThrow();
     });
 
     it('rejects missing classes', () => {
         expect(() =>
-            rosettaMapSchema.parse({ schema_version: 1, app: 'a', version: '1' }),
+            rosettaMapSchema.parse({ schema_version: 2, version_code: 1, app: 'a', version: '1' }),
         ).toThrow();
     });
 
     it('strips unknown top-level keys (forward-compat)', () => {
         const parsed = rosettaMapSchema.parse({
-            schema_version: 1,
+            schema_version: 2,
+            version_code: 1,
             app: 'a',
             version: 'v',
             classes: {},
@@ -261,7 +293,8 @@ describe('rosettaMapSchema', () => {
 describe('validateMap', () => {
     it('returns the validated map on success', () => {
         const data: RosettaMap = {
-            schema_version: 1,
+            schema_version: 2,
+            version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',
             classes: {
@@ -280,7 +313,8 @@ describe('validateMap', () => {
     it('throws MapValidationError with structured issues on failure', () => {
         try {
             validateMap({
-                schema_version: 1,
+                schema_version: 2,
+                version_code: 1,
                 app: 'a',
                 version: 'v',
                 classes: {
@@ -311,7 +345,8 @@ describe('validateMap', () => {
     it('summary message uses singular "1 issue" for a single problem', () => {
         try {
             validateMap({
-                schema_version: 1,
+                schema_version: 2,
+                version_code: 1,
                 app: 'a',
                 version: 'v',
                 classes: 'not-an-object',

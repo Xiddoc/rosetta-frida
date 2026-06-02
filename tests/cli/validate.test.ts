@@ -13,38 +13,24 @@ import * as fsReal from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { beforeAll, afterAll } from 'vitest';
-import {
-    parseValidateArgs,
-    stripJsoncComments,
-    loadMap,
-    runValidate,
-} from '../../cli/commands/validate.js';
+import { parseValidateArgs, loadMap, runValidate } from '../../cli/commands/validate.js';
 import { RosettaError } from '../../src/errors.js';
 
 const VALID_JSON = `{
-    "schema_version": 1,
+    "schema_version": 2,
     "app": "com.example.app",
     "version": "1.0.0",
+    "version_code": 100,
     "classes": {
         "IFoo": { "obfuscated": "aaaa" }
     }
 }`;
 
-const VALID_JSONC = `// header comment
-{
-    "schema_version": 1,
-    "app": "com.example.app",
-    "version": "1.0.0",
-    /* block comment */
-    "classes": {
-        "IFoo": { "obfuscated": "aaaa" } // inline comment
-    }
-}`;
-
 const VALID_YAML = `
-schema_version: 1
+schema_version: 2
 app: com.example.app
 version: "1.0.0"
+version_code: 100
 classes:
   IFoo:
     obfuscated: aaaa
@@ -52,7 +38,7 @@ classes:
 
 const TS_MODULE_SRC = `
 export default {
-    schema_version: 1,
+    schema_version: 2, version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
     classes: {
@@ -105,42 +91,6 @@ describe('parseValidateArgs', () => {
     });
 });
 
-describe('stripJsoncComments', () => {
-    it('removes line comments', () => {
-        const out = stripJsoncComments('// comment\n{"a": 1}');
-        expect(out).toContain('{"a": 1}');
-        expect(out).not.toContain('comment');
-    });
-
-    it('removes block comments', () => {
-        const out = stripJsoncComments('/* block */{"a": 1}');
-        expect(out).toContain('{"a": 1}');
-        expect(out).not.toContain('block');
-    });
-
-    it('leaves comment-like sequences inside strings alone', () => {
-        const out = stripJsoncComments('{"u": "https://example.com//path"}');
-        expect(out).toContain('https://example.com//path');
-    });
-
-    it('handles backslash-escapes inside strings', () => {
-        const out = stripJsoncComments('{"q": "a \\" // not a comment"}');
-        expect(out).toContain('// not a comment');
-    });
-
-    it('survives an unterminated block comment without infinite loop', () => {
-        const out = stripJsoncComments('/* unterminated');
-        // No throw, no infinite loop; output is empty/cleared.
-        expect(out).toBe('');
-    });
-
-    it('handles an unterminated string literal gracefully', () => {
-        // The literal-copy loop terminates at end-of-input.
-        const out = stripJsoncComments('{"a": "no-close-quote');
-        expect(out).toContain('no-close-quote');
-    });
-});
-
 describe('loadMap', () => {
     it('loads a .json file', async () => {
         const fs = makeFs({ '/m.json': VALID_JSON });
@@ -148,10 +98,9 @@ describe('loadMap', () => {
         expect(map.app).toBe('com.example.app');
     });
 
-    it('loads a .jsonc file (strips comments first)', async () => {
-        const fs = makeFs({ '/m.jsonc': VALID_JSONC });
-        const map = await loadMap('/m.jsonc', fs);
-        expect(map.app).toBe('com.example.app');
+    it('rejects a .json file with comments (strict)', async () => {
+        const fs = makeFs({ '/m.json': `// header\n${VALID_JSON}` });
+        await expect(loadMap('/m.json', fs)).rejects.toThrow(/JSON parse error/);
     });
 
     it('loads a .yaml file', async () => {
@@ -194,7 +143,8 @@ describe('runValidate', () => {
 
     it('reports structured errors for a malformed map', async () => {
         const fs = makeFs({
-            '/m.json': '{"schema_version": 1, "app": "x", "classes": {"IFoo": {}}}',
+            '/m.json':
+                '{"schema_version": 2, "version_code": 1, "app": "x", "classes": {"IFoo": {}}}',
         });
         const result = await runValidate(['/m.json'], fs);
         expect(result.ok).toBe(false);
@@ -240,7 +190,7 @@ describe('runValidate', () => {
             import.meta.dirname,
             '..',
             '..',
-            'maps/com.example.app/3.4.5.jsonc',
+            'maps/com.example.app/3.4.5.json',
         );
         const result = await runValidate([sample]);
         expect(result.ok).toBe(true);

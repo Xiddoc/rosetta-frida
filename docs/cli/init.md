@@ -1,6 +1,6 @@
 # `rosetta init`
 
-Scaffold a JSONC skeleton for a new `(app, version)` pair.
+Scaffold a strict-JSON skeleton for a new `(app, version)` pair.
 
 ## Synopsis
 
@@ -14,58 +14,53 @@ rosetta init <app> <version> [-o <path>] [--force]
 |---|---|---|
 | `<app>` | Yes | Android package name, e.g. `com.example.app`. Becomes the top-level `"app"` field in the scaffolded map. |
 | `<version>` | Yes | App version, e.g. `3.4.5`. Becomes the `"version"` field. |
-| `-o`, `--output <path>` | No | Output path. Defaults to `maps/<app>/<version>.jsonc`. |
+| `-o`, `--output <path>` | No | Output path. Defaults to `maps/<app>/<version>.json`. |
 | `-f`, `--force` | No | Overwrite an existing file at the output path. |
 
 ## What it writes
 
-A JSONC skeleton with:
+A plain strict-JSON skeleton (no comments — field documentation lives
+in [Maps — format](../maps/format.md)) with:
 
-- Header comments documenting each required field.
-- All required top-level metadata filled in.
-- An empty `classes: {}`.
-- A single example class entry, commented out — so a new user reads
-  the comment, uncomments, and edits inline.
+- All required top-level metadata filled in. `version_code` is a `0`
+  placeholder — **replace it** with the build's real
+  `PackageInfo.versionCode`.
+- A single worked example class entry under `classes` so you see the
+  shape and edit it in place.
 
-```jsonc
-// rosetta-frida map — skeleton scaffold.
-//
-// Edit this file to fill in real-name → obfuscated-name mappings for
-// each class, method, and field you want to hook in
-// com.example.app@3.4.5.
-//
-// Top-level fields:
-//   schema_version: integer — must be 1 (current schema).
-//   app:            string  — Android package name.
-//   version:        string  — app version.
-//   captured_at:    string  — ISO date this map was captured.
-//   sources:        array   — provenance (which tool produced which entries).
-//   classes:        object  — keyed by real fully-qualified class name.
-//
-// See maps/com.example.app/3.4.5.jsonc for a fully-worked example
-// demonstrating every supported field.
+```json
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "app": "com.example.app",
     "version": "3.4.5",
+    "version_code": 0,
     "captured_at": "",
     "sources": [
         {
             "tool": "hand-authored",
-            "classes": 0,
+            "classes": 1,
             "notes": "initial scaffold"
         }
     ],
     "classes": {
-        // Example class entry (uncomment + edit to use):
-        //
-        // "com.example.app.IRemoteService$Stub": {
-        //     "obfuscated": "aaaa",
-        //     "kind": "aidl_stub",
-        //     "aidl_descriptor": "com.example.app.IRemoteService",
-        //     "methods": { ... },
-        //     "fields": { ... }
-        // }
+        "com.example.app.IRemoteService$Stub": {
+            "obfuscated": "aaaa",
+            "kind": "aidl_stub",
+            "aidl_descriptor": "com.example.app.IRemoteService",
+            "methods": {
+                "requestTicket": {
+                    "obfuscated": "c",
+                    "signature": "(Landroid/os/Bundle;Lbbbb;)V",
+                    "aidl_txn": 2
+                }
+            },
+            "fields": {
+                "sessionId": {
+                    "obfuscated": "a",
+                    "type": "Ljava/lang/String;"
+                }
+            }
+        }
     }
 }
 ```
@@ -76,7 +71,7 @@ A JSONC skeleton with:
 
 ```sh
 $ npx rosetta init com.example.app 3.4.5
-wrote maps/com.example.app/3.4.5.jsonc
+wrote maps/com.example.app/3.4.5.json
 ```
 
 ### Custom path
@@ -90,12 +85,12 @@ wrote vendor/maps/example.json
 
 ```sh
 $ npx rosetta init com.example.app 3.4.5
-error: refusing to overwrite existing file: maps/com.example.app/3.4.5.jsonc (pass --force to overwrite)
+error: refusing to overwrite existing file: maps/com.example.app/3.4.5.json (pass --force to overwrite)
 ```
 
 ```sh
 $ npx rosetta init com.example.app 3.4.5 --force
-wrote maps/com.example.app/3.4.5.jsonc
+wrote maps/com.example.app/3.4.5.json
 ```
 
 ## Behavior notes
@@ -104,8 +99,11 @@ wrote maps/com.example.app/3.4.5.jsonc
   (`mkdir -p`).
 - The scaffold's `captured_at` field is left empty — fill it with an
   ISO date when you commit the map.
+- The scaffold's `version_code` is `0` — replace it with the build's
+  real `PackageInfo.versionCode`; it is the authoritative key the
+  runtime selects maps by.
 - The scaffold's `sources` array has one `hand-authored` entry with
-  `classes: 0`. Update it when you add real entries; the field is
+  `classes: 1` (the worked example). Update it as you add real entries; the field is
   free-form provenance.
 - No flag enables auto-detect of the running version from a
   connected device. `init` is purely a filesystem scaffold; for

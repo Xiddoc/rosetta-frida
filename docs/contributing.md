@@ -54,7 +54,7 @@ rosetta-frida/
 │   ├── convert/               # YAML / TS-module converters
 │   ├── diagnostics/           # EventBus re-export
 │   ├── marker/                # PEM-style marker block emit/parse/patch
-│   ├── parse/                 # JSONC parser + loadMap
+│   ├── parse/                 # JSON parser + loadMap
 │   ├── proxy/                 # ClassProxy, MethodHandle, FieldAccessor
 │   ├── resolver/              # Real → obf translation
 │   ├── session/               # Session lifecycle, auto-detect, health check
@@ -82,7 +82,7 @@ deliberate API edit.
 V1.0 was implemented in four "waves" of mostly-independent parallel
 subagent work, integrated linearly:
 
-- **Wave 1A** — JSONC parser, schema validator.
+- **Wave 1A** — JSON parser, schema validator.
 - **Wave 1B** — Resolver, diagnostics, failure policies.
 - **Wave 1C** — Marker block, CLI patch/extract/inspect.
 - **Wave 1D** — Converters, CLI init/validate/convert, sample map.

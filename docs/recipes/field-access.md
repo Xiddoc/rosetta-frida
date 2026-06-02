@@ -22,7 +22,7 @@ rosetta.hook(
 
 In the sample map, `RemoteServiceClient` has:
 
-```jsonc
+```json
 "com.example.app.RemoteServiceClient": {
     "obfuscated": "dddd",
     "fields": {
@@ -76,7 +76,7 @@ Config.MAX_RETRIES.value = 999;
 
 In the sample map:
 
-```jsonc
+```json
 "com.example.app.Config": {
     "obfuscated": "nnnn",
     "fields": {

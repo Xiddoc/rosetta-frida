@@ -1,28 +1,10 @@
-// rosetta-frida sample map — com.example.app @ 3.4.5
-//
-// This is the canonical example map. Every feature of the schema is
-// exercised at least once below. Read top-to-bottom for a tour of what
-// a real Android-AIDL-service obfuscation map looks like.
-//
-// All identifiers are synthetic:
-//   - Package:           com.example.app
-//   - Real class names:  CamelCase Java-style (IRemoteService$Stub etc.)
-//   - Obfuscated names:  aaaa, bbbb, cccc, ...  (4-letter pattern)
-//   - Method/field obf:  single letters a, b, c, d, e, f, ...
-//
-// Reading observation (per project README §0.2): METHOD names tend to
-// be more stable than CLASS names across minor releases. Notice how
-// the method letter `c` recurs across several unrelated classes
-// (IRemoteService$Stub.requestTicket → c, ResultPromise.then → c,
-// BlobCache.get → c). When the class anchors rotate in 3.4.6 those
-// inner letters will often survive — only the 4-letter class names
-// at the left side of the table change.
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "app": "com.example.app",
     "version": "3.4.5",
+    "version_code": 30405,
     "captured_at": "2026-05-13",
-    "apk_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signer_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "frida_min_version": "16.0.0",
     "frida_max_version": "17.99.99",
     "sources": [
@@ -39,15 +21,6 @@
         }
     ],
     "classes": {
-        // ──────────────────────────────────────────────────────────────
-        // The headline AIDL stub. This is the binder dispatch surface
-        // that user-mode clients invoke via IPC. The .Stub side runs
-        // inside the service process; the txn codes (`aidl_txn`) are
-        // assigned by aidl-compiler at build time and stay stable per
-        // descriptor. The `requestTicket` method has two overloads —
-        // the simpler 2-arg form (the common call path) and a 3-arg
-        // form that takes an opaque tag string.
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.IRemoteService$Stub": {
             "obfuscated": "aaaa",
             "extends": "android.os.Binder",
@@ -91,11 +64,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // The async-response callback that the .Stub above invokes when
-        // the result is ready. Modeled as an AIDL callback interface;
-        // method `a` is `onResult`, taking a Bundle of result data.
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.IServiceCallback": {
             "obfuscated": "bbbb",
             "kind": "aidl_callback",
@@ -114,7 +82,6 @@
                 }
             }
         },
-        // Second callback used by the dialog path of the stub.
         "com.example.app.IDialogCallback": {
             "obfuscated": "cccc",
             "kind": "aidl_callback",
@@ -128,14 +95,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // Service-layer plumbing: the client wrapper invoked by app code.
-        // Note `extends: AbstractServiceClient` — that's a real-name ref
-        // into another mapped class below, demonstrating an extends chain
-        // that the runtime resolver can walk. The single-overload form
-        // is used for `requestTicket` (no ambiguity at this layer; the
-        // overloads get picked further down the stack at the .Stub).
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.RemoteServiceClient": {
             "obfuscated": "dddd",
             "extends": "com.example.app.AbstractServiceClient",
@@ -162,8 +121,6 @@
                 }
             }
         },
-        // The parent class of RemoteServiceClient. Holds shared state
-        // (connection, retry state) and a static class-counter field.
         "com.example.app.AbstractServiceClient": {
             "obfuscated": "ffff",
             "extends": "java.lang.Object",
@@ -191,12 +148,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // Future-style result wrapper returned by RemoteServiceClient.
-        // The `.then(callback)` method's obfuscated name is also `c` —
-        // demonstrating method-name stability across unrelated classes
-        // (see header comment).
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.ResultPromise": {
             "obfuscated": "eeee",
             "kind": "class",
@@ -226,8 +177,6 @@
                 }
             }
         },
-        // A simple functional-interface used by ResultPromise.then().
-        // Demonstrates `kind: interface` and a single SAM method.
         "com.example.app.PromiseCallback": {
             "obfuscated": "gggg",
             "kind": "interface",
@@ -239,10 +188,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // Cache layer — a generic key/value cache backing value reuse.
-        // Has multi-overload `put` (one accepting a TTL, one without).
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.BlobCache": {
             "obfuscated": "hhhh",
             "kind": "class",
@@ -286,10 +231,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // Ticket model class — value object with a constructor overload
-        // and a static factory. Demonstrates `is_constructor: true`.
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.Ticket": {
             "obfuscated": "iiii",
             "kind": "class",
@@ -332,10 +273,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // Error reporting enum. `kind: enum` is rare but supported.
-        // Methods are autogenerated (`values()`, `valueOf(String)`).
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.ErrorCode": {
             "obfuscated": "jjjj",
             "kind": "enum",
@@ -374,11 +311,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // Synthetic compiler-generated class. The `Companion` pattern
-        // shows up when Kotlin objects get compiled; `kind: synthetic`
-        // flags it so adaptive-discovery strategies (V2+) skip it.
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.Ticket$Companion": {
             "obfuscated": "kkkk",
             "extends": "java.lang.Object",
@@ -391,10 +323,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // Anonymous inner class — the Runnable handed to the executor
-        // when an async retry is scheduled. Captures `outer` instance.
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.AbstractServiceClient$1": {
             "obfuscated": "llll",
             "kind": "anonymous",
@@ -413,10 +341,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // Wire-format codec — used by RemoteServiceClient to marshal
-        // requests. Demonstrates a method-only class (no fields).
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.RequestCodec": {
             "obfuscated": "mmmm",
             "kind": "class",
@@ -432,11 +356,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // Configuration holder — fields-only class (no methods on the
-        // user-facing surface). All flags are static — they're set once
-        // at process start and read by everyone else.
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.Config": {
             "obfuscated": "nnnn",
             "kind": "class",
@@ -464,12 +383,6 @@
                 }
             }
         },
-        // ──────────────────────────────────────────────────────────────
-        // The session manager — the top-level entry that glues all of
-        // the above together. Holds a BlobCache, a RemoteServiceClient,
-        // and a Config reference. Provides the public API surface that
-        // app code calls (`startSession`, `endSession`).
-        // ──────────────────────────────────────────────────────────────
         "com.example.app.SessionManager": {
             "obfuscated": "oooo",
             "extends": "java.lang.Object",

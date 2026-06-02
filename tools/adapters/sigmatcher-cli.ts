@@ -2,7 +2,7 @@
 /**
  * sigmatcher-cli: thin command-line wrapper around the sigmatcher
  * adapter. Reads a sigmatcher `raw`-format JSON file, runs the
- * adapter, and prints the resulting JSONC map to stdout (or `-o`).
+ * adapter, and prints the resulting strict-JSON map to stdout (or `-o`).
  *
  * Intended use: invoked from `regenerate-goldens.sh` and the CI
  * pipeline workflow after `sigmatcher analyze`. Not part of the
@@ -13,11 +13,12 @@
  *   sigmatcher-cli <raw.json> \
  *       --app <pkg> \
  *       --version <ver> \
+ *       --version-code <n> \
  *       [--captured-at <iso-date>] \
- *       [--apk-sha256 <hex>] \
+ *       [--signer-sha256 <hex>] \
  *       [--method-name-map <file.json>] \
  *       [--class-kind-map  <file.json>] \
- *       [-o <out.jsonc>]
+ *       [-o <out.json>]
  *
  * Both auxiliary `--*-map` files are JSON objects. Their shape matches
  * the adapter options:
@@ -39,8 +40,9 @@ interface CliArgs {
     rawPath: string;
     app: string;
     version: string;
+    versionCode: number;
     capturedAt?: string;
-    apkSha256?: string;
+    signerSha256?: string;
     methodNameMapPath?: string;
     classKindMapPath?: string;
     outPath?: string;
@@ -49,11 +51,11 @@ interface CliArgs {
 function usage(): string {
     return [
         'Usage: sigmatcher-cli <raw.json> \\',
-        '         --app <pkg> --version <ver> \\',
-        '         [--captured-at <iso>] [--apk-sha256 <hex>] \\',
+        '         --app <pkg> --version <ver> --version-code <n> \\',
+        '         [--captured-at <iso>] [--signer-sha256 <hex>] \\',
         '         [--method-name-map <file.json>] \\',
         '         [--class-kind-map  <file.json>] \\',
-        '         [-o <out.jsonc>]',
+        '         [-o <out.json>]',
     ].join('\n');
 }
 
@@ -64,8 +66,9 @@ function parseArgs(argv: readonly string[]): CliArgs {
         const a = argv[i] as string;
         if (a === '--app') flags.app = argv[++i];
         else if (a === '--version') flags.version = argv[++i];
+        else if (a === '--version-code') flags.versionCode = argv[++i];
         else if (a === '--captured-at') flags.capturedAt = argv[++i];
-        else if (a === '--apk-sha256') flags.apkSha256 = argv[++i];
+        else if (a === '--signer-sha256') flags.signerSha256 = argv[++i];
         else if (a === '--method-name-map') flags.methodNameMap = argv[++i];
         else if (a === '--class-kind-map') flags.classKindMap = argv[++i];
         else if (a === '-o' || a === '--output') flags.out = argv[++i];
@@ -79,14 +82,22 @@ function parseArgs(argv: readonly string[]): CliArgs {
     }
     if (!flags.app) throw new RosettaError('--app is required');
     if (!flags.version) throw new RosettaError('--version is required');
+    if (flags.versionCode === undefined) throw new RosettaError('--version-code is required');
+    const versionCode = Number(flags.versionCode);
+    if (!Number.isInteger(versionCode) || versionCode < 0) {
+        throw new RosettaError(
+            `--version-code must be a non-negative integer (got ${flags.versionCode})`,
+        );
+    }
 
     const args: CliArgs = {
         rawPath: positional[0] as string,
         app: flags.app,
         version: flags.version,
+        versionCode,
     };
     if (flags.capturedAt !== undefined) args.capturedAt = flags.capturedAt;
-    if (flags.apkSha256 !== undefined) args.apkSha256 = flags.apkSha256;
+    if (flags.signerSha256 !== undefined) args.signerSha256 = flags.signerSha256;
     if (flags.methodNameMap !== undefined) args.methodNameMapPath = flags.methodNameMap;
     if (flags.classKindMap !== undefined) args.classKindMapPath = flags.classKindMap;
     if (flags.out !== undefined) args.outPath = flags.out;
@@ -126,40 +137,36 @@ async function main(argv: readonly string[]): Promise<number> {
     const options: SigmatcherAdapterOptions = {
         app: parsed.app,
         version: parsed.version,
+        versionCode: parsed.versionCode,
     };
     if (parsed.capturedAt !== undefined) options.capturedAt = parsed.capturedAt;
-    if (parsed.apkSha256 !== undefined) options.apkSha256 = parsed.apkSha256;
+    if (parsed.signerSha256 !== undefined) options.signerSha256 = parsed.signerSha256;
     if (methodNameMap !== undefined) options.methodNameMap = methodNameMap;
     if (classKindMap !== undefined) options.classKindMap = classKindMap;
 
-    let mapJsonc: string;
+    let mapJson: string;
     try {
         const map = sigmatcherRawToRosettaMap(raw, options);
-        mapJsonc = formatAsJsonc(map);
+        mapJson = formatAsJson(map);
     } catch (e) {
         process.stderr.write(`adapter error: ${(e as Error).message}\n`);
         return 1;
     }
 
     if (parsed.outPath) {
-        await writeFile(parsed.outPath, mapJsonc, 'utf8');
+        await writeFile(parsed.outPath, mapJson, 'utf8');
     } else {
-        process.stdout.write(mapJsonc);
+        process.stdout.write(mapJson);
     }
     return 0;
 }
 
 /**
- * Format the assembled map as JSONC. We emit pure JSON content with a
- * leading comment header explaining that this file is auto-generated.
- * Pure JSON is also valid JSONC, so this stays parser-compatible.
+ * Format the assembled map as canonical strict JSON — the on-disk map
+ * artifact format. 4-space indent + trailing newline, no comment header.
  */
-function formatAsJsonc(map: unknown): string {
-    const header =
-        '// rosetta-frida map — auto-generated by tools/adapters/sigmatcher-cli.ts.\n' +
-        '// Do not edit by hand. Re-run regenerate-goldens.sh after intentional\n' +
-        '// signature changes and review the diff before committing.\n';
-    return header + JSON.stringify(map, null, 4) + '\n';
+function formatAsJson(map: unknown): string {
+    return JSON.stringify(map, null, 4) + '\n';
 }
 
 // Invocation guard so this file is importable in tests without running.
@@ -180,4 +187,4 @@ if (invokedDirectly) {
     );
 }
 
-export { main as runSigmatcherCli, parseArgs, formatAsJsonc };
+export { main as runSigmatcherCli, parseArgs, formatAsJson };

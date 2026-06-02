@@ -13,6 +13,7 @@ import { MapValidationError, RosettaError } from '../../src/errors.js';
 const BASE_OPTIONS: SigmatcherAdapterOptions = {
     app: 'com.example.testapp',
     version: '1.0.0',
+    versionCode: 100,
 };
 
 describe('sigmatcherRawToRosettaMap — single class', () => {
@@ -42,9 +43,10 @@ describe('sigmatcherRawToRosettaMap — single class', () => {
 
         const map = sigmatcherRawToRosettaMap(raw, BASE_OPTIONS);
 
-        expect(map.schema_version).toBe(1);
+        expect(map.schema_version).toBe(2);
         expect(map.app).toBe('com.example.testapp');
         expect(map.version).toBe('1.0.0');
+        expect(map.version_code).toBe(100);
         expect(map.classes).toHaveProperty('com.example.testapp.BlobCache');
         const cls = map.classes['com.example.testapp.BlobCache'];
         expect(cls).toBeDefined();
@@ -286,7 +288,7 @@ describe('sigmatcherRawToRosettaMap — fields', () => {
 });
 
 describe('sigmatcherRawToRosettaMap — options propagation', () => {
-    it('emits captured_at and apk_sha256 on the top-level map when provided', () => {
+    it('emits captured_at and signer_sha256 on the top-level map when provided', () => {
         const raw = {
             X: {
                 original: { name: 'X', package: 'com.example.testapp' },
@@ -297,11 +299,11 @@ describe('sigmatcherRawToRosettaMap — options propagation', () => {
         };
         const map = sigmatcherRawToRosettaMap(raw, {
             ...BASE_OPTIONS,
-            apkSha256: 'deadbeef'.repeat(8),
+            signerSha256: 'deadbeef'.repeat(8),
             capturedAt: '2026-05-14',
         });
         expect(map.captured_at).toBe('2026-05-14');
-        expect(map.apk_sha256).toBe('deadbeef'.repeat(8));
+        expect(map.signer_sha256).toBe('deadbeef'.repeat(8));
     });
 
     it('applies classKindMap to set kind on emitted ClassEntry, leaves unmapped classes with kind undefined', () => {

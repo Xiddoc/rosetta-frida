@@ -18,12 +18,19 @@ import { emitMarkerBlock, emitMarkerRegistry } from './emit.js';
 import { parseMarkerBlock } from './parse.js';
 
 function minimalMap(): RosettaMap {
-    return { schema_version: 1, app: 'com.example.app', version: '1.2.3', classes: {} };
+    return {
+        schema_version: 2,
+        version_code: 1,
+        app: 'com.example.app',
+        version: '1.2.3',
+        classes: {},
+    };
 }
 
 function richishMap(version = '1.2.3'): RosettaMap {
     return {
-        schema_version: 1,
+        schema_version: 2,
+        version_code: 1,
         app: 'com.example.app',
         version,
         classes: {
@@ -215,7 +222,13 @@ describe('parseMarkerBlock — failure modes', () => {
         // will start at the BEGIN marker (no comment wrapper to extend to).
         const literal =
             'const __rosetta_map = ' +
-            JSON.stringify({ schema_version: 1, app: 'x', version: 'y', classes: {} }) +
+            JSON.stringify({
+                schema_version: 2,
+                version_code: 1,
+                app: 'x',
+                version: 'y',
+                classes: {},
+            }) +
             ';';
         const bundle = ['-----BEGIN ROSETTA MAP-----', literal, '-----END ROSETTA MAP-----'].join(
             '\n',
@@ -234,7 +247,13 @@ describe('parseMarkerBlock — failure modes', () => {
         // Defensive branch: emit always pairs END with `*/` but a
         // hand-edited bundle might not. parse should still complete and
         // bound the range at the end of the marker text itself.
-        const payload = JSON.stringify({ schema_version: 1, app: 'x', version: 'y', classes: {} });
+        const payload = JSON.stringify({
+            schema_version: 2,
+            version_code: 1,
+            app: 'x',
+            version: 'y',
+            classes: {},
+        });
         const bundle =
             '/*! -----BEGIN ROSETTA MAP----- */\n' +
             `const __rosetta_map = ${payload};\n` +

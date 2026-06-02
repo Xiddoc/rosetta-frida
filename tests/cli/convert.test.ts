@@ -11,9 +11,10 @@ import { parseConvertArgs, runConvert } from '../../cli/commands/convert.js';
 import { RosettaError } from '../../src/errors.js';
 
 const VALID_YAML = `
-schema_version: 1
+schema_version: 2
 app: com.example.app
 version: "1.0.0"
+version_code: 100
 classes:
   IFoo:
     obfuscated: aaaa
@@ -21,7 +22,7 @@ classes:
 
 const TS_MODULE_SRC = `
 export default {
-    schema_version: 1,
+    schema_version: 2, version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
     classes: {
@@ -113,13 +114,15 @@ describe('parseConvertArgs', () => {
 });
 
 describe('runConvert', () => {
-    it('converts a YAML file to canonical JSONC', async () => {
+    it('converts a YAML file to canonical strict JSON', async () => {
         const { fs, files } = makeFs({ '/in.yaml': VALID_YAML });
         const out = await runConvert(['/in.yaml', '-o', '/out.json'], fs);
         expect(out).toBe('/out.json');
         const written = files.get('/out.json');
         expect(written).toContain('"app": "com.example.app"');
-        expect(written?.startsWith('// rosetta-frida map')).toBe(true);
+        // Strict JSON artifact — no comment header.
+        expect(written?.startsWith('{')).toBe(true);
+        expect(written).not.toContain('//');
     });
 
     it('converts a .yml file', async () => {
@@ -157,10 +160,10 @@ describe('runConvert', () => {
         );
     });
 
-    it('rejects .jsonc input as already canonical', async () => {
+    it('rejects .jsonc input as unsupported (JSONC is no longer a format)', async () => {
         const { fs } = makeFs({ '/in.jsonc': '{}' });
         await expect(runConvert(['/in.jsonc', '-o', '/out.json'], fs)).rejects.toThrow(
-            /already in canonical/,
+            /unsupported input format/,
         );
     });
 

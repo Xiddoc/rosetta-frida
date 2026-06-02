@@ -2,9 +2,9 @@
  * YAML → RosettaMap converter.
  *
  * YAML is supported as an authoring format for contributors who prefer it,
- * but JSONC is the canonical on-disk format (per design doc §5.1). This
- * converter takes YAML source and produces an in-memory RosettaMap suitable
- * for further serialization to JSONC via `convertToJsonc`.
+ * but strict JSON is the canonical on-disk format (per design doc §5.1).
+ * This converter takes YAML source and produces an in-memory RosettaMap
+ * suitable for further serialization to JSON via `convertToJson`.
  *
  * Uses the `yaml` package (eemeli/yaml) — zero-dep, MIT, well-typed.
  *

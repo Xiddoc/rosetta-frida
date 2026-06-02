@@ -9,8 +9,9 @@
  *   const app = ActivityThread.currentApplication();
  *   const ctx = app.getApplicationContext();
  *   const pkg = app.getPackageName();
- *   const ver = ctx.getPackageManager()
- *                  .getPackageInfo(pkg, 0).versionName.value;
+ *   const info = ctx.getPackageManager().getPackageInfo(pkg, 0);
+ *   const ver = info.versionName.value;
+ *   const code = info.getLongVersionCode();   // API 28+ (else .versionCode)
  *
  * The Java runtime is injected (defaulting to the global `Java`) so this
  * module is unit-testable as a pure function — no MockFrida ceremony
@@ -47,17 +48,30 @@ export interface AutoDetectPackageManager {
     getPackageInfo(packageName: string, flags: number): AutoDetectPackageInfo;
 }
 
-/** PackageInfo — versionName is a Frida field accessor (`.value`). */
+/**
+ * PackageInfo — `versionName` / `versionCode` are Frida field accessors
+ * (`.value`); `getLongVersionCode()` is a method (API 28+).
+ */
 export interface AutoDetectPackageInfo {
     versionName: { value: string };
+    /** API 28+ — preferred. Frida returns the Java `long` as a JS number. */
+    getLongVersionCode?: () => number;
+    /** Pre-28 fallback — the deprecated int `versionCode` field. */
+    versionCode?: { value: number };
 }
 
 /** Result of a successful auto-detect. */
 export interface DetectedAppVersion {
     /** Detected Android package name. */
     app: string;
-    /** Detected version (PackageInfo.versionName). */
+    /** Detected version label (PackageInfo.versionName). */
     version: string;
+    /**
+     * Detected authoritative version code (PackageInfo.getLongVersionCode()
+     * on API 28+, else the int `versionCode` field). Undefined when neither
+     * is readable (e.g. a non-Android process or a stripped runtime).
+     */
+    versionCode?: number;
 }
 
 /**
@@ -84,5 +98,29 @@ export function detectAppAndVersion(javaApi?: AutoDetectJavaApi): DetectedAppVer
     const app = application.getPackageName();
     const packageInfo = context.getPackageManager().getPackageInfo(app, 0);
     const version = packageInfo.versionName.value;
-    return { app, version };
+    const versionCode = readVersionCode(packageInfo);
+    return versionCode === undefined ? { app, version } : { app, version, versionCode };
+}
+
+/**
+ * Read the authoritative version code from a PackageInfo wrapper.
+ *
+ * Prefers `getLongVersionCode()` (API 28+); on older runtimes — or any
+ * runtime where the method is absent or throws — falls back to the
+ * deprecated int `versionCode` field. Returns undefined when neither is
+ * a finite number (so callers can fall back to versionName matching).
+ */
+function readVersionCode(packageInfo: AutoDetectPackageInfo): number | undefined {
+    let code: number | undefined;
+    if (typeof packageInfo.getLongVersionCode === 'function') {
+        try {
+            code = Number(packageInfo.getLongVersionCode());
+        } catch {
+            code = undefined;
+        }
+    }
+    if (code === undefined && packageInfo.versionCode !== undefined) {
+        code = Number(packageInfo.versionCode.value);
+    }
+    return code !== undefined && Number.isFinite(code) ? code : undefined;
 }
