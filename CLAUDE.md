@@ -196,10 +196,12 @@ exact version.
 Two repos at maturity:
 
 - **`rosetta-frida/`** (this repo) — library + bridge code.
-- **`rosetta-frida-maps/`** (separate repo, planned) — contributed
-  maps. PR-gated by automated schema validation; no code review
-  required. Each PR adds or updates a single `<app>/<version_code>.json`
-  (authored in YAML/TS, rendered via `rosetta convert`).
+- **[`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps)** (separate
+  repo, **scaffolded**) — contributed maps + the sigmatcher signatures
+  they're generated from. PR-gated by automated schema validation (which
+  reuses this repo's `rosetta validate`); no code review required. Each PR
+  adds or updates a single `maps/<app>/<version_code>.json` (authored in
+  YAML/TS, rendered via `rosetta convert`).
 
 The library, at attach time, can optionally fetch from the maps repo
 if no local override exists. Caching keyed by `(app, version_code)`.

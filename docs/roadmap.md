@@ -128,7 +128,14 @@ These close out the app-identity work that landed the `version_code` and
 - **Scope / dependencies.** A new binding package mirroring
   `src/proxy/` against the Xposed hooking API; the resolver and map
   layers are reused unchanged. Largest item here; a V2/V3-scale effort.
-- **Status.** planned (longer horizon).
+- **Status.** in progress — **scaffolded at
+  [`Xiddoc/rosetta-xposed`](https://github.com/Xiddoc/rosetta-xposed)**.
+  The neutral core (a Kotlin twin of the map model + resolver, kept honest
+  by a shared conformance suite) and the static layer-4 binding (resolve
+  real → obf → a `java.lang.reflect.Member` handed to the developer's hook
+  API) are built and JVM-tested. Remaining: the DexKit dynamic /
+  self-healing backend, deferred binding for late-loaded dex, and
+  `signer_sha256` enforcement.
 
 ---
 
@@ -311,7 +318,7 @@ are CLI/tooling additions on top of the stable V1 runtime.
 
 The theme: turn rosetta-frida from a library into an ecosystem.
 
-### Public `rosetta-frida-maps` repository
+### Public `rosetta-maps` repository
 
 - **Purpose.** A separate, community-contributed repository of map
   files, PR-gated by automated schema validation (no code review), keyed
@@ -328,7 +335,14 @@ The theme: turn rosetta-frida from a library into an ecosystem.
   config); a contribution + provenance workflow. Depends on
   `signer_sha256` enforcement and `migrate` for long-term map
   durability.
-- **Status.** planned (V2 headline).
+- **Status.** in progress — **scaffolded at
+  [`Xiddoc/rosetta-maps`](https://github.com/Xiddoc/rosetta-maps)**. The
+  repo layout (`signatures/` source-of-truth + `maps/<app>/<version_code>.json`
+  artifacts), the structural validation CI (reusing this library's
+  `rosetta validate`, no APK hosted), the filename↔`version_code`
+  convention check, a JSON-Schema editor aid, and a worked example are in
+  place. Remaining: the runtime fetch/cache client here, plus the
+  attestation / trusted-runner / device-telemetry trust tiers there.
 
 ### Runtime map injection
 
