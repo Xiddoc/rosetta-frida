@@ -69,10 +69,27 @@ jobs:
               # regenerate-goldens.sh pass.
               run: uv tool install sigmatcher==1.9.2
 
-            - name: Install OS dependencies (apktool + ripgrep)
+            - name: Install ripgrep
               run: |
                   sudo apt-get update
-                  sudo apt-get install -y ripgrep apktool
+                  sudo apt-get install -y ripgrep
+
+            - name: Install apktool 3.0.2 (pinned — the goldens were generated with it)
+              # The apt `apktool` package is the stale "2.7.0-dirty" build, whose
+              # version string crashes sigmatcher's `version.parse()`
+              # (InvalidVersion: '2.7.0-dirty'). Install the exact upstream release
+              # the committed goldens were generated against: the apktool version
+              # determines the smali, which determines the resolved map, so pinning
+              # it keeps the golden-diff reproducible byte-for-byte. (Also drives
+              # which unpack flags sigmatcher uses: >= 2.12.0 → `--only-manifest`.)
+              run: |
+                  APKTOOL_VERSION=3.0.2
+                  sudo curl -fsSL -o /usr/local/bin/apktool \
+                      "https://raw.githubusercontent.com/iBotPeaches/Apktool/v${APKTOOL_VERSION}/scripts/linux/apktool"
+                  sudo curl -fsSL -o /usr/local/bin/apktool.jar \
+                      "https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VERSION}/apktool_${APKTOOL_VERSION}.jar"
+                  sudo chmod +x /usr/local/bin/apktool /usr/local/bin/apktool.jar
+                  apktool --version
 
             - name: Install npm dependencies (npm ci)
               run: npm ci
