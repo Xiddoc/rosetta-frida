@@ -29,8 +29,9 @@ right for many environments.
 ```mermaid
 flowchart TB
     A["rosetta.session({ map: registry })"]
-    B[detect app+version]
-    C{exact match in registry?}
+    B["detect app+version+version_code"]
+    VC{"registry entry whose<br/>version_code matches?"}
+    C{exact label match in registry?}
     D[use it]
     E{versionMatch: 'fuzzy'?}
     F[pick closest by semver distance]
@@ -38,8 +39,10 @@ flowchart TB
     H[verify map.app matches detected app]
     I[run health check]
 
-    A --> B --> C
-    C -- yes --> D --> H --> I
+    A --> B --> VC
+    VC -- yes --> D --> H --> I
+    VC -- no --> C
+    C -- yes --> D
     C -- no --> E
     E -- yes --> F --> H --> I
     E -- no --> G
@@ -47,8 +50,14 @@ flowchart TB
 
 The selection algorithm is in [`pickMapForVersion`](../api/session.md#versionmatch):
 
-- **Exact mode (default).** Registry must contain an entry whose
-  key equals the detected version. Missing → throw.
+- **By `version_code` first (authoritative).** When a `version_code`
+  was detected (or supplied via `versionCode`), the registry is scanned
+  for the entry whose `version_code` equals it and that map is selected
+  directly — regardless of its label. This match is exact, never fuzzy.
+- **Exact label mode (default fallback).** When no `version_code` is
+  available or no entry carries the detected code, the registry must
+  contain an entry whose key equals the detected version *label*.
+  Missing → throw.
 - **Fuzzy mode.** Parse each key into a `[major, minor, patch]`
   tuple. Distance = `Δmajor × 10_000 + Δminor × 100 + Δpatch`. Tie
   → lower version wins.

@@ -22,7 +22,7 @@ rosetta convert <in> -o <out> [--force]
 |---|---|
 | `.yaml`, `.yml` | Read, parse YAML, validate, render to JSON. |
 | `.ts`, `.js`, `.mjs`, `.cjs` | Dynamically `import()`; default or named `map` export is validated and rendered. |
-| `.json`, `.json` | **Rejected** — input is already canonical; nothing to convert. Use `rosetta validate` instead. |
+| `.json` | **Rejected** — input is already canonical; nothing to convert. Use `rosetta validate` instead. |
 
 ## Examples
 

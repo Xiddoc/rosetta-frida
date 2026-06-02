@@ -168,11 +168,11 @@ interface MapLoadEvent {
 | `app` | The map's `app` field. |
 | `version` | The map's `version` field. For registry bundles, this is the picked entry's version. |
 | `classCount` | Number of entries in `map.classes`. |
-| `schemaVersion` | The map's `schema_version`. Currently always `1`. |
+| `schemaVersion` | The map's `schema_version`. Currently always `2`. |
 
 **Trace-line format:**
 
-- `[rosetta] map-load com.example.app@3.4.5 schema=1 classes=15`
+- `[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15`
 
 **Subscribing:**
 

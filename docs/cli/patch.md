@@ -17,8 +17,8 @@ rosetta patch <bundle.js> --map <new.json> [-o <out.js>]
 | `--map <path>` | Yes | Path to the new map (strict JSON). Single-map or registry. |
 | `-o`, `--output <path>` | No | Output path. Defaults to in-place (the input bundle is rewritten). |
 
-The new map is parsed via `parseJson`, so both JSON source (comments
-+ trailing commas) and strict JSON are accepted. For full schema
+The new map is parsed via `parseJson`, which is strict — comments and
+trailing commas are rejected as syntax errors. For full schema
 validation, run [`rosetta validate`](validate.md) on the map first —
 `patch` only checks enough structure to pick single-map vs registry
 emission.

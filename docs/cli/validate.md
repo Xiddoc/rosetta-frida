@@ -74,14 +74,18 @@ OK: maps/com.example.app/3.4.5.ts — com.example.app@3.4.5, 15 class(es), schem
 ```sh
 $ npx rosetta validate maps/example/broken.json
 FAIL: maps/example/broken.json — invalid map
-  at schema_version: must be 1
+  at schema_version: Invalid literal value, expected 2
   at classes.com.example.app.Foo.methods: must be an object
 ```
 
 ## What validation checks
 
-1. **Top-level fields.** `schema_version === 1`; `app` and `version`
-   are strings; `classes` is an object.
+1. **Top-level fields.** `schema_version === 2` (a hard literal gate —
+   schema 1 maps are rejected); `app` and `version` are non-empty
+   strings; `version_code` is a non-negative integer; `classes` is an
+   object. Optional `captured_at`, `signer_sha256`, `frida_min_version`,
+   `frida_max_version`, and `sources` match their declared types when
+   present.
 2. **Class entries.** Every entry has `obfuscated: string`. Optional
    fields (`extends`, `kind`, `dex`, `aidl_descriptor`, `anchors`,
    `source`, `confidence`, `methods`, `fields`) match their declared
@@ -117,7 +121,7 @@ Validate every map on every PR:
   run: |
     fail=0
     shopt -s globstar nullglob
-    for m in maps/**/*.json maps/**/*.json maps/**/*.yaml maps/**/*.yml; do
+    for m in maps/**/*.json maps/**/*.yaml maps/**/*.yml; do
       npx rosetta validate "$m" || fail=1
     done
     exit $fail

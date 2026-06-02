@@ -1,4 +1,4 @@
-# rosetta-frida
+# 🗿 rosetta-frida
 
 > Write Frida hooks against **real** Java class and method names. A
 > per-version translation layer handles the obfuscated names that
@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Xiddoc/rosetta-frida/actions/workflows/ci.yml/badge.svg)](https://github.com/Xiddoc/rosetta-frida/actions/workflows/ci.yml)
 [![Docs](https://github.com/Xiddoc/rosetta-frida/actions/workflows/docs.yml/badge.svg)](https://xiddoc.github.io/rosetta-frida/)
-[![Tests](https://img.shields.io/badge/tests-595%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/tests-611%20passing-brightgreen)](#testing)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#testing)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -74,88 +74,43 @@ runners.
 
 ## Quick start
 
-**1. Get a map for your target app.** Either author one yourself (start
-with `rosetta init`) or — eventually — pull from the community
-[maps repo](#status).
+1. **Scaffold a map** for your target with `rosetta init com.example.app
+3.4.5`, fill in the real → obfuscated names, and `rosetta validate`
+   it. (Strict JSON, `schema_version: 2`; author in YAML/TS and `rosetta
+convert` if you prefer comments.)
+2. **Write a hook** against real names — see the example above, or the
+   full three-tier sample in `examples/sample-hook/`.
+3. **Bundle and attach** with your usual toolchain — nothing else
+   changes:
 
-```sh
-npx rosetta init com.example.app 3.4.5
-# → wrote maps/com.example.app/3.4.5.json
-# edit the scaffold to fill in your real → obfuscated mappings
-npx rosetta validate maps/com.example.app/3.4.5.json
-# → OK: ...@3.4.5, 1 class(es), schema_version=2
-```
+    ```sh
+    npx frida-compile hook.ts -o hook.bundle.js
+    frida -U -l hook.bundle.js com.example.app
+    ```
 
-**2. Write a hook.** The full sample lives in `examples/sample-hook/`:
-
-```typescript
-import { rosetta } from 'rosetta-frida';
-import map from './maps/com.example.app/3.4.5.json' with { type: 'json' };
-// (Author maps in .json with comments; convert to .json for bundling
-// until the V1.5 frida-compile plugin handles .json natively.)
-
-Java.perform(() => {
-    rosetta.session({ map, failurePolicy: 'warn' });
-
-    // Tier 1 — declarative one-liner.
-    rosetta.hook('com.example.app.BlobCache.get', function (key) {
-        console.log('cache.get', key);
-        return rosetta.proceed(key);
-    });
-
-    // Tier 2 — Java.use-shaped (with real-name overload args).
-    const Stub = rosetta.use('com.example.app.IRemoteService$Stub');
-    console.log(`live mapping: ${Stub.$realName} -> ${Stub.$obfName}`);
-
-    // Tier 3 — raw map queries / runtime overrides.
-    rosetta.events.onType('resolve', (e) => {
-        if (e.miss) console.warn('unresolved:', e.name);
-    });
-});
-```
-
-**3. Bundle with `frida-compile`** and attach with any controller (Python,
-Node, `frida` CLI — all unchanged):
-
-```sh
-npx frida-compile hook.ts -o hook.bundle.js
-frida -U -l hook.bundle.js com.example.app
-```
+Full walkthrough: [docs/getting-started/quick-start.md](docs/getting-started/quick-start.md).
 
 ## Features
 
-- **Three API tiers** — declarative one-liners for common cases
-  (`rosetta.hook`), Java.use-shaped intermediate access (`rosetta.use`),
-  raw map queries for escape hatches (`rosetta.map`).
+- **Three API tiers** — declarative one-liners (`rosetta.hook`),
+  `Java.use`-shaped access (`rosetta.use`), and raw map queries
+  (`rosetta.map`). See [docs/api/overview.md](docs/api/overview.md).
 - **Strict validation** — Zod schemas reject malformed maps with
-  structured error reports. No silent corruption when a map drifts.
+  structured error reports; no silent corruption when a map drifts.
 - **Attach-time health check** — verifies the loaded map matches the
-  running app by sampling class resolution + AIDL descriptors + anchor
-  strings. Fails fast in `strict` mode.
-- **In-process auto-detect** — pulls the running app's package + version
-  from `PackageManager.getPackageInfo` inside the Frida script. No ADB
-  required; works over frida-server TCP.
-- **PEM-style marker block** — every bundled map gets wrapped in a
-  recognizable `-----BEGIN ROSETTA MAP-----` block so tools can extract,
-  patch, or inspect it without recompiling.
-- **CLI for the whole lifecycle** — `init`, `validate`, `convert` (from
-  YAML/TS), `patch`, `extract`, `inspect`.
-- **TypeScript-native** — strict types throughout; the locked contracts
-  under `src/types/` mean third-party tools can build against a stable
-  surface.
-
-## CLI
-
-```
-rosetta init <app> <version>                  Scaffold a new map skeleton
-rosetta validate <map>                        Schema + sanity check (auto-detect format)
-rosetta convert <in> -o <out>                 Convert YAML / TS module to canonical JSON
-rosetta patch <bundle.js> --map <new.json>   Replace embedded map in a compiled bundle
-rosetta extract <bundle.js> -o <out.json>     Pull embedded map out of a compiled bundle (JSON output)
-rosetta inspect <bundle.js>                   One-line summary of an embedded map
-```
-
-Full reference: see the [CLI docs](https://xiddoc.github.io/rosetta-frida/cli/overview/).
+  running app (class resolution, AIDL descriptors, anchor strings) and
+  fails fast in `strict` mode.
+- **In-process auto-detect** — reads the running app's package + version
+  via `PackageManager.getPackageInfo`. No ADB required.
+- **PEM-style marker block** — bundled maps are wrapped in a
+  `-----BEGIN ROSETTA MAP-----` block so tools can extract, patch, or
+  inspect them without recompiling. See
+  [docs/maps/marker-block.md](docs/maps/marker-block.md).
+- **CLI for the whole lifecycle** — `init`, `validate`, `convert`,
+  `patch`, `extract`, `inspect`. See
+  [docs/cli/overview.md](docs/cli/overview.md).
+- **TypeScript-native** — strict types throughout; locked contracts
+  under `src/types/` give third-party tools a stable surface.
 
 ## What rosetta-frida is _not_
 
@@ -173,7 +128,7 @@ Full reference: see the [CLI docs](https://xiddoc.github.io/rosetta-frida/cli/ov
 
 ## Status
 
-V1.0 is functionally complete and exercised by 595 tests at 100%
+V1.0 is functionally complete and exercised by 611 tests at 100%
 line/branch/function/statement coverage. The library has not yet
 been published to npm; install from the GitHub master branch if you
 want to try it now.
@@ -189,14 +144,16 @@ want to try it now.
 
 ## Documentation
 
-The full documentation is hosted using GitHub pages.
+Full docs live under [`docs/`](docs/index.md) (also published to
+[GitHub Pages](https://xiddoc.github.io/rosetta-frida/)):
 
-- [Getting started](https://xiddoc.github.io/rosetta-frida/getting-started/quick-start/)
-- [API reference](https://xiddoc.github.io/rosetta-frida/api/overview/) — every public surface
-- [Map authoring guide](https://xiddoc.github.io/rosetta-frida/maps/authoring/)
-- [CLI reference](https://xiddoc.github.io/rosetta-frida/cli/overview/)
-- [Recipes](https://xiddoc.github.io/rosetta-frida/recipes/aidl-stub-hook/) — common patterns
-- [Design doc](https://xiddoc.github.io/rosetta-frida/reference/design/) — architecture overview
+- [Getting started](docs/getting-started/quick-start.md) — install, quick start, concepts
+- [API reference](docs/api/overview.md) — every public surface (three tiers + session)
+- [Map format & authoring](docs/maps/format.md) — schema 2, `version_code`, authoring guide
+- [CLI reference](docs/cli/overview.md) — `init`, `validate`, `convert`, `patch`, `extract`, `inspect`
+- [Recipes](docs/recipes/aidl-stub-hook.md) — common hook patterns
+- [Design doc](docs/reference/design.md) — architecture
+- [Roadmap](docs/roadmap.md) — what's next, and why
 
 ## Testing
 
@@ -223,8 +180,7 @@ contracts in `src/types/`. To extend it:
 4. Run `npm run verify` before pushing. The 100% coverage gate is
    enforced in CI.
 
-See [CONTRIBUTING](https://xiddoc.github.io/rosetta-frida/contributing/)
-for the longer version.
+See [docs/contributing.md](docs/contributing.md) for the longer version.
 
 ## License
 

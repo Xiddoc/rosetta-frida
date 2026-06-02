@@ -111,6 +111,23 @@ export interface ClassEntry {
 /** Classes are keyed by real fully-qualified name. */
 export type ClassMap = Record<string, ClassEntry>;
 
+/**
+ * The current map schema version — the single source of truth.
+ *
+ * Bump this ONE constant to change the schema version. It drives:
+ *   - the `RosettaMap.schema_version` literal type (`typeof` below),
+ *   - the Zod gate in `src/validate/schema.ts` (`z.literal(...)`),
+ *   - the value emitted by the adapter and `rosetta init`.
+ *
+ * The matching JSON-artifact / docs literals (`"schema_version": N`) are
+ * kept in sync by `scripts/check-schema-version.mjs` (run via
+ * `npm run schema-version:fix`; `:check` is wired into `npm run verify`).
+ *
+ * Declared `const` so its type narrows to the numeric literal (e.g. `2`),
+ * which is what `RosettaMap.schema_version` and `z.literal` need.
+ */
+export const CURRENT_SCHEMA_VERSION = 2;
+
 /** The top-level mapping file. */
 export interface RosettaMap {
     /**
@@ -119,7 +136,7 @@ export interface RosettaMap {
      * `2` (current): adds the required `version_code` app-identity key and
      * the optional `signer_sha256` authenticity guard; drops `apk_sha256`.
      */
-    schema_version: 2;
+    schema_version: typeof CURRENT_SCHEMA_VERSION;
     /** Android package name (e.g. "com.example.app"). */
     app: string;
     /**

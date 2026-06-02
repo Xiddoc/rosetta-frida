@@ -118,7 +118,7 @@ describe('tsModuleToMap', () => {
     });
 });
 
-/** Exported for the jsonc/convert tests that also want a TS-module path. */
+/** Exported for the json/convert tests that also want a TS-module path. */
 export function getFixturePaths(): {
     defaultExport: string;
     namedExport: string;

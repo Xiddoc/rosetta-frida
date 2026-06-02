@@ -65,7 +65,7 @@ bundle without recompiling:
 ```sh
 # What does this bundle target?
 npx rosetta inspect hook.bundled.js
-# → com.example.app@3.4.5, schema_version 1, 15 classes
+# → com.example.app@3.4.5, schema_version 2, 15 classes
 
 # Pull the embedded map back out (for diff/debug):
 npx rosetta extract hook.bundled.js -o extracted.json

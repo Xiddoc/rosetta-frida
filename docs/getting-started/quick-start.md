@@ -100,9 +100,10 @@ npx frida-compile hook.ts -o hook.bundle.js
 ```
 
 The resulting `hook.bundle.js` is a single self-contained script. The
-imported `.json` sibling (produced from `.json` via `rosetta convert`)
-is inlined by `frida-compile` as a JavaScript object literal — no
-filesystem dependency at hook-execution time.
+imported `.json` sibling (the canonical artifact, optionally produced
+from a YAML/TS authoring source via `rosetta convert`) is inlined by
+`frida-compile` as a JavaScript object literal — no filesystem
+dependency at hook-execution time.
 
 !!! warning "Marker block is not embedded automatically yet"
     `rosetta inspect`, `extract`, and `patch` operate on a marker
@@ -126,7 +127,7 @@ stderr like:
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=1 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.IRemoteService$Stub ← aaaa (map)
 [rosetta] com.example.app.IRemoteService$Stub.requestTicket ← c (map) (Landroid/os/Bundle;Lbbbb;)V
@@ -144,7 +145,7 @@ your bundle becomes self-describing:
 
 ```sh
 $ npx rosetta inspect hook.bundle.js
-com.example.app@3.4.5, schema_version 1, 15 classes
+com.example.app@3.4.5, schema_version 2, 15 classes
 ```
 
 And you can swap maps without recompiling:
@@ -154,7 +155,7 @@ $ npx rosetta patch hook.bundle.js --map maps/com.example.app/3.5.0.json
 patch: wrote hook.bundle.js (in place)
 
 $ npx rosetta inspect hook.bundle.js
-com.example.app@3.5.0, schema_version 1, 15 classes
+com.example.app@3.5.0, schema_version 2, 15 classes
 ```
 
 The hook source did not change. The user-visible class names did not

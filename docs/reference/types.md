@@ -180,6 +180,7 @@ interface SessionOptions {
     map: RosettaMap | RosettaMapRegistry;
     app?: string;
     version?: string;
+    versionCode?: number; // authoritative selection key; auto-detected if omitted
     failurePolicy?: FailurePolicy;
     versionMatch?: VersionMatch;
     trace?: boolean;

@@ -7,8 +7,8 @@
 A library that lets you write Frida hooks against **real (unobfuscated)
 class and method names**, with a translation layer that resolves them
 to the obfuscated names that actually exist at runtime in the target
-app. The translation tables are **per-app, per-version** YAML files
-that the library loads at attach time.
+app. The translation tables are **per-app, per-version** JSON maps
+(`schema_version: 2`) that the library loads at attach time.
 
 Write once, hook many versions.
 
@@ -81,44 +81,41 @@ There were two candidate architectures:
 script works against any version that has a mapping file." Worth the
 small runtime cost.
 
-### API sketch
+### Shipped API
 
-```js
-const Rosetta = require('rosetta-frida');
+The V1 surface is `rosetta.session(...)` + a three-tier hook API, not
+the early `Rosetta.attach()` sketch. The core idea is unchanged: you
+reference **real** names and a proxy re-resolves them through the
+loaded map at runtime.
 
-// Attach: detect app/version, load mapping, return a bridge.
-const m = await Rosetta.attach({
-    app: 'com.example.app',             // optional — detected from active process
-    version: 'auto',                     // 'auto' reads from dumpsys; or "3.4.5"
-    mapping: undefined,                  // optional path to a local mapping override
+```ts
+import { rosetta } from 'rosetta-frida';
+import map from './maps/com.example.app/3.4.5.json' with { type: 'json' };
+
+Java.perform(() => {
+    // Open a session: auto-detect app + version, validate against the
+    // map, run an attach-time health check.
+    rosetta.session({ map });
+
+    // Tier 1 — declarative hook by real name.
+    rosetta.hook(
+        'com.example.app.IRemoteService$Stub.requestTicket',
+        function (bundle, callback) {
+            console.log('request keys:', bundle.keySet());
+            return rosetta.proceed(bundle, callback);
+        },
+    );
+
+    // Tier 2 — Java.use-shaped proxy that translates names.
+    const Stub = rosetta.use('com.example.app.IRemoteService$Stub');
+    // Tier 3 — raw map queries / events: rosetta.map, rosetta.events.
 });
-
-// Use a class by REAL name. The bridge translates to the obfuscated
-// name in the loaded mapping.
-const Stub = m.use(
-    'com.example.app.service.IRemoteService$Stub'
-);
-
-// Hook a method by REAL name. The proxy translates method names too.
-// `m.type(...)` resolves a type for overload-disambiguation.
-Stub.requestTicket
-    .overload('android.os.Bundle', m.type('IServiceCallback'))
-    .implementation = function (bundle, callback) {
-        console.log('request keys:', bundle.keySet());
-        return this.requestTicket(bundle, callback);
-    };
 ```
 
-Behind the scenes:
-- `m.use('com.example.app.service.IRemoteService$Stub')`
-  → looks up real name in mapping → finds `aaaa` (or `aaab`, depending
-  on version) → calls `Java.use('aaaa')` → returns a proxy that
-  re-resolves field/method accesses through the mapping.
-- `Stub.requestTicket` → looks up the method on the resolved
-  class in the mapping → finds method `c` → returns
-  `Java.use('aaaa').c` (an overload bundle).
-- `m.type('IServiceCallback')` → resolves the AIDL
-  callback type's obfuscated name (e.g. `bbbb` or `bbcc`).
+Behind the scenes the proxy looks up `IRemoteService$Stub` → obfuscated
+`aaaa`, resolves the method `requestTicket` → `c`, and translates
+real-name overload argument types (e.g. `IServiceCallback` → `bbbb`)
+the same way. See `docs/api/` for the full surface.
 
 ## Mapping file format
 
@@ -200,112 +197,71 @@ Two repos at maturity:
 
 - **`rosetta-frida/`** (this repo) — library + bridge code.
 - **`rosetta-frida-maps/`** (separate repo, planned) — contributed
-  maps. PR-gated by automated YAML schema validation; no code review
-  required. Each PR adds or updates a single `<app>/<version>.yaml`.
+  maps. PR-gated by automated schema validation; no code review
+  required. Each PR adds or updates a single `<app>/<version_code>.json`
+  (authored in YAML/TS, rendered via `rosetta convert`).
 
 The library, at attach time, can optionally fetch from the maps repo
-if no local override exists. Caching keyed by `(app, version)`.
+if no local override exists. Caching keyed by `(app, version_code)`.
 
 **Not in V1.** For the MVP, maps live in the same repo
 (`rosetta-frida/maps/`) and ship with the library.
 
-## Open questions (these are the unfinished design decisions)
+## Resolved design decisions
 
-These are the things I didn't fully nail down with the user before
-starting this project. The new Claude session that picks this up
-should resolve them with the user before locking implementation
-choices in.
+These were open questions at project start; all are now settled and
+shipped in V1.0. Kept here so future sessions understand the
+trade-offs behind each choice rather than re-litigating them.
 
 ### 1. Project naming
 
-Working name: **`rosetta-frida`** (translation metaphor; my pick).
-
-Other options the user said to keep on the table:
-- `frida-decode` — descriptive
-- `unrot` / `unrotate` — too clever?
-- `obf-bridge` — utility-flavoured
-
-If the user picks a different name, rename the project directory
-and update this CLAUDE.md.
+**`rosetta-frida`** (translation metaphor). Alternatives considered
+and dropped: `frida-decode`, `unrot`/`unrotate`, `obf-bridge`.
 
 ### 2. Native (libffi / C symbols) coverage?
 
-Frida hooks both Java and native. JNI / native symbols *also* rotate
-per release. Should V1 cover both, or Java-only?
-
-- **Java-only V1, native V2:** simpler scope, ships sooner. Past
-  experience suggests Java-side rotation is the dominant pain.
-- **Both V1:** unified API from the start.
-
-My lean: **Java-only V1.** Native is a different mapping shape
-(function pointers, demangled symbols, base offsets) and would
-significantly complicate the file format.
+**Java-only in V1; native deferred to V2+.** Java-side rotation is the
+dominant pain, and native is a different mapping shape (function
+pointers, demangled symbols, base offsets) that would complicate the
+file format. Shipped Java-only.
 
 ### 3. Fuzzy-version matching?
 
-If you have a map for `3.4.5` and the device runs `3.4.6`, do
-you:
-- (a) Fall back to the closest map with a warning,
-- (b) Fail hard and tell the user to provide a map for that exact
-  version?
-
-My lean: **(b) fail hard by default, opt-in fuzzy via config flag.**
-Wrong-version maps silently corrupt hooks; the failure mode of
-loading the wrong map is worse than the failure mode of having to
-either generate a new map or pass `--allow-fuzzy`.
+**Fail hard by default; opt-in fuzzy via config.** `version_code` is
+the authoritative O(1) selection key; a wrong-version map silently
+corrupts hooks, so an exact miss should fail loudly rather than fall
+back unless the user explicitly allows it.
 
 ### 4. MVP scope
 
-The minimum useful prototype I'd target:
-- One app.
-- One version.
-- A hand-written YAML mapping covering 10-20 classes (those that
-  are useful for a representative capture workflow).
-- The wrapper APIs: `Rosetta.attach()`, `m.use()`, `m.type()`,
-  `m.method()` — but **no** auto-detect (require explicit `version`).
-- No remote-map-fetching, no fuzzy-version-matching.
-- No CLI, no test harness for maps yet.
-- A `frida-compile` example showing how to bundle a hook that uses
-  rosetta-frida.
-
-Estimated time: a weekend.
-
-Question: is this the right MVP scope, or does the user want
-something smaller / larger?
+Shipped V1.0 went past the original weekend prototype: a three-tier
+hook API (`rosetta.hook`, `rosetta.use`, `rosetta.map`) over
+`rosetta.session(...)`, in-process auto-detect, attach-time health
+check, a full CLI (`init`, `validate`, `convert`, `patch`, `extract`,
+`inspect`), a 15-class sample map, and a sample hook — at 611 tests /
+100% coverage.
 
 ### 5. TypeScript vs plain JS?
 
-Frida's runtime is JS. The library's *runtime code* must be JS.
-But the *source* could be TypeScript that compiles to JS — same
-pattern as `frida-java-bridge` and `frida-il2cpp-bridge`.
+**TypeScript source → JS output**, same pattern as
+`frida-java-bridge` / `frida-il2cpp-bridge`. The map types, session
+bridge, and `rosetta.use` proxy all benefit from types. Locked
+contracts live under `src/types/`.
 
-My lean: **TypeScript source → JS output.** The mapping file types,
-the bridge class, the proxy returned from `m.use()` all benefit
-substantially from types. Adds a build step but is worth it for
-mid-size library code.
+### 6. How `rosetta.session()` detects the live app version
 
-### 6. How does `Rosetta.attach()` actually detect the live app version?
+**In-process via `PackageManager.getPackageInfo`** (reads package +
+`versionCode`/`longVersionCode` from inside the target process; no
+ADB dependency). The detected `version_code` is matched against the
+map's authoritative `version_code` key.
 
-`'auto'` is the desired UX, but implementation has trade-offs:
-- **adb shell dumpsys package <pkg>** — requires adb access from the
-  Frida-controlling host, which capture-style orchestrators typically
-  already have. Works.
-- **Read from inside the target process** via Java's
-  `Context.getPackageManager().getPackageInfo(pkg, 0).versionName`.
-  Frida can do this. Cleaner, no external dependency on adb.
+### 7. Versioning the mapping file format itself
 
-My lean: **in-process via PackageManager**, with adb as fallback for
-contexts where you don't have a `Context` yet.
-
-### 7. Versioning the mapping file format itself?
-
-We'll learn things about the schema as we go. The top-level
-`schema_version` field exists from day 1 so format changes can be
-detected and handled. **Resolved:** the current schema is `2` — the
-RFC-0001 app-identity refinement made `version_code` required, added
-the optional `signer_sha256` guard, and dropped `apk_sha256`. The
-literal is a hard gate (`z.literal(2)`); `schema_version: 1` maps are
-rejected and must be re-emitted with a `version_code`.
+Current schema is **`2`**. The RFC-0001 app-identity refinement made
+`version_code` required, added the optional `signer_sha256` guard, and
+dropped `apk_sha256`. The literal is a hard gate (`z.literal(2)`);
+`schema_version: 1` maps are rejected and must be re-emitted with a
+`version_code`.
 
 ## When to NOT use rosetta-frida (anti-scope)
 
@@ -325,26 +281,22 @@ scope-creep:
   signature-matching logic. Sigmatcher is one upstream input among
   several.
 
-## Suggested next steps for a fresh session
+## Orientation for a fresh session
 
-When the user launches a new Claude session in this directory:
+V1.0 is built (Java-only runtime + CLI, 611 tests at 100% coverage).
+The design decisions above are settled; the next frontier is the V1.5 /
+V2 roadmap (`docs/reference/design.md`). When picking up work here:
 
-1. **Read this CLAUDE.md end-to-end.** It contains every design
-   decision and open question.
-2. **Resolve open questions §1-§7 with the user before writing code.**
-   Don't lock implementation choices in unilaterally — those are real
-   trade-offs that need the user's input.
-3. **Write a `README.md`** that's the user-facing entry point (this
-   CLAUDE.md is for Claude; README is for humans reading the GitHub
-   page if/when published).
-4. **Scaffold the npm package** (`package.json`, `tsconfig.json` if
-   TypeScript, a standard Node `.gitignore`).
-5. **Start with the V1 MVP scope from §4** — one app, one version,
-   hand-written 10-class map, the four wrapper APIs.
-6. **Validate by porting an existing adaptive-discovery Frida hook**
-   to use rosetta-frida. A small hook that targets just a couple of
-   rotation-prone classes is the ideal first port — exactly the
-   pattern this library exists to simplify.
+1. **Read this CLAUDE.md end-to-end** for the design rationale, then
+   skim `docs/` (the human-facing entry point; `README.md` is the
+   GitHub front page).
+2. **Honour the locked type contracts in `src/types/`** — downstream
+   code depends on those shapes; sketch the contract first when adding
+   a subsystem.
+3. **Keep maps strict JSON, `schema_version: 2`, with a `version_code`.**
+   YAML/TS are authoring inputs converted via `rosetta convert`.
+4. **Maintain the 100% coverage gate** (`npm run verify`); co-locate
+   tests with source and use the Frida mock under `tests/mocks/`.
 
 ## Memory
 

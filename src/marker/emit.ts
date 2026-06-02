@@ -4,7 +4,7 @@
  * The shape is exactly what design §5.5 specifies:
  *
  *   /\*! -----BEGIN ROSETTA MAP----- *\/
- *   /\*! app: com.example.app | version: 1.2.3 | schema: 1 | classes: 47 *\/
+ *   /\*! app: com.example.app | version: 1.2.3 | schema: 2 | classes: 47 *\/
  *   const __rosetta_map = { ... pretty-printed JSON ... };
  *   /\*! -----END ROSETTA MAP----- *\/
  *

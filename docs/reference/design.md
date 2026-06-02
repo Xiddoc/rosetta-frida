@@ -222,7 +222,7 @@ What landed in V1.0:
 - CLI scaffold: `init`, `validate`, `convert`, `patch`, `extract`,
   `inspect`.
 - One sample hook demonstrating the workflow.
-- 595 tests, 100% coverage.
+- 611 tests, 100% coverage.
 
 What is deferred:
 
@@ -231,7 +231,7 @@ What is deferred:
 | `rosetta diff`, `merge`, `migrate`, `types`, `verify`, `fetch`, `merge-bundle` CLI commands | V1.5 |
 | `frida-compile` plugin for auto-marker-wrapping | V1.5 |
 | Fuzzy version matching expanded (e.g. version ranges, premium hints) | V1.5 |
-| Schema migrators (1 → 2 etc.) | V1.5 |
+| Schema migrators (e.g. a future 2 → 3 bump; the 1 → 2 change was a hard cutover) | V1.5 |
 | Public maps repo (`rosetta-frida-maps`) | V2 |
 | Runtime injection / hot-reload (`rosetta.injectMap(...)`) | V2 |
 | Runtime discovery / self-healing | V2 |
@@ -282,9 +282,11 @@ format versioning lives in the payload as `schema_version`.
 
 No ADB. The only auto-detect path is in-process Java:
 `ActivityThread.currentApplication().getApplicationContext()
-.getPackageManager().getPackageInfo(...).versionName.value`. Pure
-Frida JS, no external deps, works over `frida-server`-over-TCP
-without root.
+.getPackageManager().getPackageInfo(...)`, reading both
+`.versionName.value` (the display label) and the authoritative
+`.getLongVersionCode()` (API 28+, falling back to the int
+`versionCode`). Pure Frida JS, no external deps, works over
+`frida-server`-over-TCP without root.
 
 ### Failure policies: `strict` and `warn`
 

@@ -43,6 +43,9 @@ jobs:
             - name: Format check
               run: npm run format:check
 
+            - name: Schema-version literals in sync (docs/sample vs CURRENT_SCHEMA_VERSION)
+              run: npm run schema-version:check
+
             - name: Tests + coverage (100% gate enforced by vitest.config.ts)
               run: npm run test:coverage
 
@@ -69,7 +72,7 @@ jobs:
 
             - run: npm ci
 
-            - name: rosetta validate (every .jsonc map in maps/)
+            - name: rosetta validate (every .json map in maps/)
               # Validates every map under maps/. Once the maps repo splits
               # off (V2+), this loop moves to that repo's CI; until then,
               # we validate the canonical sample + any other authored maps
@@ -77,14 +80,14 @@ jobs:
               run: |
                   shopt -s globstar nullglob
                   found=0
-                  for f in maps/**/*.jsonc; do
+                  for f in maps/**/*.json; do
                       echo "::group::$f"
                       npm run --silent cli -- validate "$f"
                       echo "::endgroup::"
                       found=$((found + 1))
                   done
                   if [ "$found" = "0" ]; then
-                      echo "::error::no .jsonc maps found under maps/"
+                      echo "::error::no .json maps found under maps/"
                       exit 1
                   fi
                   echo "validated $found map(s)"
@@ -95,9 +98,10 @@ jobs:
                   const before = 1;
                   /*! -----BEGIN ROSETTA MAP----- */
                   const __rosetta_map = {
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "app": "com.example.app",
                     "version": "3.4.5",
+                    "version_code": 30405,
                     "classes": { "IFoo": { "obfuscated": "aaaa" } }
                   };
                   /*! -----END ROSETTA MAP----- */

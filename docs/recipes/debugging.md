@@ -19,7 +19,7 @@ line:
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=1 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.IRemoteService$Stub ← aaaa (map)
 [rosetta] com.example.app.IRemoteService$Stub.requestTicket ← c (map) (Landroid/os/Bundle;Lbbbb;)V
@@ -151,12 +151,12 @@ list. Either:
 
 ### `JsonParseError`
 
-> "rosetta-frida: JSON parse error at line 12 col 4: unexpected
-> token"
+> "Invalid JSON: Unexpected token ... (line 12, column 4)"
 
-The JSON source doesn't parse. The error carries `line` and
+The strict-JSON source doesn't parse. The error carries `line` and
 `column`. Find the location, fix the syntax (usually a missing
-comma or quote), retry.
+comma or quote — note that comments and trailing commas are *not*
+valid JSON and surface here too), retry.
 
 ### `MarkerBlockError`
 
@@ -244,7 +244,7 @@ Before running a bundle, audit it:
 
 ```sh
 $ npx rosetta inspect hook.bundle.js
-com.example.app@3.4.5, schema_version 1, 15 classes
+com.example.app@3.4.5, schema_version 2, 15 classes
 
 $ npx rosetta extract hook.bundle.js -o snapshot.json
 $ jq '.classes | keys' snapshot.json
