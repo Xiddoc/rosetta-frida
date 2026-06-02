@@ -55,6 +55,12 @@ public class RemoteService extends Service {
             Runnable retry = new Runnable() {
                 @Override
                 public void run() {
+                    // Unique string literal anchor for this anonymous
+                    // Runnable (R8 emits it as RemoteService$1$1).
+                    // Writing to the kept static sink is a side effect R8
+                    // cannot prove dead, so the literal survives.
+                    AbstractServiceClient.anchorSink =
+                        "rosetta-anchor-RemoteServiceRetryRunnable";
                     try {
                         callback.onResult(params);
                     } catch (Exception ignored) {

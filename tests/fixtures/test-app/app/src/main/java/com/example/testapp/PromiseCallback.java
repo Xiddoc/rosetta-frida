@@ -12,6 +12,13 @@ package com.example.testapp;
  */
 public interface PromiseCallback {
 
+    /**
+     * Stable cross-version anchor. Interface fields are implicitly
+     * {@code public static final}; R8 keeps the literal in the field
+     * table so sigmatcher can anchor the (rotated) interface on it.
+     */
+    String ROSETTA_ANCHOR = "rosetta-anchor-PromiseCallback";
+
     /** SAM method. */
     Object apply(Object input);
 }

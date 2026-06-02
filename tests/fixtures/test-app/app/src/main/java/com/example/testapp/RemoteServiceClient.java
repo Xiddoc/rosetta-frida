@@ -18,6 +18,9 @@ import android.os.Bundle;
  */
 public class RemoteServiceClient extends AbstractServiceClient implements PromiseCallback {
 
+    /** Stable cross-version anchor — survives R8 in the field table. */
+    public static final String ROSETTA_ANCHOR = "rosetta-anchor-RemoteServiceClient";
+
     /** Private instance field. */
     private String sessionId = null;
 
