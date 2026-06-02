@@ -1,8 +1,10 @@
 # CLI overview
 
-The `rosetta` binary ships with the npm package. Invoke it via
-`npx rosetta <command>`, or directly via `node_modules/.bin/rosetta`,
-or wire it into a `package.json` script.
+The `rosetta` CLI lives in this repo. Until the npm package ships, run
+it from a source checkout with `npm run cli -- <command>` (the examples
+below show `rosetta <command>` for brevity). Once the npm package is
+published, `npx rosetta <command>` and a `node_modules/.bin/rosetta`
+binary will be available.
 
 ## Commands
 

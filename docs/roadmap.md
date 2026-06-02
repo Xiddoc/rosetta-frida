@@ -18,6 +18,15 @@ Milestones are ordered by priority, not by strict release boundaries —
 the V1.5 / V2 / V3 grouping mirrors `changelog.md` but several items can
 move between them as priorities shift.
 
+## Milestones at a glance
+
+| Version        | Focus                                                                                                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V1.0 (current) | Java-only Frida runtime + CLI. Maps ship in-repo.                                                                                                                                           |
+| V1.5           | `rosetta diff` / `merge` / `types` / `verify` CLI commands. Multi-version registry bundles. Fuzzy version matching.                                                                         |
+| V2             | Self-healing runtime discovery. Public [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) community repo (canonical schema owner; scaffolded). Frida-compile plugin for transparent marker-block injection. |
+| V3             | Native (JNI / ELF) symbol mapping. Non-Frida runtimes — [`rosetta-xposed`](https://github.com/Xiddoc/rosetta-xposed) (Xposed / LSPosed / LSPatch, scaffolded). Hosted resolution service.   |
+
 ---
 
 ## Housekeeping (do first)

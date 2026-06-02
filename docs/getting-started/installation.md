@@ -1,14 +1,24 @@
 # Installation
 
-rosetta-frida is a regular npm package. It runs inside a Frida script
-(authored in TypeScript or JavaScript and compiled with
-[`frida-compile`](https://github.com/frida/frida-compile)) and ships a
-CLI binary, `rosetta`, for map authoring and bundle manipulation.
+rosetta-frida runs inside a Frida script (authored in TypeScript or
+JavaScript and compiled with
+[`frida-compile`](https://github.com/frida/frida-compile)) and provides
+a CLI, `rosetta`, for map authoring and bundle manipulation.
+
+!!! warning "Not on npm yet"
+
+    rosetta-frida is **not published to npm yet** — publishing is
+    deliberately deferred. For now you **clone and build from source**
+    (below). An npm package is planned for a later phase; once it lands,
+    `npm install rosetta-frida` and a published `rosetta` binary will be
+    documented here.
 
 ## Requirements
 
-- **Node.js 18.18 or newer.** The library uses ESM modules, native
-  fetch, and a handful of post-18 stdlib APIs.
+- **Node.js 24 or newer** (build/CLI side only — see
+  `engines.node` in `package.json`). The compiled hook itself runs in
+  Frida's JS sandbox like any other Frida script. Older Node versions
+  are unsupported.
 - **Frida 16 or newer** in the target environment (`frida-server` on
   the device, plus whichever controller you use — Python `frida`,
   `frida` CLI, `frida-node`). The library is tested against Frida 16
@@ -20,42 +30,32 @@ There is no Python, Java, or Android-SDK dependency on the host
 running rosetta-frida. The CLI is pure Node; the runtime is pure JS
 that loads inside Frida's Quickjs / V8 sandbox.
 
-## Install
+## Install (clone & build from source)
 
-=== "npm"
+Until the npm package ships, clone the repo and build it:
 
-    ```sh
-    npm install --save rosetta-frida
-    ```
+```sh
+git clone https://github.com/Xiddoc/rosetta-frida
+cd rosetta-frida
+npm install
+npm run build
+```
 
-=== "pnpm"
+This gives you:
 
-    ```sh
-    pnpm add rosetta-frida
-    ```
+- The runtime library (compiled into `dist/`), importable from a local
+  checkout or via a path/`npm link` reference.
+- The `rosetta` CLI, run via `npm run cli -- <command>` from the repo
+  root.
 
-=== "yarn"
-
-    ```sh
-    yarn add rosetta-frida
-    ```
-
-This installs:
-
-- The runtime library at `rosetta-frida` (default ESM import).
-- The CLI at `node_modules/.bin/rosetta`. Add it to your `PATH` via
-  `npx rosetta <command>` or `npm run rosetta -- <command>` from a
-  `scripts` entry.
-
-### Peer dependencies
+### Dependencies
 
 rosetta-frida itself depends only on `yaml` (for the YAML converter)
-and `zod` (for schema validation). Both are regular dependencies, not
-peers — you do not need to install them yourself.
+and `zod` (for schema validation); `npm install` pulls both. There are
+no peer dependencies to install yourself.
 
 You do need `frida-compile` to *compile* hooks. It is the standard
-build step for any non-trivial Frida script. Install it once globally
-or per-project:
+build step for any non-trivial Frida script:
 
 ```sh
 npm install --save-dev frida-compile
@@ -64,7 +64,7 @@ npm install --save-dev frida-compile
 ## Verify the install
 
 ```sh
-npx rosetta --help
+npm run cli -- --help
 ```
 
 You should see:
