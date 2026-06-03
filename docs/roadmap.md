@@ -77,11 +77,10 @@ move between them as priorities shift.
 
 ---
 
-## Deferred follow-ups from the schema-v2 change (RFC 0001 Decision 3)
+## Deferred follow-ups from the schema-v2 change
 
 These close out the app-identity work that landed the `version_code` and
-`signer_sha256` fields. See
-[`rfcs/0001-unified-cross-framework-signatures.md`](rfcs/0001-unified-cross-framework-signatures.md).
+`signer_sha256` fields.
 
 ### On-device `signer_sha256` enforcement
 
@@ -121,11 +120,11 @@ These close out the app-identity work that landed the `version_code` and
 
 ---
 
-## RFC 0001 broader arc — cross-framework
+## Broader arc — cross-framework
 
 ### A second framework binding (Xposed / LSPosed)
 
-- **Purpose.** RFC 0001 re-cast the system as four layers (signature
+- **Purpose.** The system is structured as four layers (signature
   authoring, canonical map artifact, resolution semantics, runtime
   binding) where only the bottom layer is Frida-specific. Build a
   **second binding** that applies resolved names through the Xposed /
@@ -337,7 +336,7 @@ The theme: turn rosetta-frida from a library into an ecosystem.
   a map from the cloud.
 - **Benefit.** **The killer feature.** A hook works against a version its
   author never tested, because someone else contributed that version's
-  map — an obfuscation-map "CVE database." Schema v2 was deliberately
+  map — a shared, community-contributed obfuscation-map database. Schema v2 was deliberately
   shaped (authoritative `version_code` key, signer guard) to make this
   selection and trust model sound.
 - **Scope / dependencies.** A new repo with CI validation using this

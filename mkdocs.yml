@@ -11,6 +11,11 @@ edit_uri: edit/master/docs/
 docs_dir: docs
 site_dir: site
 
+# RFCs are agent-facing planning material, kept in the repo (docs/rfcs/)
+# for tooling but excluded from the published human docs site.
+exclude_docs: |
+  rfcs/
+
 theme:
   name: material
   language: en
@@ -149,8 +154,6 @@ nav:
       - Types: reference/types.md
       - Events: reference/events.md
       - Design: reference/design.md
-  - RFCs:
-      - 0001 — Unified cross-framework signatures: rfcs/0001-unified-cross-framework-signatures.md
   - Roadmap: roadmap.md
   - Contributing: contributing.md
   - Changelog: changelog.md
