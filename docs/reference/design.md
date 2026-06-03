@@ -263,13 +263,18 @@ session-injection point moves.
 
 ### Strict JSON (not YAML) as the artifact, plus YAML/TS authoring converters
 
-Strict JSON (no comments, no trailing commas) is the canonical on-disk
+Strict JSON (no comments, no trailing commas) is the on-disk artifact
 format: the data round-trips machine-cleanly, the on-disk shape matches
 the runtime shape exactly, and JS bundlers / `frida-compile` consume
 the `.json` import natively with no conversion step. Comment-bearing
 YAML and TS-module input exist via converters for authors who prefer
-them — `rosetta convert` renders those to the canonical JSON artifact —
-but the *runtime* only ever sees strict JSON.
+them — `rosetta convert` renders those to the JSON artifact — but the
+*runtime* only ever sees strict JSON.
+
+The *schema* that this JSON conforms to is owned by the separate
+[`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo
+(`schema/rosetta-map.schema.json`); rosetta-frida's Zod validator
+(`src/validate/schema.ts`) is a **client** that tracks it.
 
 ### PEM-style marker block
 

@@ -5,12 +5,12 @@ Short version: clone, `npm install`, `npm run verify`, send a PR.
 ## Setup
 
 ```sh
-git clone https://github.com/rosetta-frida/rosetta-frida
+git clone https://github.com/Xiddoc/rosetta-frida
 cd rosetta-frida
 npm install
 ```
 
-Node 18.18 or newer required. The library has no native dependencies
+Node 24 or newer required (see `engines.node` in `package.json`). The library has no native dependencies
 on the build side — pure TypeScript + a couple of JS deps (`yaml`,
 `zod`).
 
@@ -96,7 +96,7 @@ subagent work, integrated linearly:
 
 Each wave landed as its own integration commit on `master`. The
 parallel-agent model is documented in
-[CLAUDE.md](https://github.com/rosetta-frida/rosetta-frida/blob/main/CLAUDE.md);
+[CLAUDE.md](https://github.com/Xiddoc/rosetta-frida/blob/master/CLAUDE.md);
 contributors are welcome to follow the same model for non-trivial
 additions, but it's not required.
 

@@ -108,9 +108,15 @@ the full motivating story.
   [Tier 3](api/tier-3.md) is the low-level escape hatch:
   `rosetta.map.resolveClass(...)`, `rosetta.events.on(...)`,
   runtime overrides.
-- **Session lifecycle.** In-process auto-detect of app + version,
-  registry-bundle picking with optional fuzzy fallback, attach-time
-  health check.
+- **Session lifecycle.** In-process auto-detect of app + version (via
+  `PackageManager.getPackageInfo`, no ADB required), registry-bundle
+  picking with optional fuzzy fallback, attach-time health check
+  (class resolution, AIDL descriptors, anchor strings; fails fast in
+  `strict` mode).
+- **Strict validation.** A Zod validator rejects malformed maps with
+  structured `{path, message}` error reports — no silent corruption
+  when a map drifts. The validator tracks the canonical map schema
+  owned by [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps).
 - **Comment-bearing authoring inputs.** YAML and TypeScript modules supported
   via `rosetta convert`.
 - **PEM-style marker block.** Maps embed into the compiled bundle
@@ -156,3 +162,26 @@ rosetta-frida is the consumer of maps. It does not analyze APKs
 (sigmatcher does that). It does not replace Frida (your existing
 controller — Python `frida`, `frida` CLI, `frida-node` — loads the
 compiled bundle unchanged).
+
+## What rosetta-frida is _not_
+
+- **Not a deobfuscator.** It consumes maps. Use jadx / sigmatcher /
+  hand-authoring to produce them.
+- **Not a hook framework.** It doesn't define what a "hook" is — Frida
+  does. rosetta-frida just makes `Java.use` smarter.
+- **Not a host-side orchestrator.** It's a library that runs inside the
+  Frida JS script. Your Python / Node / CLI controller stays unchanged.
+- **Not iOS / desktop / non-Android Frida** (V1.0). Future versions may
+  add native-side mapping and non-Android targets.
+- **Not an auto-discoverer of obfuscated names** (V1.0). Maps are the
+  only source of translation. Self-healing runtime discovery is on the
+  V2+ roadmap.
+
+## Status
+
+V1.0 is functionally complete and exercised by a full test suite at
+100% line/branch/function/statement coverage. The library has not yet
+been published to npm (publishing is deliberately deferred); clone and
+build from source to try it now — see
+[Installation](getting-started/installation.md). For the milestone
+overview, see the [Roadmap](roadmap.md).
