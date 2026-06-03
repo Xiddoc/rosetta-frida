@@ -336,7 +336,7 @@ The theme: turn rosetta-frida from a library into an ecosystem.
   a map from the cloud.
 - **Benefit.** **The killer feature.** A hook works against a version its
   author never tested, because someone else contributed that version's
-  map — an obfuscation-map "CVE database." Schema v2 was deliberately
+  map — a shared, community-contributed obfuscation-map database. Schema v2 was deliberately
   shaped (authoritative `version_code` key, signer guard) to make this
   selection and trust model sound.
 - **Scope / dependencies.** A new repo with CI validation using this
