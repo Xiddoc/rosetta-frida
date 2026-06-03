@@ -45,7 +45,7 @@ interface RosettaMap {
 | `schema_version` | `2` | The schema version. Must be `2`. Bumped on breaking schema changes; old maps will fail to load against newer libraries until in-tree migrators are added. (`2` added the required `version_code` and optional `signer_sha256`, and dropped `apk_sha256`.) |
 | `app` | string | Android package name (`com.example.app`). Cross-checked against the auto-detected app at session start. |
 | `version` | string | App version *label* (`PackageInfo.versionName`, e.g. `3.4.5`). A human display label only — NOT authoritative for selection (labels can repeat across builds). Used as the fuzzy-match fallback key. |
-| `version_code` | integer | **The authoritative app-identity key** — Android `PackageInfo.versionCode` (or the low 32 bits of `longVersionCode`). The runtime selects maps by this first (O(1), monotonic per build); the `version` label is only a fallback. See [RFC 0001](../rfcs/0001-unified-cross-framework-signatures.md). |
+| `version_code` | integer | **The authoritative app-identity key** — Android `PackageInfo.versionCode` (or the low 32 bits of `longVersionCode`). The runtime selects maps by this first (O(1), monotonic per build); the `version` label is only a fallback. |
 | `classes` | object | Real-FQN → `ClassEntry`. The whole point of the file. |
 
 ### Optional fields

@@ -26,7 +26,7 @@ interface RosettaMap {
     schema_version: 2;
     app: string;
     version: string; // versionName label — fuzzy fallback only
-    version_code: number; // authoritative selection key (RFC 0001)
+    version_code: number; // authoritative selection key
     captured_at?: string;
     signer_sha256?: string; // signing-cert hash authenticity guard
     frida_min_version?: string;
