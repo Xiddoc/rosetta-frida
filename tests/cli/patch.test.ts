@@ -94,11 +94,12 @@ describe('runPatch', () => {
             'new.json': JSON.stringify(newMap),
         });
         const captured = makeCaptured();
-        const code = await runPatch(
+        // run* returns the success message; the router owns the prefix +
+        // stdout, so command-level tests assert on the return value.
+        const msg = await runPatch(
             ['b.js', '--map', 'new.json', '-o', 'out.js'],
             makeIo(fs, captured),
         );
-        expect(code).toBe(0);
         const written = fs.files.get('out.js');
         expect(written).toBeDefined();
         // The original bundle is unchanged.
@@ -110,7 +111,7 @@ describe('runPatch', () => {
         const parsed = parseMarkerBlock(written!);
         if (parsed.kind !== 'single') throw new Error('unreachable');
         expect(parsed.map.version).toBe('2.0.0');
-        expect(captured.stdout[0]).toMatch(/wrote out\.js$/);
+        expect(msg).toMatch(/wrote out\.js$/);
     });
 
     it('patches in place when -o is omitted', async () => {
@@ -122,13 +123,12 @@ describe('runPatch', () => {
             'new.json': JSON.stringify(newMap),
         });
         const captured = makeCaptured();
-        const code = await runPatch(['b.js', '--map', 'new.json'], makeIo(fs, captured));
-        expect(code).toBe(0);
+        const msg = await runPatch(['b.js', '--map', 'new.json'], makeIo(fs, captured));
         const updated = fs.files.get('b.js')!;
         const parsed = parseMarkerBlock(updated);
         if (parsed.kind !== 'single') throw new Error('unreachable');
         expect(parsed.map.version).toBe('3.0.0');
-        expect(captured.stdout[0]).toMatch(/in place/);
+        expect(msg).toMatch(/in place/);
     });
 
     it('accepts a registry payload in the map JSON', async () => {
@@ -141,11 +141,11 @@ describe('runPatch', () => {
             'reg.json': JSON.stringify(reg),
         });
         const captured = makeCaptured();
-        const code = await runPatch(['b.js', '--map', 'reg.json'], makeIo(fs, captured));
-        expect(code).toBe(0);
+        const msg = await runPatch(['b.js', '--map', 'reg.json'], makeIo(fs, captured));
         const updated = fs.files.get('b.js')!;
         const parsed = parseMarkerBlock(updated);
         expect(parsed.kind).toBe('registry');
+        expect(msg).toMatch(/in place/);
     });
 
     // Failure paths now THROW (router maps to exit 1 + uniform prefix).
@@ -218,8 +218,8 @@ describe('runPatch', () => {
                 '}\n',
         });
         const captured = makeCaptured();
-        const code = await runPatch(['b.js', '--map', 'm.json'], makeIo(fs, captured));
-        expect(code).toBe(0);
+        const msg = await runPatch(['b.js', '--map', 'm.json'], makeIo(fs, captured));
+        expect(msg).toMatch(/^wrote /);
     });
 
     it('throws when map is not an object', async () => {
@@ -323,11 +323,11 @@ describe('runPatch', () => {
             'new.json': JSON.stringify(newMap),
         });
         const captured = makeCaptured();
-        const code = await runPatch(
+        const msg = await runPatch(
             ['b.js', '--map', 'new.json', '-o', '../escape.js'],
             makeIo(fs, captured),
         );
-        expect(code).toBe(0);
+        expect(msg).toMatch(/^wrote /);
         expect(fs.files.has('../escape.js')).toBe(true);
         // The original bundle is untouched.
         expect(fs.files.get('b.js')).toBe(emitMarkerBlock(oldMap));
@@ -339,11 +339,11 @@ describe('runPatch', () => {
             'new.json': JSON.stringify(map('9.9.9')),
         });
         const captured = makeCaptured();
-        const code = await runPatch(
+        const msg = await runPatch(
             ['b.js', '--map', 'new.json', '-o', '/tmp/out.js'],
             makeIo(fs, captured),
         );
-        expect(code).toBe(0);
+        expect(msg).toMatch(/^wrote /);
         expect(fs.files.has('/tmp/out.js')).toBe(true);
     });
 
@@ -356,10 +356,9 @@ describe('runPatch', () => {
             'new.json': JSON.stringify(map('5.0.0')),
         });
         const captured = makeCaptured();
-        const code = await runPatch(['../outside.js', '--map', 'new.json'], makeIo(fs, captured));
-        expect(code).toBe(0);
+        const msg = await runPatch(['../outside.js', '--map', 'new.json'], makeIo(fs, captured));
         expect(fs.files.has('../outside.js')).toBe(true);
-        expect(captured.stdout[0]).toMatch(/in place/);
+        expect(msg).toMatch(/in place/);
     });
 
     it('throws when -o contains a NUL byte', async () => {

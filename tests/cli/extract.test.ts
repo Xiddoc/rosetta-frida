@@ -83,8 +83,9 @@ describe('runExtract', () => {
         const fs = makeFakeFs({ 'bundle.js': bundle });
         const captured = makeCaptured();
 
-        const code = await runExtract(['bundle.js', '-o', 'out.json'], makeIo(fs, captured));
-        expect(code).toBe(0);
+        // run* returns the success message; the router owns the prefix +
+        // stdout, so command-level tests assert on the return value.
+        const msg = await runExtract(['bundle.js', '-o', 'out.json'], makeIo(fs, captured));
         const written = fs.files.get('out.json');
         expect(written).toBeDefined();
         // Pretty-printed with 2-space indent.
@@ -92,7 +93,7 @@ describe('runExtract', () => {
         expect(JSON.parse(written!)).toEqual(map);
         // Output ends with a trailing newline.
         expect(written!.endsWith('\n')).toBe(true);
-        expect(captured.stdout[0]).toMatch(/wrote out\.json.*single/);
+        expect(msg).toMatch(/wrote out\.json.*single/);
     });
 
     it('extracts a registry bundle to JSON', async () => {
@@ -104,11 +105,10 @@ describe('runExtract', () => {
         const fs = makeFakeFs({ 'b.js': bundle });
         const captured = makeCaptured();
 
-        const code = await runExtract(['b.js', '-o', 'reg.json'], makeIo(fs, captured));
-        expect(code).toBe(0);
+        const msg = await runExtract(['b.js', '-o', 'reg.json'], makeIo(fs, captured));
         const written = fs.files.get('reg.json');
         expect(JSON.parse(written!)).toEqual(reg);
-        expect(captured.stdout[0]).toMatch(/registry/);
+        expect(msg).toMatch(/registry/);
     });
 
     // Failure paths now THROW (router maps to exit 1 + uniform prefix).
@@ -150,10 +150,9 @@ describe('runExtract', () => {
         const map = minimalMap();
         const fs = makeFakeFs({ 'b.js': emitMarkerBlock(map) });
         const captured = makeCaptured();
-        const code = await runExtract(['b.js', '-o', '../escape.json'], makeIo(fs, captured));
-        expect(code).toBe(0);
+        const msg = await runExtract(['b.js', '-o', '../escape.json'], makeIo(fs, captured));
         expect(fs.files.has('../escape.json')).toBe(true);
-        expect(captured.stdout[0]).toMatch(/wrote \.\.\/escape\.json/);
+        expect(msg).toMatch(/wrote \.\.\/escape\.json/);
     });
 
     it('allows -o with an absolute path outside the project tree', async () => {
@@ -161,8 +160,8 @@ describe('runExtract', () => {
         const map = minimalMap();
         const fs = makeFakeFs({ 'b.js': emitMarkerBlock(map) });
         const captured = makeCaptured();
-        const code = await runExtract(['b.js', '-o', '/tmp/extracted.json'], makeIo(fs, captured));
-        expect(code).toBe(0);
+        const msg = await runExtract(['b.js', '-o', '/tmp/extracted.json'], makeIo(fs, captured));
+        expect(msg).toMatch(/^wrote /);
         expect(fs.files.has('/tmp/extracted.json')).toBe(true);
         expect(JSON.parse(fs.files.get('/tmp/extracted.json')!)).toEqual(map);
     });

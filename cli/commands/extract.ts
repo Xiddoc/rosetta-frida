@@ -26,7 +26,13 @@ export interface ExtractArgs {
     output: string;
 }
 
-/** Indent for the extracted JSON file (separate from the embed indent). */
+/**
+ * Indent for the extracted JSON file. Intentionally 2-space — NOT the
+ * embed indent (the 4-space block sized for grep-ing through compiled
+ * bundles) and NOT the canonical 4-space `renderJson` artifact that
+ * init/convert emit. extract output is for human inspection, not
+ * re-ingestion, so it favours terseness over byte-for-byte canonical form.
+ */
 const EXTRACT_JSON_INDENT = 2;
 
 /** Option grammar for `extract`: just `-o/--output <path>`. */
@@ -55,11 +61,11 @@ export function parseExtractArgs(argv: readonly string[]): ExtractArgs {
 
 /**
  * Execute the extract command under the shared contract: write the
- * extracted JSON and report it to stdout, returning 0. Handled failures
- * throw a `RosettaError` the router formats under the `rosetta extract:`
- * prefix.
+ * extracted JSON and return the success message (the router prints it
+ * under the uniform `rosetta extract:` prefix). Handled failures throw a
+ * `RosettaError` the router formats under the same prefix.
  */
-export async function runExtract(argv: readonly string[], io: CommandIo): Promise<number> {
+export async function runExtract(argv: readonly string[], io: CommandIo): Promise<string> {
     const args = parseExtractArgs(argv);
     // Reject NUL in the output path (content-derived path containment is
     // not applied here: operator-supplied -o may legitimately point outside
@@ -85,6 +91,5 @@ export async function runExtract(argv: readonly string[], io: CommandIo): Promis
         throw new RosettaError(`cannot write output ${args.output}: ${errorMessage(err)}`);
     }
 
-    io.stdout(`extract: wrote ${args.output} (${parsed.kind})`);
-    return 0;
+    return `wrote ${args.output} (${parsed.kind})`;
 }

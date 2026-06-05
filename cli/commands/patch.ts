@@ -135,11 +135,11 @@ function loadMapForPatch(jsonText: string): RosettaMap | RosettaMapRegistry {
 
 /**
  * Execute the patch command under the shared contract: rewrite the
- * embedded map and report the written path to stdout, returning 0.
- * Handled failures throw a `RosettaError` the router formats under the
- * `rosetta patch:` prefix.
+ * embedded map and return the success message (the router prints it under
+ * the uniform `rosetta patch:` prefix). Handled failures throw a
+ * `RosettaError` the router formats under the same prefix.
  */
-export async function runPatch(argv: readonly string[], io: CommandIo): Promise<number> {
+export async function runPatch(argv: readonly string[], io: CommandIo): Promise<string> {
     const args = parsePatchArgs(argv);
     // Reject NUL in the output path. Containment to the project tree is
     // NOT applied: operator-supplied -o (and the in-place default) may
@@ -173,6 +173,5 @@ export async function runPatch(argv: readonly string[], io: CommandIo): Promise<
     }
 
     const inPlace = args.output === args.bundle;
-    io.stdout(`patch: wrote ${args.output}${inPlace ? ' (in place)' : ''}`);
-    return 0;
+    return `wrote ${args.output}${inPlace ? ' (in place)' : ''}`;
 }
