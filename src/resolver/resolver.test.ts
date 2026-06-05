@@ -146,6 +146,12 @@ describe('ResolverImpl.resolveClass', () => {
         expect(h.resolver.hasClass('com.example.app.IRemoteService$Stub')).toBe(true);
         expect(h.resolver.hasClass('com.example.app.IMissing')).toBe(false);
     });
+
+    it('hasClass returns true for an overridden class not in the original map', () => {
+        expect(h.resolver.hasClass('com.example.app.NewClass')).toBe(false);
+        h.resolver.override('com.example.app.NewClass', { obfuscated: 'xxxx' });
+        expect(h.resolver.hasClass('com.example.app.NewClass')).toBe(true);
+    });
 });
 
 describe('ResolverImpl.resolveMethod', () => {

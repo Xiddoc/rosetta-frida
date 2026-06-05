@@ -81,9 +81,14 @@ describe('EventBus.emit — listener isolation', () => {
     it('isolates a throwing trace formatter from listeners', () => {
         const bus = new EventBus();
         bus.setTrace(true);
-        // Force console.error (used by traceWrite) to throw the first time.
-        const spy = vi.spyOn(console, 'error').mockImplementationOnce(() => {
-            throw new Error('trace boom');
+        // Force console.error (used by traceWrite) to throw the FIRST time, but
+        // swallow any later calls so the isolation path's own "listener threw"
+        // console.error doesn't leak to real stderr (it would otherwise pollute
+        // CI output even though the test passes).
+        let calls = 0;
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {
+            calls += 1;
+            if (calls === 1) throw new Error('trace boom');
         });
         let delivered = false;
         bus.on(() => {
@@ -93,6 +98,7 @@ describe('EventBus.emit — listener isolation', () => {
             bus.emit({ type: 'detect', app: 'a', version: '1', source: 'auto' }),
         ).not.toThrow();
         expect(delivered).toBe(true);
+        expect(spy).toHaveBeenCalled();
         spy.mockRestore();
     });
 });
