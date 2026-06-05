@@ -24,6 +24,7 @@ interface SessionOptions {
     trace?: boolean;                          // default: false
     healthCheckThreshold?: number;            // default: 0.8
     skipHealthCheck?: boolean;                // default: false
+    enforceSigner?: boolean;                  // default: true (secure default)
 }
 ```
 
@@ -140,6 +141,24 @@ session reports `healthy: true` regardless. Use only in tests or when
 your hook does not depend on the mapped classes being live yet
 (e.g., late-loaded plugins).
 
+### `enforceSigner`
+
+Whether to enforce the map's signing-certificate authenticity guard
+(`signer_sha256`) at attach time. Default `true` — the secure default.
+
+When the loaded map carries a `signer_sha256` and `enforceSigner` is
+not `false`, the session reads the running app's signing certificate
+**in-process** (see [Signer enforcement](#signer-enforcement)),
+SHA-256's it, and **fails closed** with
+[`SignerMismatchError`](../reference/errors.md#signermismatcherror) if
+no live signer matches. When the map has no `signer_sha256`, the check
+is skipped regardless of this flag (and no `signer-check` event is
+emitted).
+
+Set to `false` to opt out — e.g. when attaching to a locally re-signed
+debug build of an app whose map was captured from the production-signed
+APK.
+
 ## Return value — `Session`
 
 ```typescript
@@ -171,6 +190,7 @@ sequenceDiagram
     participant S as RosettaSession ctor
     participant D as detectAppAndVersion
     participant P as pickMapForVersion
+    participant G as checkSigner
     participant H as runHealthCheck
     participant R as createResolver
 
@@ -182,6 +202,14 @@ sequenceDiagram
     P-->>S: { map, fuzzy?, registryKey? }
     Note over S: cross-check map.app; version_code (or label) acceptable
     Note over S: emit 'map-load' event
+    opt map.signer_sha256 set AND enforceSigner!=false
+        S->>G: checkSigner(map.signer_sha256)
+        G-->>S: { passed, expected, actual, source }
+        Note over S: emit 'signer-check' event
+        opt !passed
+            S--xU: throw SignerMismatchError
+        end
+    end
     alt skipHealthCheck=false
         S->>H: runHealthCheck(map, threshold)
         H-->>S: { passed, rate, failedEntries }
@@ -195,9 +223,10 @@ sequenceDiagram
     S-->>U: Session
 ```
 
-The session emits four events as it spins up — `detect`,
-`map-load`, `health-check`, and `resolve` events as your hooks
-exercise the resolver. Subscribe via
+The session emits a sequence of events as it spins up — `detect`,
+`map-load`, an optional `signer-check` (only when the map carries a
+`signer_sha256` and enforcement is on), `health-check`, and `resolve`
+events as your hooks exercise the resolver. Subscribe via
 [`rosetta.events.on(...)`](tier-3.md#rosettaevents).
 
 ## Errors
@@ -205,6 +234,7 @@ exercise the resolver. Subscribe via
 | Error | When |
 |---|---|
 | [`MapVersionMismatchError`](../reference/errors.md#mapversionmismatcherror) | The picked map's `(app, version)` does not match the detected `(app, version)`. Includes a hint about `versionMatch: 'fuzzy'` if applicable. |
+| [`SignerMismatchError`](../reference/errors.md#signermismatcherror) | The map carries a `signer_sha256`, enforcement is on, and no live signing certificate matched. Carries `expected` + `actual` hashes. Override with `enforceSigner: false`. |
 | [`HealthCheckFailedError`](../reference/errors.md#healthcheckfailederror) | Health check failed and `failurePolicy === 'strict'`. |
 | `Error` ("no map for version …") | Registry has no exact-version entry and `versionMatch !== 'fuzzy'`. |
 | `Error` ("registry is empty") | Registry has no entries at all. |
@@ -266,6 +296,70 @@ rosetta.events.onType('health-check', (e) => {
 
 See [Events reference](../reference/events.md#healthcheckevent) for
 the full event shape.
+
+## Signer enforcement
+
+When the loaded map carries a `signer_sha256` (the SHA-256 of the APK
+**signing certificate**, not the APK bytes) and `enforceSigner` is not
+`false`, the session verifies the running app was actually signed by
+the expected party **before** any hook installs. This is the
+authenticity half of the "right map for the right app" guarantee
+(RFC 0001 Decision 3): it stops a map from being silently applied to a
+**repackaged or spoofed** build that merely shares the same
+`version_code`.
+
+The read mirrors the auto-detect chain but asks `PackageManager` for
+signing info instead of versions:
+
+```typescript
+const pm = ctx.getPackageManager();
+// API 28+ — the v2/v3 signing block:
+let info = pm.getPackageInfo(pkg, PackageManager.GET_SIGNING_CERTIFICATES);
+let signers = info.signingInfo.value.getApkContentsSigners();
+// pre-28 fallback — the deprecated signatures array:
+if (!signers) signers = pm.getPackageInfo(pkg, PackageManager.GET_SIGNATURES).signatures.value;
+// each Signature → SHA-256(cert bytes) → lowercase, colon-free hex
+```
+
+Behaviour:
+
+- **Match** — at least one live signer's SHA-256 equals the map's
+  `signer_sha256`. The session emits a passing `signer-check` event and
+  proceeds.
+- **Mismatch** — no live signer matches. The session emits a failing
+  `signer-check` event and **fails closed** with
+  [`SignerMismatchError`](../reference/errors.md#signermismatcherror)
+  (carrying the `expected` hash and every `actual` live hash). Unlike
+  the health check, this is *not* gated by `failurePolicy` — an
+  authenticity failure always halts, because the whole point is to
+  refuse a map that does not belong to the running app.
+- **Field absent** — the map has no `signer_sha256`. The check is
+  skipped and no `signer-check` event is emitted.
+- **Opted out** — `enforceSigner: false`. Same as field-absent: skipped
+  and silent.
+
+**Multiple signers.** An APK may be signed by more than one certificate
+(e.g. a signing-key rotation lineage). The check hashes every signer
+and accepts a match on **any** one — requiring all to match would
+reject legitimate key-rotation builds, and a single trusted-signer
+match already establishes "this build was signed by the expected
+party."
+
+**Normalization.** Both the map's `signer_sha256` and the live hashes
+are normalized before comparison — lowercased, with colon separators
+and whitespace stripped — so a map authored as `AB:CD:...` compares
+equal to the runtime bytes.
+
+```typescript
+rosetta.events.onType('signer-check', (e) => {
+    if (!e.passed) {
+        send({ stage: 'signer-mismatch', expected: e.expected, actual: e.actual });
+    }
+});
+```
+
+See [Events reference](../reference/events.md#signercheckevent) for the
+full event shape.
 
 ## Switching sessions
 

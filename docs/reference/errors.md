@@ -15,6 +15,7 @@ import {
     MapValidationError,
     JsonParseError,
     MapVersionMismatchError,
+    SignerMismatchError,
     HealthCheckFailedError,
     MarkerBlockError,
     UnresolvedAccessError,
@@ -203,6 +204,44 @@ versionMatch: 'fuzzy'.`
 
 - `rosetta.session({ map })` when the map's `app`/`version` doesn't
   match the detected pair (and `versionMatch` is not `'fuzzy'`).
+
+## `SignerMismatchError`
+
+The loaded map carries a `signer_sha256`, enforcement is on
+(`enforceSigner !== false`), and **no** live signing certificate
+matched the expected hash. This is a fail-closed authenticity guard
+(RFC 0001 Decision 3) — it is **not** gated by `failurePolicy`; an
+authenticity failure always halts.
+
+```typescript
+class SignerMismatchError extends RosettaError {
+    readonly app: string;
+    readonly expected: string;
+    readonly actual: readonly string[];
+}
+```
+
+| Field | Description |
+|---|---|
+| `app` | The session's detected/supplied app package name. |
+| `expected` | The map's `signer_sha256`, normalized (lowercase, no colons). |
+| `actual` | Every live signing-certificate SHA-256 observed (normalized). May contain more than one when the app has multiple signers. |
+
+**Example message:** `rosetta-frida: signer mismatch for
+com.example.app — the loaded map (com.example.app@3.4.5) expects
+signing-certificate SHA-256 ab… , but the running app is signed by
+[cd…]. Refusing to apply a map to an app it was not captured for (pass
+enforceSigner: false to override).`
+
+**When fired:**
+
+- `rosetta.session({ map })` when the map has a `signer_sha256`, the
+  flag is on, and the live signer(s) don't match.
+
+The check is **skipped** (and no error is possible) when the map has no
+`signer_sha256` or when `enforceSigner: false`. A match on **any** one
+of several live signers passes. See
+[API · Session · Signer enforcement](../api/session.md#signer-enforcement).
 
 ## `HealthCheckFailedError`
 

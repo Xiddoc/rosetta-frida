@@ -76,6 +76,7 @@ describe('sample-hook example', () => {
                 map,
                 app: 'com.example.app',
                 version: '3.4.5',
+                enforceSigner: false,
                 skipHealthCheck: true,
             });
             expect(session.app).toBe('com.example.app');
@@ -127,6 +128,7 @@ describe('sample-hook example', () => {
                 map,
                 app: 'com.example.app',
                 version: '3.4.5',
+                enforceSigner: false,
                 skipHealthCheck: true,
             });
 
@@ -153,6 +155,7 @@ describe('sample-hook example', () => {
                 map,
                 app: 'com.example.app',
                 version: '3.4.5',
+                enforceSigner: false,
                 skipHealthCheck: true,
             });
 
@@ -169,6 +172,7 @@ describe('sample-hook example', () => {
                 map,
                 app: 'com.example.app',
                 version: '3.4.5',
+                enforceSigner: false,
                 skipHealthCheck: true,
             });
             const Stub = rosetta.use('com.example.app.IRemoteService$Stub');
@@ -183,6 +187,7 @@ describe('sample-hook example', () => {
                 map,
                 app: 'com.example.app',
                 version: '3.4.5',
+                enforceSigner: false,
                 skipHealthCheck: true,
             });
             const blobCache = rosetta.map.resolveClass('com.example.app.BlobCache');
@@ -195,6 +200,7 @@ describe('sample-hook example', () => {
                 map,
                 app: 'com.example.app',
                 version: '3.4.5',
+                enforceSigner: false,
                 skipHealthCheck: true,
             });
             const names: string[] = [];

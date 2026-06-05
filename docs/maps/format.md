@@ -53,7 +53,7 @@ interface RosettaMap {
 | Field | Type | Description |
 |---|---|---|
 | `captured_at` | ISO date string | When the map was captured. Useful when reading old maps to know how stale they are. |
-| `signer_sha256` | SHA-256 hex | Authenticity guard — the SHA-256 of the APK *signing certificate* (not the APK bytes). Cheap to verify on-device via PackageManager; guards against loading a map for a repackaged/spoofed app. Not enforced at runtime in V1; reserved for the trust workflow. |
+| `signer_sha256` | SHA-256 hex | Authenticity guard — the SHA-256 of the APK *signing certificate* (not the APK bytes). Cheap to verify on-device via PackageManager; guards against loading a map for a repackaged/spoofed app. **Enforced at attach time:** when present, `rosetta.session(...)` reads the live app's signing certificate in-process and fails closed (`SignerMismatchError`) on a mismatch. Opt out with `enforceSigner: false`. See [API · Session](../api/session.md#signer-enforcement). |
 | `frida_min_version`, `frida_max_version` | semver | The Frida runtime range this map is known to work with. Not enforced at runtime in V1; emitted as metadata. |
 | `sources` | `MapSource[]` | Provenance per tool. See [Provenance](#provenance). |
 

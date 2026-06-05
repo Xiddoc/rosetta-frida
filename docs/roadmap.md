@@ -85,22 +85,30 @@ These close out the app-identity work that landed the `version_code` and
 ### On-device `signer_sha256` enforcement
 
 - **Purpose.** The schema carries an optional `signer_sha256` (the hash
-  of the APK signing certificate), but nothing reads it at runtime yet.
-  Wire the session attach path to read the running app's signing
-  certificate (via `PackageManager` signing info), hash it, and compare
-  it against `map.signer_sha256` when the field is present.
+  of the APK signing certificate); the session attach path now reads the
+  running app's signing certificate (via `PackageManager` signing info),
+  hashes it, and compares it against `map.signer_sha256` when the field
+  is present.
 - **Benefit.** Turns the field from documentation into a real trust
   gate: a map cannot be silently applied to a **repackaged or spoofed**
   build that happens to share the same `version_code`. This is the
   authenticity half of the "right map for the right app" guarantee.
-- **Scope / dependencies.** Extend `src/session/auto-detect.ts` (or a
-  sibling) to read signing certs; add a comparison step + a new failure
-  mode in `src/session/session.ts`; surface a `Config`/`SessionOptions`
-  opt-out (`verifySigner?: boolean`, default on when the field is
-  present). New error type or reuse `MapVersionMismatchError`'s sibling.
-  Needs Frida-mock support for the signing API.
-- **Status.** planned. The field, adapter option, and sample data
-  already shipped; only the runtime guard remains.
+- **What shipped.** A sibling module `src/session/signer-detect.ts`
+  reads signers in-process (`GET_SIGNING_CERTIFICATES` →
+  `signingInfo.apkContentsSigners` on API 28+, `GET_SIGNATURES` →
+  `packageInfo.signatures` as the pre-28 fallback), SHA-256's each
+  certificate via `java.security.MessageDigest`, and normalizes to
+  lowercase colon-free hex. The session compares after version selection
+  and before the health check, **fails closed** with the new
+  `SignerMismatchError`, and emits a structured `signer-check`
+  diagnostic event. An app may carry multiple signers (key-rotation
+  lineage); a match on **any** one is accepted. The
+  `SessionOptions.enforceSigner` knob (default `true`, the secure
+  default) opts out; the check is skipped entirely when the map has no
+  `signer_sha256`.
+- **Status.** **done** (V1.5). Reference: [`api/session.md`](api/session.md),
+  [`reference/errors.md`](reference/errors.md),
+  [`reference/events.md`](reference/events.md).
 
 ### `rosetta migrate` + schema migrators
 

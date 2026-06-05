@@ -186,6 +186,7 @@ interface SessionOptions {
     trace?: boolean;
     healthCheckThreshold?: number;
     skipHealthCheck?: boolean;
+    enforceSigner?: boolean; // default true — fail closed on signer_sha256 mismatch
 }
 ```
 
@@ -448,10 +449,15 @@ Defined in `src/types/events.ts`. See
 ### `DiagnosticEvent`
 
 ```typescript
-type DiagnosticEvent = ResolveEvent | HealthCheckEvent | DetectEvent | MapLoadEvent;
+type DiagnosticEvent =
+    | ResolveEvent
+    | HealthCheckEvent
+    | DetectEvent
+    | MapLoadEvent
+    | SignerCheckEvent;
 ```
 
-Tagged union over the four event kinds.
+Tagged union over the five event kinds.
 
 ### `ResolveEvent`
 
@@ -501,6 +507,22 @@ interface MapLoadEvent {
     schemaVersion: number;
 }
 ```
+
+### `SignerCheckEvent`
+
+```typescript
+interface SignerCheckEvent {
+    type: 'signer-check';
+    passed: boolean;
+    app: string;
+    expected: string;
+    actual: readonly string[];
+    source: 'signingInfo' | 'signatures';
+}
+```
+
+Emitted only when the map carries a `signer_sha256` and enforcement is
+on. See [Events reference](events.md#signercheckevent).
 
 ### `EventListener`
 

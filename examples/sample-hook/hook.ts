@@ -47,6 +47,13 @@ Java.perform(() => {
         // In a real script you'd typically pick 'warn' for production
         // and 'strict' for CI. Default is 'warn'.
         failurePolicy: 'warn',
+        // Signer-certificate authenticity guard. When the map carries a
+        // `signer_sha256`, the session reads the live app's signing cert
+        // in-process and FAILS CLOSED on a mismatch (default on). The
+        // sample map ships a placeholder (all-zeros) signer, so we opt out
+        // here; a real map captured from the production APK carries the
+        // real hash and you'd leave this on. See docs/api/session.md.
+        enforceSigner: false,
     });
 
     // ----------------------------------------------------------------
