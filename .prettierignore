@@ -17,3 +17,8 @@ mkdocs.yml
 # canonical maps/ tree is ignored for the same reason — both are guarded
 # instead by `npm run schema-version:check`.
 tests/fixtures/test-app/expected/
+# VENDORED cross-client conformance fixtures (copied verbatim from
+# rosetta-xposed; see tests/conformance/README.md). They must stay
+# byte-identical to the canonical source so the parity oracle does not
+# silently fork — prettier must not reformat them.
+tests/conformance/fixtures/
