@@ -3,9 +3,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type * as fsMod from 'node:fs/promises';
 import { parseConvertArgs, runConvert } from '../../cli/commands/convert.js';
 import { RosettaError } from '../../src/errors.js';
+import type { FsLike } from '../../cli/commands/io.js';
+import { makeFakeFs, makeFsLike, type FakeFs } from './helpers.js';
 
 const VALID_YAML = `
 schema_version: 2
@@ -17,36 +18,12 @@ classes:
     obfuscated: aaaa
 `;
 
-function enoent(p: string): NodeJS.ErrnoException {
-    const err = new Error(`ENOENT: ${p}`) as NodeJS.ErrnoException;
-    err.code = 'ENOENT';
-    return err;
-}
-
 function makeFs(initial: Record<string, string> = {}): {
-    fs: typeof fsMod;
+    fs: FsLike;
     files: Map<string, string>;
 } {
-    const files = new Map<string, string>(Object.entries(initial));
-    const fs = {
-        readFile(p: string) {
-            const v = files.get(p);
-            return v === undefined ? Promise.reject(enoent(p)) : Promise.resolve(v);
-        },
-        writeFile(p: string, content: string) {
-            files.set(p, content);
-            return Promise.resolve();
-        },
-        mkdir() {
-            return Promise.resolve(undefined);
-        },
-        stat(p: string) {
-            return files.has(p)
-                ? Promise.resolve({ isFile: () => true } as fsMod.Stats)
-                : Promise.reject(enoent(p));
-        },
-    } as unknown as typeof fsMod;
-    return { fs, files };
+    const fake: FakeFs = makeFakeFs(initial);
+    return { fs: makeFsLike(fake), files: fake.files };
 }
 
 describe('parseConvertArgs', () => {

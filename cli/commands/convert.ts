@@ -17,11 +17,12 @@
  * as `rosetta init`'s default) are separately contained to the project tree.
  */
 
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
 import { convertToJson, yamlToMap, refuseModuleInput } from '../../src/convert/index.js';
 import { assertNoNul } from '../../src/parse/index.js';
+import type { FsLike } from './io.js';
+import { ensureDir, fileExists } from './io.js';
 
 export interface ConvertOptions {
     inputPath: string;
@@ -64,7 +65,7 @@ export function parseConvertArgs(argv: readonly string[]): ConvertOptions {
 }
 
 /** Run `rosetta convert`. Returns the absolute output path on success. */
-export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs): Promise<string> {
+export async function runConvert(argv: readonly string[], fs: FsLike): Promise<string> {
     const opts = parseConvertArgs(argv);
     assertNoNul(opts.inputPath);
     // Reject NUL in the output path. Containment to the project tree is NOT
@@ -74,7 +75,7 @@ export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs
     assertNoNul(opts.outputPath);
     const ext = path.extname(opts.inputPath).toLowerCase();
 
-    if (!opts.force && (await fileExists(opts.outputPath, fsImpl))) {
+    if (!opts.force && (await fileExists(fs, opts.outputPath))) {
         throw new RosettaError(
             `refusing to overwrite existing file: ${opts.outputPath} (pass --force to overwrite)`,
         );
@@ -82,7 +83,7 @@ export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs
 
     let json: string;
     if (ext === '.yaml' || ext === '.yml') {
-        const raw = await fsImpl.readFile(opts.inputPath, 'utf8');
+        const raw = await fs.readFile(opts.inputPath, 'utf8');
         json = await convertToJson(raw, 'yaml');
     } else if (ext === '.ts' || ext === '.js' || ext === '.mjs' || ext === '.cjs') {
         // Maps are pure data — never import a contributor-supplied module.
@@ -93,18 +94,9 @@ export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs
         throw new RosettaError(`unsupported input format: ${ext} (path: ${opts.inputPath})`);
     }
 
-    await fsImpl.mkdir(path.dirname(opts.outputPath), { recursive: true });
-    await fsImpl.writeFile(opts.outputPath, json, 'utf8');
+    await ensureDir(fs, path.dirname(opts.outputPath));
+    await fs.writeFile(opts.outputPath, json, 'utf8');
     return opts.outputPath;
-}
-
-async function fileExists(p: string, fsImpl: typeof fs): Promise<boolean> {
-    try {
-        await fsImpl.stat(p);
-        return true;
-    } catch {
-        return false;
-    }
 }
 
 // Re-export for tests that want to round-trip through the same entry that the

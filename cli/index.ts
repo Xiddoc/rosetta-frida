@@ -18,7 +18,7 @@
  * trivial routing.
  */
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 
 import { RosettaError } from '../src/errors.js';
 import { runExtract } from './commands/extract.js';
@@ -65,18 +65,18 @@ async function dispatch(cmd: Command, args: readonly string[], io: CommandIo): P
     try {
         switch (cmd) {
             case 'init': {
-                const out = await runInit(args);
+                const out = await runInit(args, io.fs);
                 io.stdout(`wrote ${out}`);
                 return 0;
             }
             case 'validate': {
-                const result = await runValidate(args);
+                const result = await runValidate(args, io.fs);
                 const write = result.ok ? io.stdout : io.stderr;
                 for (const line of result.output) write(line);
                 return result.ok ? 0 : 1;
             }
             case 'convert': {
-                const out = await runConvert(args);
+                const out = await runConvert(args, io.fs);
                 io.stdout(`wrote ${out}`);
                 return 0;
             }
@@ -93,7 +93,7 @@ async function dispatch(cmd: Command, args: readonly string[], io: CommandIo): P
 
 async function main(): Promise<number> {
     const io: CommandIo = {
-        fs: { readFile, writeFile },
+        fs: { readFile, writeFile, mkdir, stat },
         stdout: (line) => process.stdout.write(line + '\n'),
         stderr: (line) => process.stderr.write(line + '\n'),
     };

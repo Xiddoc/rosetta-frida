@@ -8,10 +8,15 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type * as fsMod from 'node:fs/promises';
 import * as path from 'node:path';
 import { parseValidateArgs, loadMap, runValidate } from '../../cli/commands/validate.js';
 import { RosettaError } from '../../src/errors.js';
+import type { FsLike } from '../../cli/commands/io.js';
+import { makeFakeFs, makeFsLike } from './helpers.js';
+
+// The committed sample map is validated against the real filesystem; that
+// one case needs the production fs (read-only).
+import * as realFs from 'node:fs/promises';
 
 const VALID_JSON = `{
     "schema_version": 2,
@@ -33,20 +38,8 @@ classes:
     obfuscated: aaaa
 `;
 
-function enoent(p: string): NodeJS.ErrnoException {
-    const err = new Error(`ENOENT: ${p}`) as NodeJS.ErrnoException;
-    err.code = 'ENOENT';
-    return err;
-}
-
-function makeFs(initial: Record<string, string>): typeof fsMod {
-    const files = new Map<string, string>(Object.entries(initial));
-    return {
-        readFile(p: string) {
-            const v = files.get(p);
-            return v === undefined ? Promise.reject(enoent(p)) : Promise.resolve(v);
-        },
-    } as unknown as typeof fsMod;
+function makeFs(initial: Record<string, string>): FsLike {
+    return makeFsLike(makeFakeFs(initial));
 }
 
 describe('parseValidateArgs', () => {
@@ -175,20 +168,17 @@ describe('runValidate', () => {
             '..',
             'maps/com.example.app/3.4.5.json',
         );
-        const result = await runValidate([sample]);
+        const result = await runValidate([sample], realFs);
         expect(result.ok).toBe(true);
     });
 });
 
 describe('validate error wrapping', () => {
     it('wraps unknown errors with FAIL prefix', async () => {
-        const fs = {
-            readFile() {
-                // Plain non-Rosetta error.
-                return Promise.reject(new Error('boom'));
-            },
-        } as unknown as typeof fsMod;
-        const result = await runValidate(['/x.json'], fs);
+        // Inject a non-Rosetta read error via the FakeFs error map.
+        const fake = makeFakeFs({});
+        fake.readErrors.set('/x.json', new Error('boom'));
+        const result = await runValidate(['/x.json'], makeFsLike(fake));
         expect(result.ok).toBe(false);
         expect(result.output[0]).toContain('FAIL');
     });

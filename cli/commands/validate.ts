@@ -10,13 +10,13 @@
  * build-time RCE), never imported.
  */
 
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError, MapValidationError } from '../../src/errors.js';
 import { yamlToMap, refuseModuleInput, validateStructure } from '../../src/convert/index.js';
 import { parseJson } from '../../src/parse/json.js';
 import { assertNoNul } from '../../src/parse/index.js';
 import type { RosettaMap } from '../../src/types/map.js';
+import type { FsLike } from './io.js';
 
 export interface ValidateOptions {
     inputPath: string;
@@ -43,11 +43,11 @@ export function parseValidateArgs(argv: readonly string[]): ValidateOptions {
  * Load a map from the filesystem, auto-detecting format from the path's
  * extension.
  */
-export async function loadMap(inputPath: string, fsImpl: typeof fs = fs): Promise<RosettaMap> {
+export async function loadMap(inputPath: string, fs: FsLike): Promise<RosettaMap> {
     assertNoNul(inputPath);
     const ext = path.extname(inputPath).toLowerCase();
     if (ext === '.json') {
-        const raw = await fsImpl.readFile(inputPath, 'utf8');
+        const raw = await fs.readFile(inputPath, 'utf8');
         let parsed: unknown;
         try {
             parsed = parseJson(raw);
@@ -57,7 +57,7 @@ export async function loadMap(inputPath: string, fsImpl: typeof fs = fs): Promis
         return validateStructure(parsed);
     }
     if (ext === '.yaml' || ext === '.yml') {
-        const raw = await fsImpl.readFile(inputPath, 'utf8');
+        const raw = await fs.readFile(inputPath, 'utf8');
         return yamlToMap(raw);
     }
     if (ext === '.ts' || ext === '.js' || ext === '.mjs' || ext === '.cjs') {
@@ -79,14 +79,11 @@ export interface ValidateResult {
  * Run `rosetta validate`. Returns a result with the textual output to
  * print and an `ok` flag the caller turns into an exit code.
  */
-export async function runValidate(
-    argv: readonly string[],
-    fsImpl: typeof fs = fs,
-): Promise<ValidateResult> {
+export async function runValidate(argv: readonly string[], fs: FsLike): Promise<ValidateResult> {
     const opts = parseValidateArgs(argv);
     let map: RosettaMap;
     try {
-        map = await loadMap(opts.inputPath, fsImpl);
+        map = await loadMap(opts.inputPath, fs);
     } catch (e) {
         return { ok: false, output: formatError(opts.inputPath, e) };
     }

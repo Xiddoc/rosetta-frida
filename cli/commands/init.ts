@@ -13,7 +13,6 @@
  * Refuses to overwrite an existing file unless `--force` is passed.
  */
 
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
 import { CURRENT_SCHEMA_VERSION } from '../../src/types/map.js';
@@ -23,6 +22,8 @@ import {
     assertContained,
     assertNoNul,
 } from '../../src/parse/index.js';
+import type { FsLike } from './io.js';
+import { ensureDir, fileExists } from './io.js';
 
 export interface InitOptions {
     app: string;
@@ -125,7 +126,7 @@ export function defaultOutputPath(app: string, version: string): string {
  * @throws RosettaError if the target already exists and `--force` was
  * not passed.
  */
-export async function runInit(argv: readonly string[], fsImpl: typeof fs = fs): Promise<string> {
+export async function runInit(argv: readonly string[], fs: FsLike): Promise<string> {
     const opts = parseInitArgs(argv);
     // Validate the identity tokens BEFORE they are interpolated into a path.
     assertValidApp(opts.app);
@@ -142,21 +143,12 @@ export async function runInit(argv: readonly string[], fsImpl: typeof fs = fs): 
         // final backstop against any edge-case traversal.
         assertContained(outPath);
     }
-    if (!opts.force && (await fileExists(outPath, fsImpl))) {
+    if (!opts.force && (await fileExists(fs, outPath))) {
         throw new RosettaError(
             `refusing to overwrite existing file: ${outPath} (pass --force to overwrite)`,
         );
     }
-    await fsImpl.mkdir(path.dirname(outPath), { recursive: true });
-    await fsImpl.writeFile(outPath, renderSkeleton(opts.app, opts.version), 'utf8');
+    await ensureDir(fs, path.dirname(outPath));
+    await fs.writeFile(outPath, renderSkeleton(opts.app, opts.version), 'utf8');
     return outPath;
-}
-
-async function fileExists(p: string, fsImpl: typeof fs): Promise<boolean> {
-    try {
-        await fsImpl.stat(p);
-        return true;
-    } catch {
-        return false;
-    }
 }

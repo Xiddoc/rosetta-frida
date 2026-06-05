@@ -6,7 +6,6 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type * as fsMod from 'node:fs/promises';
 import {
     parseInitArgs,
     renderSkeleton,
@@ -14,43 +13,21 @@ import {
     runInit,
 } from '../../cli/commands/init.js';
 import { RosettaError } from '../../src/errors.js';
-
-function enoent(p: string): NodeJS.ErrnoException {
-    const err = new Error(`ENOENT: ${p}`) as NodeJS.ErrnoException;
-    err.code = 'ENOENT';
-    return err;
-}
+import type { FsLike } from '../../cli/commands/io.js';
+import { makeFakeFs, makeFsLike, type FakeFs } from './helpers.js';
 
 /**
- * Minimal in-memory fs that backs the subset of node:fs/promises that
- * runInit uses. Returns a `Promise.reject(...)` with `ENOENT` for missing
- * files (so `stat` mimics the real behavior). Each operation returns
- * a Promise directly rather than being an async function, so eslint's
- * `require-await` doesn't complain.
+ * Build a fully-typed `FsLike` (no casts) backed by the shared in-memory
+ * FakeFs. Returns the live `files` / `dirsCreated` views so assertions
+ * can inspect post-run state.
  */
 function makeFs(initial: Record<string, string> = {}): {
-    fs: typeof fsMod;
+    fs: FsLike;
     files: Map<string, string>;
     dirsCreated: string[];
 } {
-    const files = new Map<string, string>(Object.entries(initial));
-    const dirsCreated: string[] = [];
-    const fs = {
-        stat(p: string) {
-            return files.has(p)
-                ? Promise.resolve({ isFile: () => true } as fsMod.Stats)
-                : Promise.reject(enoent(p));
-        },
-        mkdir(p: string) {
-            dirsCreated.push(p);
-            return Promise.resolve(undefined);
-        },
-        writeFile(p: string, content: string) {
-            files.set(p, content);
-            return Promise.resolve();
-        },
-    } as unknown as typeof fsMod;
-    return { fs, files, dirsCreated };
+    const fake: FakeFs = makeFakeFs(initial);
+    return { fs: makeFsLike(fake), files: fake.files, dirsCreated: fake.dirsCreated };
 }
 
 describe('parseInitArgs', () => {
