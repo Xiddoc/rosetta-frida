@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import {
     HealthCheckFailedError,
+    MalformedSignerError,
     MapVersionMismatchError,
     MissingSignerError,
     SignerMismatchError,
@@ -162,6 +163,24 @@ describe('selectAndVerifyStage', () => {
         if (!result.ok) expect(result.error).toBeInstanceOf(MapVersionMismatchError);
     });
 
+    it('accepts a fuzzy registry pick whose version_code differs from the detected one', () => {
+        // Detection is 1.2.4 / code 4, which matches NO map in the registry by
+        // either code or label. Under 'fuzzy', pickMapForVersion falls back to
+        // the closest label (1.2.3) and marks the pick fuzzy, so
+        // isVersionAcceptable tolerates the code mismatch and the stage is ok.
+        const registry: RosettaMapRegistry = {
+            '1.2.3': buildMap('1.2.3', 'com.example.app', 1),
+            '1.0.0': buildMap('1.0.0', 'com.example.app', 2),
+        };
+        const result = selectAndVerifyStage(
+            { map: registry },
+            { app: 'com.example.app', version: '1.2.4', versionCode: 4, source: 'auto' },
+            'fuzzy',
+        );
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(result.value.version).toBe('1.2.3');
+    });
+
     it('selects by version_code from a registry', () => {
         const registry: RosettaMapRegistry = {
             '1.0.0': buildMap('1.0.0', 'com.example.app', 1),
@@ -268,6 +287,18 @@ describe('runSignerGuard', () => {
         );
         expect(result.ok).toBe(false);
         if (!result.ok) expect(result.error).toBeInstanceOf(SignerMismatchError);
+    });
+
+    it('propagates MalformedSignerError from checkSigner without wrapping', () => {
+        // An ill-formed map hash is a defect in the artifact, not a spoof, so
+        // checkSigner throws MalformedSignerError BEFORE reading live signers;
+        // runSignerGuard must let it propagate (only NoSignerReadableError is
+        // converted to MissingSignerError). The hash bypasses the schema regex
+        // because this stage test builds the map object directly.
+        const map = { ...buildMap(), signer_sha256: 'not-valid-hex' };
+        expect(() => runSignerGuard(map, 'com.example.app', { map }, new EventBus())).toThrow(
+            MalformedSignerError,
+        );
     });
 
     it('returns MissingSignerError when the app exposes no readable signer', () => {
