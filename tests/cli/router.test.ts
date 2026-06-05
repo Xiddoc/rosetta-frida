@@ -82,7 +82,8 @@ describe('route — dispatch happy paths', () => {
         const captured = makeCaptured();
         const code = await route(['inspect', 'b.js'], makeIo(fs, captured));
         expect(code).toBe(EXIT_OK);
-        expect(captured.stdout[0]).toMatch(/com\.example\.app@1\.0\.0/);
+        // Success output is prefixed per verb, mirroring the error path.
+        expect(captured.stdout[0]).toMatch(/^rosetta inspect: com\.example\.app@1\.0\.0/);
     });
 
     it('routes extract and exits 0', async () => {
@@ -98,7 +99,7 @@ describe('route — dispatch happy paths', () => {
         const captured = makeCaptured();
         const code = await route(['patch', 'b.js', '--map', 'n.json'], makeIo(fs, captured));
         expect(code).toBe(EXIT_OK);
-        expect(captured.stdout[0]).toMatch(/in place/);
+        expect(captured.stdout[0]).toMatch(/^rosetta patch: wrote .* \(in place\)$/);
     });
 
     it('routes init and exits 0', async () => {
@@ -110,7 +111,7 @@ describe('route — dispatch happy paths', () => {
         );
         expect(code).toBe(EXIT_OK);
         expect(fs.files.has('m.json')).toBe(true);
-        expect(captured.stdout[0]).toMatch(/^wrote m\.json/);
+        expect(captured.stdout[0]).toBe('rosetta init: wrote m.json');
     });
 
     it('routes convert and exits 0', async () => {
@@ -128,7 +129,7 @@ describe('route — dispatch happy paths', () => {
         const captured = makeCaptured();
         const code = await route(['validate', 'm.json'], makeIo(fs, captured));
         expect(code).toBe(EXIT_OK);
-        expect(captured.stdout[0]).toMatch(/^OK:/);
+        expect(captured.stdout[0]).toMatch(/^rosetta validate: OK:/);
     });
 });
 
@@ -175,6 +176,18 @@ describe('route — unified failure formatting', () => {
         const code = await route(['convert', 'in.json', '-o', 'o.json'], makeIo(fs, captured));
         expect(code).toBe(EXIT_FAILURE);
         expect(captured.stderr[0]).toMatch(/^rosetta convert: input is already in canonical/);
+    });
+
+    it('formats a validate file-not-found failure under the rosetta validate: prefix, exit 1', async () => {
+        // The only command whose route-level failure path was previously
+        // unexercised. Confirms the uniform prefix + the `cannot read`
+        // wrapping (SHOULD: convert/validate now wrap reads like the rest).
+        const fs = makeFakeFs(); // no m.json seeded
+        const captured = makeCaptured();
+        const code = await route(['validate', 'm.json'], makeIo(fs, captured));
+        expect(code).toBe(EXIT_FAILURE);
+        expect(captured.stdout).toEqual([]);
+        expect(captured.stderr[0]).toMatch(/^rosetta validate: cannot read m\.json/);
     });
 
     it('folds an empty-path validate issue without an "at" prefix', async () => {

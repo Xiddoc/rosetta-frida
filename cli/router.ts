@@ -3,7 +3,10 @@
  * a command, runs it, and enforces the one shared exit-code contract.
  *
  * The contract (see also `cli/commands/io.ts`):
- *   - A command does its own success output via `io.stdout` and returns 0.
+ *   - A command returns its success *message*; the router emits it under
+ *     the uniform `rosetta <command>: <message>` prefix (via
+ *     {@link successLine}) to `io.stdout` and returns 0. Success output is
+ *     greppable per verb, mirroring the error path.
  *   - A command signals a *handled* failure by throwing a `RosettaError`
  *     (or any `Error`); the router catches it, prints `formatErrorLines`
  *     to `io.stderr`, and returns exit code 1.
@@ -16,6 +19,12 @@
  * `cli/index.ts` is a thin shell that builds the production `CommandIo`,
  * calls `route`, and exits with the returned code. All routing logic
  * lives here so it is unit-testable with an in-memory `CommandIo`.
+ *
+ * The six commands are described by ONE table ({@link COMMANDS}): each
+ * entry carries the command's `run` function and its one-line `usage`
+ * text. The command-name union, the usage block, and dispatch are all
+ * derived from that table, so adding a command means editing one place
+ * and the help text can never go stale.
  */
 
 import { runExtract } from './commands/extract.js';
@@ -24,13 +33,54 @@ import { runPatch } from './commands/patch.js';
 import { runInit } from './commands/init.js';
 import { runValidate } from './commands/validate.js';
 import { runConvert } from './commands/convert.js';
-import { formatErrorLines, type CommandIo } from './commands/io.js';
+import { formatErrorLines, successLine, type CommandIo } from './commands/io.js';
 
-const COMMANDS = ['init', 'validate', 'convert', 'patch', 'extract', 'inspect'] as const;
-type Command = (typeof COMMANDS)[number];
+/** A command's run function: argv tail + io → its success message. */
+type CommandRun = (args: readonly string[], io: CommandIo) => Promise<string>;
+
+/** One command's behaviour and help text — the single source of truth. */
+interface CommandEntry {
+    run: CommandRun;
+    /** One-line usage row shown under `Commands:` in the help block. */
+    usage: string;
+}
+
+/**
+ * The command table. The key order is the help-listing order. Every
+ * command appears exactly once; the usage row lives next to the function
+ * it documents so the two can't drift.
+ */
+const COMMANDS = {
+    init: {
+        run: runInit,
+        usage: 'init <app> <version>                 Scaffold a new map skeleton',
+    },
+    validate: {
+        run: runValidate,
+        usage: 'validate <map>                       Schema + sanity check (auto-detect format)',
+    },
+    convert: {
+        run: runConvert,
+        usage: 'convert <in> -o <out>                Convert YAML map to canonical JSON',
+    },
+    patch: {
+        run: runPatch,
+        usage: 'patch <bundle.js> --map <new.json>   Replace embedded map in bundle',
+    },
+    extract: {
+        run: runExtract,
+        usage: 'extract <bundle.js> -o <out.json>    Pull embedded map out of bundle',
+    },
+    inspect: {
+        run: runInspect,
+        usage: 'inspect <bundle.js>                  One-line summary of embedded map',
+    },
+} satisfies Record<string, CommandEntry>;
+
+type Command = keyof typeof COMMANDS;
 
 function isCommand(s: string | undefined): s is Command {
-    return COMMANDS.includes(s as Command);
+    return s !== undefined && s in COMMANDS;
 }
 
 /** Exit codes are a small fixed contract; named for readability. */
@@ -43,31 +93,18 @@ export function printUsage(write: (line: string) => void): void {
     write('Usage: rosetta <command> [options]');
     write('');
     write('Commands:');
-    write('  init <app> <version>                 Scaffold a new map skeleton');
-    write('  validate <map>                       Schema + sanity check (auto-detect format)');
-    write('  convert <in> -o <out>                Convert YAML map to canonical JSON');
-    write('  patch <bundle.js> --map <new.json>   Replace embedded map in bundle');
-    write('  extract <bundle.js> -o <out.json>    Pull embedded map out of bundle');
-    write('  inspect <bundle.js>                  One-line summary of embedded map');
+    for (const entry of Object.values(COMMANDS)) {
+        write(`  ${entry.usage}`);
+    }
 }
 
-/** Dispatch a known command, applying the shared error/exit contract. */
+/** Dispatch a known command, applying the shared success/error contract. */
 async function dispatch(cmd: Command, args: readonly string[], io: CommandIo): Promise<number> {
     try {
-        switch (cmd) {
-            case 'patch':
-                return await runPatch(args, io);
-            case 'extract':
-                return await runExtract(args, io);
-            case 'inspect':
-                return await runInspect(args, io);
-            case 'init':
-                return await runInit(args, io);
-            case 'validate':
-                return await runValidate(args, io);
-            case 'convert':
-                return await runConvert(args, io);
-        }
+        const entry = COMMANDS[cmd];
+        const message = await entry.run(args, io);
+        io.stdout(successLine(cmd, message));
+        return EXIT_OK;
     } catch (err) {
         for (const line of formatErrorLines(cmd, err)) io.stderr(line);
         return EXIT_FAILURE;
