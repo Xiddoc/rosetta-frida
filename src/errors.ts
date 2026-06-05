@@ -82,7 +82,15 @@ export class UnknownArgTypeError extends ResolveError {
         realName: string,
         app: string,
         version: string,
-        classScope: string,
+        /**
+         * Narrows the inherited optional `ResolveError.classScope` to a
+         * required field: an `UnknownArgTypeError` is always raised during
+         * method-overload disambiguation, so the owning class scope is always
+         * known. Mirrors the Kotlin `UnknownArgTypeException`, whose
+         * `classScope: String` is non-null. Callers catching this subtype can
+         * read `classScope` without a null check.
+         */
+        public override readonly classScope: string,
         /** The offending argument type name that is not a known map class. */
         public readonly argType: string,
     ) {
