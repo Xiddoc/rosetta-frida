@@ -383,6 +383,47 @@ if (!result.success) {
 See [Errors — MapValidationError](../reference/errors.md#mapvalidationerror)
 for the error shape.
 
+## Validation limits (security bounds)
+
+A map is untrusted input. To stop a hostile or corrupt map from driving
+unbounded work in the resolver — or shadowing object internals via
+crafted record keys — the validator enforces hard caps that mirror the
+canonical JSON Schema in
+[`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps)
+(`schema/rosetta-map.schema.json`). A map that exceeds any cap fails
+validation up front rather than at attach time.
+
+| Bound                       | Limit                                            |
+| --------------------------- | ------------------------------------------------ |
+| `classes` entries           | 50 000                                           |
+| `methods` per class         | 5 000                                            |
+| `fields` per class          | 5 000                                            |
+| method overloads (array)    | 200 (min 1)                                      |
+| `anchors` per class         | 1 000                                            |
+| `sources`                   | 100                                              |
+| `version_code`              | 2 147 483 647 (low 32 bits of Android `longVersionCode`) |
+| obfuscated / short names    | 512 chars                                        |
+| `extends`                   | 4 096 chars (free-form / possibly-FQN type name) |
+| `signature` / field `type`  | 4 096 chars                                      |
+| `app`                       | 256 chars                                        |
+| `version`                   | 256 chars                                        |
+| any other free-form string  | 4 096 chars                                      |
+
+Two additional shape constraints:
+
+- **`app`** must be a dotted package name
+  (`^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$`).
+- **`signer_sha256`** (when present) must be 64 lowercase hex characters
+  (`^[0-9a-f]{64}$`). The session layer additionally normalises and
+  re-validates it at runtime.
+
+**Reserved keys.** The keys `__proto__`, `constructor`, and `prototype`
+are rejected anywhere they appear in a `classes`, `methods`, or `fields`
+object. (`JSON.parse` produces a genuine own `__proto__` key, so this is
+checked against the raw input.) This blocks prototype-pollution /
+bracket-index footguns in the resolver; the whole map is rejected rather
+than silently sanitised.
+
 ## Schema evolution
 
 `schema_version` is mandatory; missing-version maps fail to load.
