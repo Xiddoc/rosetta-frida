@@ -12,7 +12,7 @@ import {
     TargetPolicyError,
     UnresolvedAccessError,
 } from '../errors.js';
-import { EventBus } from '../log.js';
+import { EventBus } from '../diagnostics/event-bus.js';
 import type { ClassEntry, RosettaMap } from '../types/map.js';
 import type { ResolveEvent } from '../types/events.js';
 import {

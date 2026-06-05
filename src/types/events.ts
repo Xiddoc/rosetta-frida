@@ -1,8 +1,8 @@
 /**
  * Diagnostic event types.
  *
- * LOCKED contract. All subsystems emit through src/log.ts; consumers
- * subscribe via rosetta.events.on(...).
+ * LOCKED contract. All subsystems emit through the diagnostics EventBus
+ * (src/diagnostics/event-bus.ts); consumers subscribe via rosetta.events.on(...).
  */
 
 /** Event emitted when a name is resolved. */

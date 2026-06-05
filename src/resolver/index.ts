@@ -6,7 +6,7 @@
  * the recommended entry point is `createResolver(map, options)`.
  */
 
-import { EventBus } from '../log.js';
+import { EventBus } from '../diagnostics/event-bus.js';
 import type { RosettaMap } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
 import type { FailurePolicy, TargetPolicy } from '../types/session.js';

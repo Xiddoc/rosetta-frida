@@ -14,7 +14,7 @@
  */
 
 import { AmbiguousOverloadError, ResolveError } from '../errors.js';
-import type { EventBus } from '../log.js';
+import type { EventBus } from '../diagnostics/event-bus.js';
 import type { ClassEntry, FieldEntry, MethodEntry, RosettaMap } from '../types/map.js';
 import type { ResolvedClass, ResolvedField, ResolvedMethod, Resolver } from '../types/resolver.js';
 import type { FailurePolicy, TargetPolicy } from '../types/session.js';

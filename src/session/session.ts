@@ -22,7 +22,7 @@
  * loading is the user's responsibility via the async `loadMap`.
  */
 
-import type { EventBus } from '../log.js';
+import type { EventBus } from '../diagnostics/event-bus.js';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
 import type { FailurePolicy, Session, SessionOptions, VersionMatch } from '../types/session.js';

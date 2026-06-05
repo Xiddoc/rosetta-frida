@@ -5,9 +5,8 @@
  * signer-check event. Internally subsystems call `emit(...)`; users
  * subscribe via `rosetta.events.on(...)`.
  *
- * This module OWNS the implementation. `src/log.ts` is a thin compat shim
- * that re-exports from here so the historical `'../log.js'` import path
- * keeps working.
+ * This module OWNS the implementation; all first-party importers reference
+ * it directly (or via `./diagnostics/index.js` for the public surface).
  */
 
 import type { DiagnosticEvent, EventListener } from '../types/events.js';

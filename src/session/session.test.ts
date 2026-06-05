@@ -22,7 +22,7 @@ import {
     MissingSignerError,
     SignerMismatchError,
 } from '../errors.js';
-import { EventBus } from '../log.js';
+import { EventBus } from '../diagnostics/event-bus.js';
 import type { DiagnosticEvent } from '../types/events.js';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
 import { createSession, RosettaSession, isRegistry } from './session.js';

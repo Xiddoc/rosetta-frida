@@ -27,7 +27,7 @@ import {
     type RosettaError,
     SignerMismatchError,
 } from '../errors.js';
-import { EventBus } from '../log.js';
+import { EventBus } from '../diagnostics/event-bus.js';
 import { appPrefixOf, createResolver } from '../resolver/index.js';
 import type { RosettaMap } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
