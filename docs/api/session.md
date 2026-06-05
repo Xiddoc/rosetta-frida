@@ -200,6 +200,9 @@ no configuration needed.
 
 Decision order (first match wins):
 
+0. **normalization** — strip array markers down to the element class
+   FQN; a primitive / `void` / empty result → ALLOW (not a loadable
+   class). (Matches the Kotlin `decide` step 0.)
 1. **`allow`** exact-FQN match → ALLOW (the escape hatch for legitimate
    framework hooks; exact, case-sensitive, against the normalized
    element FQN).
@@ -231,6 +234,35 @@ org.apache.harmony.
 `rosetta-xposed` `TargetGuard`; both clients share the same decision
 order and the same `DEFAULT_DENY_PREFIXES` (value-for-value) so they
 accept/reject the same maps.
+
+#### Programmatic guard helpers
+
+The guard predicates are also part of the **public API**, re-exported
+from the package root for callers who want to apply the same fail-closed
+decision outside a session (e.g. pre-validating a map before bundling,
+or in their own tooling). They are the Frida twins of the Kotlin
+`TargetGuard` / `isAllowed` / `assertAllowed` surface:
+
+```typescript
+import {
+    DEFAULT_DENY_PREFIXES,      // readonly string[] — the built-in reserved denylist
+    DEFAULT_APP_NAMESPACE_LABELS, // number — default app-prefix label count (2)
+    appPrefixOf,                // (app, policy?) => string — derive the app namespace prefix
+    isTargetAllowed,            // (fqn, appPrefix, policy?) => boolean — pure predicate
+    assertTargetAllowed,        // (realName, fqn, appPrefix, policy?, classScope?) => void — throws TargetPolicyError
+} from 'rosetta-frida';
+
+const appPrefix = appPrefixOf('com.example.app'); // 'com.example'
+isTargetAllowed('java.lang.Runtime', appPrefix);  // false (reserved)
+isTargetAllowed('aaaa', appPrefix);               // true  (package-local)
+assertTargetAllowed('com.example.app.Evil', 'java.lang.Runtime', appPrefix); // throws TargetPolicyError
+```
+
+`isTargetAllowed` / `assertTargetAllowed` apply the exact decision order
+above; `assertTargetAllowed` throws
+[`TargetPolicyError`](../reference/errors.md#targetpolicyerror) on a
+denial (the form the session's resolver and attach-time health check use
+internally). All four are pure and side-effect-free.
 
 ## Return value — `Session`
 

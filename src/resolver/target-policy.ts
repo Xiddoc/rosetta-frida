@@ -87,6 +87,12 @@ function effectiveDenyPrefixes(policy: TargetPolicy): readonly string[] {
  * Derive the app namespace prefix: the first `appNamespaceLabels`
  * dot-separated labels of `app` (default 2). `<= 0` labels → empty prefix
  * (no app-owned namespace is implicitly allowed).
+ *
+ * CAVEAT (mirrors the Kotlin `appPrefixOf`): a very short `app` value
+ * yields a very broad app prefix — e.g. `app = "com"` makes every
+ * `com.*` namespace app-owned and therefore allowed. Validate that
+ * `app` is a well-formed package name before relying on the derived
+ * prefix as a security boundary.
  */
 export function appPrefixOf(app: string, policy: TargetPolicy = {}): string {
     const labels = policy.appNamespaceLabels ?? DEFAULT_APP_NAMESPACE_LABELS;

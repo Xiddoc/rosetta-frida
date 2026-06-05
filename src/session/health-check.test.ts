@@ -4,7 +4,7 @@
  * path directly for failure / empty cases.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/frida.js';
 import type { RosettaMap } from '../types/map.js';
 import {
@@ -193,5 +193,47 @@ describe('runHealthCheck', () => {
         });
         const result = runHealthCheck({ map, javaApi });
         expect(result.failedEntries).toEqual(['com.example.app.Foo']);
+    });
+
+    it('does NOT call Java.use for a guard-denied obfuscated name', () => {
+        // A malicious/wrong map points a class at a framework FQN. The guard
+        // must reject it BEFORE Java.use, so the framework class is never
+        // loaded / <clinit>-initialized at attach.
+        const useSpy = vi.fn(() => ({}));
+        const javaApi: HealthCheckJavaApi = { use: useSpy };
+        const map = buildMap({
+            'com.example.app.Evil': { obfuscated: 'java.lang.Runtime' },
+        });
+        const result = runHealthCheck({ map, javaApi, appPrefix: 'com.example' });
+        // The denied name was never handed to Frida.
+        expect(useSpy).not.toHaveBeenCalled();
+        // And it is reported as a failed entry.
+        expect(result.failedEntries).toEqual(['com.example.app.Evil']);
+        expect(result.passed).toBe(false);
+        expect(result.rate).toBe(0);
+    });
+
+    it('guards each entry independently: allowed names still resolve', () => {
+        const useSpy = vi.fn((name: string) => {
+            if (name === 'aaaa') return {};
+            throw new Error('should not be called for denied names: ' + name);
+        });
+        const javaApi: HealthCheckJavaApi = { use: useSpy };
+        const map = buildMap({
+            'com.example.app.Good': { obfuscated: 'aaaa' },
+            'com.example.app.Evil': { obfuscated: 'android.app.ActivityThread' },
+        });
+        const result = runHealthCheck({
+            map,
+            javaApi,
+            appPrefix: 'com.example',
+            threshold: 0.5,
+        });
+        // The denied entry never reached Java.use; only the allowed one did.
+        expect(useSpy).toHaveBeenCalledTimes(1);
+        expect(useSpy).toHaveBeenCalledWith('aaaa');
+        expect(result.failedEntries).toEqual(['com.example.app.Evil']);
+        expect(result.rate).toBe(0.5);
+        expect(result.passed).toBe(true);
     });
 });

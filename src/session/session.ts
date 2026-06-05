@@ -30,7 +30,7 @@ import {
     SignerMismatchError,
 } from '../errors.js';
 import { EventBus } from '../log.js';
-import { createResolver } from '../resolver/index.js';
+import { appPrefixOf, createResolver } from '../resolver/index.js';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
 import type { FailurePolicy, Session, SessionOptions, VersionMatch } from '../types/session.js';
@@ -170,8 +170,16 @@ export class RosettaSession implements Session {
         this.enforceSignerGuard(options, events);
 
         // 4. Health check.
+        //    The target-namespace guard (RFC 0001 C1) is threaded in here too:
+        //    the health check loads every mapped class via `Java.use`, so it
+        //    must funnel each raw obf name through the SAME guard the resolver
+        //    uses, with the SAME policy + app prefix — otherwise a malicious
+        //    map entry (e.g. obfuscated: 'java.lang.Runtime') would be loaded
+        //    and <clinit>-initialized at attach, bypassing the guard.
         const skip = options.skipHealthCheck === true;
         const threshold = options.healthCheckThreshold ?? DEFAULT_HEALTH_CHECK_THRESHOLD;
+        const targetPolicy = options.targetPolicy ?? {};
+        const appPrefix = appPrefixOf(this.app, targetPolicy);
         if (skip) {
             this.healthy = true;
         } else {
@@ -179,6 +187,8 @@ export class RosettaSession implements Session {
                 map: this.map,
                 threshold,
                 javaApi: options.healthCheckJavaApi,
+                targetPolicy,
+                appPrefix,
             });
             events.emit({
                 type: 'health-check',
@@ -206,7 +216,7 @@ export class RosettaSession implements Session {
         this.resolver = createResolver(this.map, {
             events: this.events,
             failurePolicy: this.failurePolicy,
-            targetPolicy: options.targetPolicy ?? {},
+            targetPolicy,
             appPackage: this.app,
         });
     }
