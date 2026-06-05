@@ -82,6 +82,10 @@ export function formatEvent(event: DiagnosticEvent): string {
         case 'map-load': {
             return `[rosetta] map-load ${event.app}@${event.version} schema=${event.schemaVersion} classes=${event.classCount}`;
         }
+        case 'signer-check': {
+            const status = event.passed ? 'PASS' : 'FAIL';
+            return `[rosetta] signer-check ${status} ${event.app} expected=${event.expected} signers=${event.actual.length} (${event.source})`;
+        }
     }
 }
 

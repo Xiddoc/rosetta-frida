@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Runtime
+
+- **On-device `signer_sha256` enforcement** (`src/session/signer-detect.ts`)
+  — when the loaded map carries a `signer_sha256`, `rosetta.session(...)`
+  now reads the running app's signing certificate **in-process**
+  (`GET_SIGNING_CERTIFICATES` → `signingInfo.apkContentsSigners` on
+  API 28+, `GET_SIGNATURES` → `packageInfo.signatures` as the pre-28
+  fallback), SHA-256's each certificate, and **fails closed** with the new
+  [`SignerMismatchError`](reference/errors.md#signermismatcherror) if no
+  live signer matches. A match on **any** one of several signers passes
+  (key-rotation lineage). The check runs after version selection and before
+  the health check, emits a structured
+  [`signer-check`](reference/events.md#signercheckevent) diagnostic event,
+  and is gated by the new `SessionOptions.enforceSigner` knob (default
+  `true`, the secure default; set `false` to opt out). When the map has no
+  `signer_sha256` the check is skipped entirely. Moves the V2-roadmap item
+  out of *planned*.
+
 ## V1.0 — proof of life
 
 The first complete release. Every subsystem the strategic design

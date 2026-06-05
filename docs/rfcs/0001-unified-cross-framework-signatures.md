@@ -189,7 +189,11 @@ Full APK SHA-256 is not O(1) and is unused on-device. Split identity by role:
   pre-parsed by the system, not a hash of the whole file) and meaningful: it pins
   *publisher authenticity* and detects repacks. Stable across versions, so it is
   an **authenticity guard, not a version key.** Frida reads the same via
-  `Java.use('android.content.pm.PackageManager')`.
+  `Java.use('android.content.pm.PackageManager')`. **Enforced on the Frida
+  side:** `rosetta.session(...)` reads the live signer in-process and fails
+  closed (`SignerMismatchError`) when the field is present; see
+  [`api/session.md`](../api/session.md#signer-enforcement). (rosetta-xposed
+  enforcement remains planned.)
 - **`apk_sha256` (existing)** — offline **provenance only**, computed once by the
   contributor when generating the map; **never recomputed on-device.**
 

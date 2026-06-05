@@ -256,6 +256,34 @@ describe('formatEvent', () => {
         expect(s).toMatch(/classes=47/);
         expect(s).toMatch(/schema=1/);
     });
+
+    it('formats a signer-check pass', () => {
+        const s = formatEvent({
+            type: 'signer-check',
+            passed: true,
+            app: 'com.example.app',
+            expected: 'ab'.repeat(32),
+            actual: ['ab'.repeat(32)],
+            source: 'signingInfo',
+        });
+        expect(s).toMatch(/signer-check PASS com\.example\.app/);
+        expect(s).toMatch(/signers=1/);
+        expect(s).toMatch(/signingInfo/);
+    });
+
+    it('formats a signer-check fail', () => {
+        const s = formatEvent({
+            type: 'signer-check',
+            passed: false,
+            app: 'com.example.app',
+            expected: 'cd'.repeat(32),
+            actual: ['ab'.repeat(32), 'ef'.repeat(32)],
+            source: 'signatures',
+        });
+        expect(s).toMatch(/signer-check FAIL/);
+        expect(s).toMatch(/signers=2/);
+        expect(s).toMatch(/signatures/);
+    });
 });
 
 describe('RosettaMap type shape (compile-time)', () => {
