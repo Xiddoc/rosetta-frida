@@ -12,15 +12,16 @@
  * (`.ts`/`.js`/`.mjs`/`.cjs`) are refused — maps are pure data and must
  * be authored as JSON or YAML (module ingestion was a build-time RCE).
  *
- * The output path is contained to the project tree (CWD); a traversal
- * or absolute `-o` is refused.
+ * The output path is checked for NUL bytes only; operator-supplied `-o`
+ * may point anywhere (e.g. `/tmp/out.json`). Content-derived paths (such
+ * as `rosetta init`'s default) are separately contained to the project tree.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
 import { convertToJson, yamlToMap, refuseModuleInput } from '../../src/convert/index.js';
-import { assertContained, assertNoNul } from '../../src/parse/index.js';
+import { assertNoNul } from '../../src/parse/index.js';
 
 export interface ConvertOptions {
     inputPath: string;
@@ -66,8 +67,11 @@ export function parseConvertArgs(argv: readonly string[]): ConvertOptions {
 export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs): Promise<string> {
     const opts = parseConvertArgs(argv);
     assertNoNul(opts.inputPath);
-    // Contain the output path to the project tree before any IO.
-    assertContained(opts.outputPath);
+    // Reject NUL in the output path. Containment to the project tree is NOT
+    // applied: operator-supplied -o may legitimately point outside CWD (e.g.
+    // /tmp/out.json). Content-derived paths (rosetta init default) are
+    // contained there.
+    assertNoNul(opts.outputPath);
     const ext = path.extname(opts.inputPath).toLowerCase();
 
     if (!opts.force && (await fileExists(opts.outputPath, fsImpl))) {

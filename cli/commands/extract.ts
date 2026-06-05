@@ -12,7 +12,7 @@
  */
 
 import { parseMarkerBlock } from '../../src/marker/parse.js';
-import { assertContained } from '../../src/parse/index.js';
+import { assertNoNul } from '../../src/parse/index.js';
 import type { CommandIo } from './io.js';
 import { errorMessage } from './io.js';
 
@@ -73,8 +73,10 @@ export async function runExtract(argv: readonly string[], io: CommandIo): Promis
     let args: ExtractArgs;
     try {
         args = parseExtractArgs(argv);
-        // Contain the output path to the project tree before any IO.
-        assertContained(args.output);
+        // Reject NUL in the output path (content-derived path containment is
+        // not applied here: operator-supplied -o may legitimately point outside
+        // the project tree, e.g. /tmp/extracted.json).
+        assertNoNul(args.output);
     } catch (err) {
         io.stderr(`extract: ${errorMessage(err)}`);
         return 1;
