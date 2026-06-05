@@ -21,7 +21,12 @@ Supported extensions:
 |---|---|
 | `.json` | Strict JSON. Comments/trailing commas are rejected. |
 | `.yaml`, `.yml` | YAML — converted in-memory to a map, then validated. |
-| `.ts`, `.js`, `.mjs`, `.cjs` | TypeScript / JavaScript module — dynamically imported; default or named `map` export is validated. |
+| `.ts`, `.js`, `.mjs`, `.cjs` | **Refused** — TS/JS map modules are no longer supported (build-time RCE). Never imported. |
+
+> **Removed (security):** validating a TS/JS module used to dynamically
+> `import()` it, executing arbitrary code before any check ran. Maps are
+> pure data — author them as JSON or YAML. A module path is now refused
+> with a clear error.
 
 ## Behavior
 
@@ -62,11 +67,11 @@ $ npx rosetta validate maps/com.example.app/3.4.5.yaml
 OK: maps/com.example.app/3.4.5.yaml — com.example.app@3.4.5, 15 class(es), schema_version=2
 ```
 
-### TS module
+### TS/JS module → refused
 
 ```sh
 $ npx rosetta validate maps/com.example.app/3.4.5.ts
-OK: maps/com.example.app/3.4.5.ts — com.example.app@3.4.5, 15 class(es), schema_version=2
+FAIL: maps/com.example.app/3.4.5.ts — TS/JS map modules are no longer supported; author maps as JSON or YAML (path: maps/com.example.app/3.4.5.ts)
 ```
 
 ### Invalid map
@@ -148,5 +153,5 @@ try {
 }
 ```
 
-For YAML, use `yamlToMap`; for TS modules, use `tsModuleToMap`. All
-three end up running the same validator under the hood.
+For YAML, use `yamlToMap`. Both end up running the same validator
+under the hood. (TS/JS-module ingestion was removed for security.)

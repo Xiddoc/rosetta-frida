@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased — CLI security hardening
+
+- **Removed TS/JS-module map ingestion (build-time RCE).** `rosetta
+  convert` / `validate` no longer accept `.ts`/`.js`/`.mjs`/`.cjs`
+  inputs. They used to be loaded via dynamic `import()`, executing
+  arbitrary contributor-supplied code *before* validation. Maps are
+  pure data — author them as JSON or YAML. Module inputs are now
+  refused with a clear error, never imported. `tsModuleToMap` is gone;
+  `convertToJson` accepts YAML only.
+- **Path containment for CLI writers (arbitrary file write).** All
+  commands that build an on-disk path (`init`, `convert`, `extract`,
+  `patch`) now validate the `app`/`version` identity tokens and
+  contain every output path to the project tree (CWD). Traversal
+  (`../…`), absolute escapes, and NUL bytes are refused before any IO.
+  See `src/parse/paths.ts`.
+
 ## V1.0 — proof of life
 
 The first complete release. Every subsystem the strategic design
@@ -82,11 +98,10 @@ called out is implemented and tested.
   authoritative `version_code` key and the optional `signer_sha256`
   authenticity guard; drops `apk_sha256`. Validated by Zod.
 - **Strict JSON** — canonical on-disk format (no comments / trailing
-  commas). Comment-bearing YAML / TS modules are authoring inputs
-  rendered to JSON via `rosetta convert`.
+  commas). Comment-bearing YAML is the authoring input rendered to
+  JSON via `rosetta convert`. (V1.0 also shipped a TS-module input;
+  it was removed in *Unreleased* above — build-time RCE.)
 - **YAML converter** — `yamlToMap(...)` via the `yaml` package.
-- **TS-module converter** — `tsModuleToMap(...)` via dynamic
-  `import()`.
 - **Single-map and registry forms** — `RosettaMap` and
   `RosettaMapRegistry`.
 - **15-class anonymized sample map** at
@@ -111,9 +126,8 @@ The `rosetta` binary, six commands:
 
 - [`init <app> <version>`](cli/init.md) — scaffold a new JSON map.
 - [`validate <map>`](cli/validate.md) — schema + sanity check.
-  Auto-detects JSON / YAML / TS-module from extension.
-- [`convert <in> -o <out>`](cli/convert.md) — YAML / TS module →
-  canonical JSON.
+  Auto-detects JSON / YAML from extension.
+- [`convert <in> -o <out>`](cli/convert.md) — YAML → canonical JSON.
 - [`patch <bundle.js> --map <new>`](cli/patch.md) — replace embedded
   map in a compiled bundle. In-place by default.
 - [`extract <bundle.js> -o <out>`](cli/extract.md) — pull the

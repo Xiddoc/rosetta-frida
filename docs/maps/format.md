@@ -356,8 +356,8 @@ the CLI side and in tests.
 ## Validation
 
 Every map flows through a Zod schema. Authoring tools (the CLI,
-`loadMap`, `yamlToMap`, `tsModuleToMap`) all run the same validator,
-so format errors surface uniformly:
+`loadMap`, `yamlToMap`) all run the same validator, so format errors
+surface uniformly:
 
 ```text
 FAIL: maps/com.example.app/3.4.5.json — invalid map

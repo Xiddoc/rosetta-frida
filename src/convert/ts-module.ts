@@ -1,62 +1,39 @@
 /**
- * TypeScript-module → RosettaMap converter.
+ * TS/JS-module map ingestion — REMOVED (security).
  *
- * Power users can author maps as TS modules that default-export (or named-
- * export as `map`) a RosettaMap object. This gives them compile-time type
- * checking. At conversion time we dynamically import the module and pull
- * the exported map out.
+ * `rosetta convert` / `validate` used to accept a contributor-supplied
+ * `.ts`/`.js`/`.mjs`/`.cjs` module and `await import()` it to pull out an
+ * exported `RosettaMap`. That executed arbitrary code at build/author time
+ * *before* any validation ran — a build-time RCE primitive (and the URL
+ * normaliser even passed `http(s)://` straight through to `import()`).
  *
- * IMPORTANT: this uses dynamic `import()`. The caller is responsible for
- * providing a path that the runtime can resolve. For Node usage, callers
- * typically pass an absolute path or a `file://` URL.
+ * Maps are pure data and must be authored as JSON or YAML. The dynamic
+ * `import()` path is gone; this module now only provides a recognizer so
+ * callers can emit a clear, actionable refusal instead of silently routing
+ * a module path somewhere unexpected.
  */
 
-import { pathToFileURL } from 'node:url';
-import { isAbsolute, resolve as resolvePath } from 'node:path';
+import { extname } from 'node:path';
 import { RosettaError } from '../errors.js';
-import type { RosettaMap } from '../types/map.js';
-import { validateStructure } from './validate.js';
 
-interface MaybeMapModule {
-    default?: unknown;
-    map?: unknown;
+/** Module extensions we explicitly refuse (formerly dynamically imported). */
+const MODULE_EXTENSIONS = new Set(['.ts', '.js', '.mjs', '.cjs']);
+
+/** Does `inputPath` carry a JS/TS-module extension? */
+export function isModuleExtension(inputPath: string): boolean {
+    return MODULE_EXTENSIONS.has(extname(inputPath).toLowerCase());
 }
 
+/** The single, shared refusal message for module-format inputs. */
+export const MODULE_UNSUPPORTED_MESSAGE =
+    'TS/JS map modules are no longer supported; author maps as JSON or YAML';
+
 /**
- * Dynamically import the TS/JS module at `modulePath` and validate the
- * exported RosettaMap. Looks for `default` export first; falls back to
- * a named `map` export.
+ * Refuse a TS/JS-module input. This NEVER imports or executes the file —
+ * it exists solely to produce a consistent, helpful error.
  *
- * @throws RosettaError if the module can't be loaded or exposes no map.
- * @throws MapValidationError if the exported map fails validation.
+ * @throws RosettaError always.
  */
-export async function tsModuleToMap(modulePath: string): Promise<RosettaMap> {
-    const url = toFileUrl(modulePath);
-    let mod: MaybeMapModule;
-    try {
-        mod = (await import(url)) as MaybeMapModule;
-    } catch (e) {
-        throw new RosettaError(`failed to load TS module '${modulePath}': ${(e as Error).message}`);
-    }
-    const exported = mod.default ?? mod.map;
-    if (exported === undefined) {
-        throw new RosettaError(
-            `module '${modulePath}' has no \`default\` or \`map\` export — ` +
-                'expected a RosettaMap',
-        );
-    }
-    return validateStructure(exported);
-}
-
-/**
- * Convert a filesystem path (absolute or relative) to a file:// URL that
- * Node's dynamic `import()` can resolve. If the input is already a URL,
- * pass it through unchanged.
- */
-function toFileUrl(modulePath: string): string {
-    if (modulePath.startsWith('file://') || /^https?:\/\//.test(modulePath)) {
-        return modulePath;
-    }
-    const abs = isAbsolute(modulePath) ? modulePath : resolvePath(modulePath);
-    return pathToFileURL(abs).href;
+export function refuseModuleInput(inputPath: string): never {
+    throw new RosettaError(`${MODULE_UNSUPPORTED_MESSAGE} (path: ${inputPath})`);
 }

@@ -146,8 +146,7 @@ with `issues`:
 
 - `loadMap('./x.json')` when the parsed object doesn't satisfy the
   Zod schema.
-- `yamlToMap(...)` / `tsModuleToMap(...)` — the converters all run
-  the same validator.
+- `yamlToMap(...)` — the converter runs the same validator.
 - `rosetta validate <map>` CLI when the file fails the check.
 
 ## `JsonParseError`
