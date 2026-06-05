@@ -10,6 +10,13 @@ app. The translation tables are **per-app, per-version** JSON maps
 
 Write once, hook many versions.
 
+## Testing mandate
+
+We strive for maximum coverage: **everything that can be tested must be
+tested.** Keep the `npm run verify` 100% coverage gate green, and
+add/extend co-located tests with every change. Use the Frida mock under
+`tests/mocks/` for anything that touches the Java bridge.
+
 ## Why this project exists
 
 The pain point that motivated it, from real experience reverse-engineering
