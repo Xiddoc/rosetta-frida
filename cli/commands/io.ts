@@ -7,7 +7,15 @@
  *     never touching the real disk;
  *   - the real `process` entry point at `cli/index.ts` builds the
  *     production `CommandIo` once and threads it through.
+ *
+ * One error/exit-code contract (see `cli/router.ts`): a command throws a
+ * `RosettaError` (or any Error) for a handled failure and the router maps
+ * it to exit 1 via `formatErrorLines`. The success exit code is 0;
+ * exit 2 is reserved for unexpected (programmer-bug) throws that escape
+ * the router entirely.
  */
+
+import { MapValidationError } from '../../src/errors.js';
 
 /**
  * Subset of `node:fs/promises` the CLI commands need. Kept narrow so the
@@ -46,6 +54,34 @@ export interface CommandIo {
 export function errorMessage(err: unknown): string {
     if (err instanceof Error) return err.message;
     return String(err);
+}
+
+/**
+ * Format a handled command failure as one or more stderr lines, using a
+ * single uniform convention shared by every command:
+ *
+ *   rosetta <command>: <message>
+ *
+ * A {@link MapValidationError} additionally folds its structured issue
+ * list in as indented follow-on lines (this is `validate`'s old bespoke
+ * `FAIL: … — …` + `  at <path>: <msg>` report, now unified):
+ *
+ *   rosetta validate: Map failed schema validation (2 issues)
+ *     at classes.IFoo.obfuscated: Required
+ *     <message-without-path>
+ *
+ * The `command` token keys the line so output stays greppable per verb.
+ */
+export function formatErrorLines(command: string, err: unknown): string[] {
+    const head = `rosetta ${command}: ${errorMessage(err)}`;
+    if (!(err instanceof MapValidationError)) {
+        return [head];
+    }
+    const lines = [head];
+    for (const issue of err.issues) {
+        lines.push(issue.path ? `  at ${issue.path}: ${issue.message}` : `  ${issue.message}`);
+    }
+    return lines;
 }
 
 /**

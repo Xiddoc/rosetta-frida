@@ -13,6 +13,7 @@
 
 import { parseMarkerBlock } from '../../src/marker/parse.js';
 import { assertNoNul } from '../../src/parse/index.js';
+import { RosettaError } from '../../src/errors.js';
 import type { CommandIo } from './io.js';
 import { errorMessage } from './io.js';
 
@@ -66,37 +67,27 @@ export function parseExtractArgs(argv: readonly string[]): ExtractArgs {
 }
 
 /**
- * Execute the extract command. Returns the intended process exit code:
- * 0 on success, 1 on any failure (with reason printed to stderr).
+ * Execute the extract command under the shared contract: write the
+ * extracted JSON and report it to stdout, returning 0. Handled failures
+ * throw a `RosettaError` the router formats under the `rosetta extract:`
+ * prefix.
  */
 export async function runExtract(argv: readonly string[], io: CommandIo): Promise<number> {
-    let args: ExtractArgs;
-    try {
-        args = parseExtractArgs(argv);
-        // Reject NUL in the output path (content-derived path containment is
-        // not applied here: operator-supplied -o may legitimately point outside
-        // the project tree, e.g. /tmp/extracted.json).
-        assertNoNul(args.output);
-    } catch (err) {
-        io.stderr(`extract: ${errorMessage(err)}`);
-        return 1;
-    }
+    const args = parseExtractArgs(argv);
+    // Reject NUL in the output path (content-derived path containment is
+    // not applied here: operator-supplied -o may legitimately point outside
+    // the project tree, e.g. /tmp/extracted.json).
+    assertNoNul(args.output);
 
     let bundleText: string;
     try {
         bundleText = await io.fs.readFile(args.bundle, 'utf8');
     } catch (err) {
-        io.stderr(`extract: cannot read bundle ${args.bundle}: ${errorMessage(err)}`);
-        return 1;
+        throw new RosettaError(`cannot read bundle ${args.bundle}: ${errorMessage(err)}`);
     }
 
-    let parsed;
-    try {
-        parsed = parseMarkerBlock(bundleText);
-    } catch (err) {
-        io.stderr(`extract: ${errorMessage(err)}`);
-        return 1;
-    }
+    // parseMarkerBlock throws MarkerBlockError (a RosettaError) — propagate.
+    const parsed = parseMarkerBlock(bundleText);
 
     const payload = parsed.kind === 'single' ? parsed.map : parsed.maps;
     const text = JSON.stringify(payload, null, EXTRACT_JSON_INDENT) + '\n';
@@ -104,8 +95,7 @@ export async function runExtract(argv: readonly string[], io: CommandIo): Promis
     try {
         await io.fs.writeFile(args.output, text, 'utf8');
     } catch (err) {
-        io.stderr(`extract: cannot write output ${args.output}: ${errorMessage(err)}`);
-        return 1;
+        throw new RosettaError(`cannot write output ${args.output}: ${errorMessage(err)}`);
     }
 
     io.stdout(`extract: wrote ${args.output} (${parsed.kind})`);

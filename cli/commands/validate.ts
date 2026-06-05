@@ -11,12 +11,12 @@
  */
 
 import * as path from 'node:path';
-import { RosettaError, MapValidationError } from '../../src/errors.js';
+import { RosettaError } from '../../src/errors.js';
 import { yamlToMap, refuseModuleInput, validateStructure } from '../../src/convert/index.js';
 import { parseJson } from '../../src/parse/json.js';
 import { assertNoNul } from '../../src/parse/index.js';
 import type { RosettaMap } from '../../src/types/map.js';
-import type { FsLike } from './io.js';
+import type { CommandIo, FsLike } from './io.js';
 
 export interface ValidateOptions {
     inputPath: string;
@@ -67,50 +67,22 @@ export async function loadMap(inputPath: string, fs: FsLike): Promise<RosettaMap
     throw new RosettaError(`unsupported map extension: ${ext} (path: ${inputPath})`);
 }
 
-export interface ValidateResult {
-    ok: boolean;
-    /** When `ok`, the validated map. */
-    map?: RosettaMap;
-    /** Lines that should be printed to stderr / stdout. */
-    output: string[];
-}
-
 /**
- * Run `rosetta validate`. Returns a result with the textual output to
- * print and an `ok` flag the caller turns into an exit code.
+ * Run `rosetta validate` under the shared command contract: load +
+ * validate the map, print a one-line `OK` summary to stdout, and return
+ * exit code 0.
+ *
+ * A load/validation failure is *thrown* (not returned): the router's
+ * `formatErrorLines` renders it under the uniform `rosetta validate: …`
+ * prefix and folds a `MapValidationError`'s issue list into indented
+ * follow-on lines — the old bespoke `FAIL: … — …` report, unified.
  */
-export async function runValidate(argv: readonly string[], fs: FsLike): Promise<ValidateResult> {
+export async function runValidate(argv: readonly string[], io: CommandIo): Promise<number> {
     const opts = parseValidateArgs(argv);
-    let map: RosettaMap;
-    try {
-        map = await loadMap(opts.inputPath, fs);
-    } catch (e) {
-        return { ok: false, output: formatError(opts.inputPath, e) };
-    }
-    return {
-        ok: true,
-        map,
-        output: [
-            `OK: ${opts.inputPath} — ${map.app}@${map.version}, ` +
-                `${Object.keys(map.classes).length} class(es), schema_version=${map.schema_version}`,
-        ],
-    };
-}
-
-function formatError(inputPath: string, e: unknown): string[] {
-    const lines: string[] = [];
-    if (e instanceof MapValidationError) {
-        lines.push(`FAIL: ${inputPath} — ${e.message}`);
-        for (const issue of e.issues) {
-            const where = issue.path ? `  at ${issue.path}: ` : '  ';
-            lines.push(`${where}${issue.message}`);
-        }
-        return lines;
-    }
-    if (e instanceof RosettaError) {
-        lines.push(`FAIL: ${inputPath} — ${e.message}`);
-        return lines;
-    }
-    lines.push(`FAIL: ${inputPath} — ${(e as Error).message}`);
-    return lines;
+    const map = await loadMap(opts.inputPath, io.fs);
+    io.stdout(
+        `OK: ${opts.inputPath} — ${map.app}@${map.version}, ` +
+            `${Object.keys(map.classes).length} class(es), schema_version=${map.schema_version}`,
+    );
+    return 0;
 }

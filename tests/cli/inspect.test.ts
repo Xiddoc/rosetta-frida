@@ -108,56 +108,60 @@ describe('runInspect', () => {
         );
     });
 
-    it('exits 1 with usage error when args are malformed', async () => {
+    // Failure paths now THROW (handled by the router → exit 1); the
+    // command no longer prints its own prefixed stderr. Router-level
+    // exit-code + prefix coverage lives in router.test.ts.
+    it('throws a usage error when args are malformed', async () => {
         const fs = makeFakeFs();
         const captured = makeCaptured();
-        const code = await runInspect([], makeIo(fs, captured));
-        expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/inspect:.*missing required argument/);
+        await expect(runInspect([], makeIo(fs, captured))).rejects.toThrow(
+            /missing required argument/,
+        );
     });
 
-    it('exits 1 when bundle file cannot be read', async () => {
+    it('throws when bundle file cannot be read', async () => {
         const fs = makeFakeFs();
         const captured = makeCaptured();
-        const code = await runInspect(['missing.js'], makeIo(fs, captured));
-        expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/cannot read bundle/);
+        await expect(runInspect(['missing.js'], makeIo(fs, captured))).rejects.toThrow(
+            /cannot read bundle/,
+        );
     });
 
-    it('exits 1 when bundle has no marker block', async () => {
+    it('throws when bundle has no marker block', async () => {
         const fs = makeFakeFs({ 'b.js': '// nothing here' });
         const captured = makeCaptured();
-        const code = await runInspect(['b.js'], makeIo(fs, captured));
-        expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/no rosetta-frida marker block/);
+        await expect(runInspect(['b.js'], makeIo(fs, captured))).rejects.toThrow(
+            /no rosetta-frida marker block/,
+        );
     });
 
-    it('exits 1 (not 2) on a malformed-but-parseable single-map payload', async () => {
+    it('throws (not TypeError) on a malformed-but-parseable single-map payload', async () => {
         // Hand-built single-map block whose payload is valid JSON but is
         // NOT a valid RosettaMap (no `classes`, no `schema_version`).
         // Previously `Object.keys(map.classes)` threw a TypeError outside
-        // the try/catch → exit 2; now `validateMap` makes it a clean exit 1.
+        // the try/catch → exit 2; now `validateMap` makes it a clean
+        // handled MapValidationError → exit 1 at the router.
         const bundle =
             '/*! -----BEGIN ROSETTA MAP----- */\n' +
             'const __rosetta_map = {"app": "com.example.app"};\n' +
             '/*! -----END ROSETTA MAP----- */';
         const fs = makeFakeFs({ 'b.js': bundle });
         const captured = makeCaptured();
-        const code = await runInspect(['b.js'], makeIo(fs, captured));
-        expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/inspect:.*schema validation/i);
+        await expect(runInspect(['b.js'], makeIo(fs, captured))).rejects.toThrow(
+            /schema validation/i,
+        );
     });
 
-    it('exits 1 when a registry payload is not an object (e.g. JSON null)', async () => {
+    it('throws when a registry payload is not an object (e.g. JSON null)', async () => {
         const bundle =
             '/*! -----BEGIN ROSETTA MAP REGISTRY----- */\n' +
             'const __rosetta_maps = null;\n' +
             '/*! -----END ROSETTA MAP REGISTRY----- */';
         const fs = makeFakeFs({ 'b.js': bundle });
         const captured = makeCaptured();
-        const code = await runInspect(['b.js'], makeIo(fs, captured));
-        expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/inspect:.*registry payload is not an object/);
+        await expect(runInspect(['b.js'], makeIo(fs, captured))).rejects.toThrow(
+            /registry payload is not an object/,
+        );
     });
 
     it('tolerates a registry entry that is an object but lacks `classes`', async () => {

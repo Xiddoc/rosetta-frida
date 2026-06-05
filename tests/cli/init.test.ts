@@ -10,11 +10,12 @@ import {
     parseInitArgs,
     renderSkeleton,
     defaultOutputPath,
+    writeSkeleton,
     runInit,
 } from '../../cli/commands/init.js';
 import { RosettaError } from '../../src/errors.js';
 import type { FsLike } from '../../cli/commands/io.js';
-import { makeFakeFs, makeFsLike, type FakeFs } from './helpers.js';
+import { makeCaptured, makeFakeFs, makeFsLike, makeIo, type FakeFs } from './helpers.js';
 
 /**
  * Build a fully-typed `FsLike` (no casts) backed by the shared in-memory
@@ -98,10 +99,10 @@ describe('defaultOutputPath', () => {
     });
 });
 
-describe('runInit', () => {
+describe('writeSkeleton', () => {
     it('writes to the default path when none is provided', async () => {
         const { fs, files } = makeFs();
-        const out = await runInit(['com.example.app', '1.2.3'], fs);
+        const out = await writeSkeleton(['com.example.app', '1.2.3'], fs);
         expect(out).toMatch(/com\.example\.app[\\/]1\.2\.3\.json$/);
         expect(files.has(out)).toBe(true);
         expect(files.get(out)).toContain('"app": "com.example.app"');
@@ -109,53 +110,55 @@ describe('runInit', () => {
 
     it('writes to a custom output path with -o (within the project tree)', async () => {
         const { fs, files } = makeFs();
-        await runInit(['com.example.app', '1.2.3', '-o', 'out/x.json'], fs);
+        await writeSkeleton(['com.example.app', '1.2.3', '-o', 'out/x.json'], fs);
         expect(files.has('out/x.json')).toBe(true);
     });
 
     it('creates parent directories', async () => {
         const { fs, dirsCreated } = makeFs();
-        await runInit(['com.example.app', '1.2.3', '-o', 'deep/nested/path.json'], fs);
+        await writeSkeleton(['com.example.app', '1.2.3', '-o', 'deep/nested/path.json'], fs);
         expect(dirsCreated).toContain('deep/nested');
     });
 
     it('refuses to overwrite without --force', async () => {
         const { fs } = makeFs({ 'existing.json': 'previous' });
         await expect(
-            runInit(['com.example.app', '1.2.3', '-o', 'existing.json'], fs),
+            writeSkeleton(['com.example.app', '1.2.3', '-o', 'existing.json'], fs),
         ).rejects.toThrow(RosettaError);
     });
 
     it('overwrites with --force', async () => {
         const { fs, files } = makeFs({ 'existing.json': 'previous' });
-        await runInit(['com.example.app', '1.2.3', '-o', 'existing.json', '--force'], fs);
+        await writeSkeleton(['com.example.app', '1.2.3', '-o', 'existing.json', '--force'], fs);
         expect(files.get('existing.json')).not.toBe('previous');
         expect(files.get('existing.json')).toContain('"app": "com.example.app"');
     });
 
     it('rejects an invalid app name before building a path', async () => {
         const { fs, files } = makeFs();
-        await expect(runInit(['../../etc', '1.2.3'], fs)).rejects.toThrow(/invalid app name/);
+        await expect(writeSkeleton(['../../etc', '1.2.3'], fs)).rejects.toThrow(/invalid app name/);
         expect(files.size).toBe(0);
     });
 
     it('rejects an invalid version before building a path', async () => {
         const { fs, files } = makeFs();
-        await expect(runInit(['com.example.app', '../1.0'], fs)).rejects.toThrow(/invalid version/);
+        await expect(writeSkeleton(['com.example.app', '../1.0'], fs)).rejects.toThrow(
+            /invalid version/,
+        );
         expect(files.size).toBe(0);
     });
 
     it('allows an -o output that points outside the project tree (e.g. ../escape.json)', async () => {
         // Operator-supplied -o is not contained to CWD; only NUL is rejected.
         const { fs, files } = makeFs();
-        const out = await runInit(['com.example.app', '1.2.3', '-o', '../escape.json'], fs);
+        const out = await writeSkeleton(['com.example.app', '1.2.3', '-o', '../escape.json'], fs);
         expect(out).toBe('../escape.json');
         expect(files.has('../escape.json')).toBe(true);
     });
 
     it('allows an absolute -o output outside the project tree', async () => {
         const { fs, files } = makeFs();
-        const out = await runInit(['com.example.app', '1.2.3', '-o', '/tmp/out.json'], fs);
+        const out = await writeSkeleton(['com.example.app', '1.2.3', '-o', '/tmp/out.json'], fs);
         expect(out).toBe('/tmp/out.json');
         expect(files.has('/tmp/out.json')).toBe(true);
     });
@@ -163,7 +166,7 @@ describe('runInit', () => {
     it('rejects a NUL byte in the explicit -o output path', async () => {
         const { fs, files } = makeFs();
         await expect(
-            runInit(['com.example.app', '1.2.3', '-o', 'out.json\0.png'], fs),
+            writeSkeleton(['com.example.app', '1.2.3', '-o', 'out.json\0.png'], fs),
         ).rejects.toThrow(/NUL/);
         expect(files.size).toBe(0);
     });
@@ -177,7 +180,29 @@ describe('runInit', () => {
         // since valid app/version tokens can never produce a traversal path,
         // we just confirm the token validators already block traversal tokens.
         const { fs, files } = makeFs();
-        await expect(runInit(['../../etc', '1.2.3'], fs)).rejects.toThrow(/invalid app name/);
+        await expect(writeSkeleton(['../../etc', '1.2.3'], fs)).rejects.toThrow(/invalid app name/);
         expect(files.size).toBe(0);
+    });
+});
+
+describe('runInit (command wrapper)', () => {
+    it('writes the skeleton, reports the path to stdout, and returns 0', async () => {
+        const fakeFs = makeFakeFs();
+        const captured = makeCaptured();
+        const code = await runInit(
+            ['com.example.app', '1.2.3', '-o', 'm.json'],
+            makeIo(fakeFs, captured),
+        );
+        expect(code).toBe(0);
+        expect(fakeFs.files.has('m.json')).toBe(true);
+        expect(captured.stdout[0]).toBe('wrote m.json');
+    });
+
+    it('propagates a RosettaError (router formats it) instead of catching', async () => {
+        const fakeFs = makeFakeFs({ 'm.json': 'existing' });
+        const captured = makeCaptured();
+        await expect(
+            runInit(['com.example.app', '1.2.3', '-o', 'm.json'], makeIo(fakeFs, captured)),
+        ).rejects.toThrow(RosettaError);
     });
 });

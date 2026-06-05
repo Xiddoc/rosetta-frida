@@ -95,50 +95,36 @@ function summarizeRegistry(maps: RosettaMapRegistry): string {
 }
 
 /**
- * Execute the inspect command. Returns process exit code (0/1).
+ * Execute the inspect command under the shared contract: print the
+ * one-line summary to stdout and return 0. Handled failures throw a
+ * `RosettaError` the router formats under the `rosetta inspect:` prefix.
  */
 export async function runInspect(argv: readonly string[], io: CommandIo): Promise<number> {
-    let args: InspectArgs;
-    try {
-        args = parseInspectArgs(argv);
-    } catch (err) {
-        io.stderr(`inspect: ${errorMessage(err)}`);
-        return 1;
-    }
+    const args = parseInspectArgs(argv);
 
     let bundleText: string;
     try {
         bundleText = await io.fs.readFile(args.bundle, 'utf8');
     } catch (err) {
-        io.stderr(`inspect: cannot read bundle ${args.bundle}: ${errorMessage(err)}`);
-        return 1;
+        throw new RosettaError(`cannot read bundle ${args.bundle}: ${errorMessage(err)}`);
     }
 
-    let parsed;
-    try {
-        parsed = parseMarkerBlock(bundleText);
-    } catch (err) {
-        io.stderr(`inspect: ${errorMessage(err)}`);
-        return 1;
-    }
+    // parseMarkerBlock throws MarkerBlockError (a RosettaError) on a
+    // missing/malformed block — let it propagate to the router.
+    const parsed = parseMarkerBlock(bundleText);
 
     // Summarizing touches the untrusted payload shape: a single map is
     // validated, and a registry root must be a non-null object. Both
-    // failure modes are caught here so a malformed-but-parseable payload
-    // is a clean exit-1, not an unhandled TypeError → exit 2.
+    // failure modes throw a RosettaError so a malformed-but-parseable
+    // payload is a clean exit-1, not an unhandled TypeError → exit 2.
     let line: string;
-    try {
-        if (parsed.kind === 'single') {
-            line = summarizeSingle(parsed.map);
-        } else {
-            if (typeof parsed.maps !== 'object' || parsed.maps === null) {
-                throw new RosettaError('registry payload is not an object');
-            }
-            line = summarizeRegistry(parsed.maps);
+    if (parsed.kind === 'single') {
+        line = summarizeSingle(parsed.map);
+    } else {
+        if (typeof parsed.maps !== 'object' || parsed.maps === null) {
+            throw new RosettaError('registry payload is not an object');
         }
-    } catch (err) {
-        io.stderr(`inspect: ${errorMessage(err)}`);
-        return 1;
+        line = summarizeRegistry(parsed.maps);
     }
     io.stdout(line);
     return 0;

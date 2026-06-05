@@ -21,7 +21,7 @@ import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
 import { convertToJson, yamlToMap, refuseModuleInput } from '../../src/convert/index.js';
 import { assertNoNul } from '../../src/parse/index.js';
-import type { FsLike } from './io.js';
+import type { CommandIo, FsLike } from './io.js';
 import { ensureDir, fileExists } from './io.js';
 
 export interface ConvertOptions {
@@ -64,8 +64,12 @@ export function parseConvertArgs(argv: readonly string[]): ConvertOptions {
     return { inputPath: positional[0] as string, outputPath: output, force };
 }
 
-/** Run `rosetta convert`. Returns the absolute output path on success. */
-export async function runConvert(argv: readonly string[], fs: FsLike): Promise<string> {
+/**
+ * Core of `rosetta convert`: render the input to canonical JSON and write
+ * it, returning the output path. Separated from the I/O-printing
+ * `runConvert` wrapper so it stays unit-testable by return value.
+ */
+export async function convertFile(argv: readonly string[], fs: FsLike): Promise<string> {
     const opts = parseConvertArgs(argv);
     assertNoNul(opts.inputPath);
     // Reject NUL in the output path. Containment to the project tree is NOT
@@ -97,6 +101,17 @@ export async function runConvert(argv: readonly string[], fs: FsLike): Promise<s
     await ensureDir(fs, path.dirname(opts.outputPath));
     await fs.writeFile(opts.outputPath, json, 'utf8');
     return opts.outputPath;
+}
+
+/**
+ * Execute `rosetta convert` under the shared command contract: convert,
+ * report the written path to stdout, and return exit code 0. Handled
+ * failures throw `RosettaError` for the router to format.
+ */
+export async function runConvert(argv: readonly string[], io: CommandIo): Promise<number> {
+    const out = await convertFile(argv, io.fs);
+    io.stdout(`wrote ${out}`);
+    return 0;
 }
 
 // Re-export for tests that want to round-trip through the same entry that the

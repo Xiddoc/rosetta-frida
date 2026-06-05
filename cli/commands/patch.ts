@@ -21,6 +21,7 @@
 import { parseJson } from '../../src/parse/json.js';
 import { patchMarkerBlock } from '../../src/marker/patch.js';
 import { assertNoNul } from '../../src/parse/index.js';
+import { RosettaError } from '../../src/errors.js';
 import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import type { CommandIo } from './io.js';
 import { errorMessage } from './io.js';
@@ -124,58 +125,42 @@ function loadMapForPatch(jsonText: string): RosettaMap | RosettaMapRegistry {
 }
 
 /**
- * Execute the patch command. Returns process exit code (0/1).
+ * Execute the patch command under the shared contract: rewrite the
+ * embedded map and report the written path to stdout, returning 0.
+ * Handled failures throw a `RosettaError` the router formats under the
+ * `rosetta patch:` prefix.
  */
 export async function runPatch(argv: readonly string[], io: CommandIo): Promise<number> {
-    let args: PatchArgs;
-    try {
-        args = parsePatchArgs(argv);
-        // Reject NUL in the output path. Containment to the project tree is
-        // NOT applied: operator-supplied -o (and the in-place default) may
-        // legitimately point outside CWD.
-        assertNoNul(args.output);
-    } catch (err) {
-        io.stderr(`patch: ${errorMessage(err)}`);
-        return 1;
-    }
+    const args = parsePatchArgs(argv);
+    // Reject NUL in the output path. Containment to the project tree is
+    // NOT applied: operator-supplied -o (and the in-place default) may
+    // legitimately point outside CWD.
+    assertNoNul(args.output);
 
     let bundleText: string;
     try {
         bundleText = await io.fs.readFile(args.bundle, 'utf8');
     } catch (err) {
-        io.stderr(`patch: cannot read bundle ${args.bundle}: ${errorMessage(err)}`);
-        return 1;
+        throw new RosettaError(`cannot read bundle ${args.bundle}: ${errorMessage(err)}`);
     }
 
     let mapText: string;
     try {
         mapText = await io.fs.readFile(args.map, 'utf8');
     } catch (err) {
-        io.stderr(`patch: cannot read map ${args.map}: ${errorMessage(err)}`);
-        return 1;
+        throw new RosettaError(`cannot read map ${args.map}: ${errorMessage(err)}`);
     }
 
-    let payload: RosettaMap | RosettaMapRegistry;
-    try {
-        payload = loadMapForPatch(mapText);
-    } catch (err) {
-        io.stderr(`patch: ${errorMessage(err)}`);
-        return 1;
-    }
-
-    let patched: string;
-    try {
-        patched = patchMarkerBlock(bundleText, payload);
-    } catch (err) {
-        io.stderr(`patch: ${errorMessage(err)}`);
-        return 1;
-    }
+    // loadMapForPatch and patchMarkerBlock both throw on bad input
+    // (malformed/wrong-shape map; missing marker block) — propagate to
+    // the router for uniform formatting.
+    const payload: RosettaMap | RosettaMapRegistry = loadMapForPatch(mapText);
+    const patched: string = patchMarkerBlock(bundleText, payload);
 
     try {
         await io.fs.writeFile(args.output, patched, 'utf8');
     } catch (err) {
-        io.stderr(`patch: cannot write output ${args.output}: ${errorMessage(err)}`);
-        return 1;
+        throw new RosettaError(`cannot write output ${args.output}: ${errorMessage(err)}`);
     }
 
     const inPlace = args.output === args.bundle;

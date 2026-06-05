@@ -111,38 +111,39 @@ describe('runExtract', () => {
         expect(captured.stdout[0]).toMatch(/registry/);
     });
 
-    it('exits 1 with usage error when args are malformed', async () => {
+    // Failure paths now THROW (router maps to exit 1 + uniform prefix).
+    it('throws a usage error when args are malformed', async () => {
         const fs = makeFakeFs();
         const captured = makeCaptured();
-        const code = await runExtract([], makeIo(fs, captured));
-        expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/extract:.*missing required argument/);
+        await expect(runExtract([], makeIo(fs, captured))).rejects.toThrow(
+            /missing required argument/,
+        );
     });
 
-    it('exits 1 when bundle file cannot be read', async () => {
+    it('throws when bundle file cannot be read', async () => {
         const fs = makeFakeFs();
         const captured = makeCaptured();
-        const code = await runExtract(['missing.js', '-o', 'out.json'], makeIo(fs, captured));
-        expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/cannot read bundle/);
+        await expect(
+            runExtract(['missing.js', '-o', 'out.json'], makeIo(fs, captured)),
+        ).rejects.toThrow(/cannot read bundle/);
     });
 
-    it('exits 1 when bundle has no marker block', async () => {
+    it('throws when bundle has no marker block', async () => {
         const fs = makeFakeFs({ 'b.js': 'console.log("no marker");' });
         const captured = makeCaptured();
-        const code = await runExtract(['b.js', '-o', 'out.json'], makeIo(fs, captured));
-        expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/no rosetta-frida marker block/);
+        await expect(runExtract(['b.js', '-o', 'out.json'], makeIo(fs, captured))).rejects.toThrow(
+            /no rosetta-frida marker block/,
+        );
     });
 
-    it('exits 1 when output cannot be written', async () => {
+    it('throws when output cannot be written', async () => {
         const map = minimalMap();
         const fs = makeFakeFs({ 'b.js': emitMarkerBlock(map) });
         fs.writeErrors.set('out.json', new Error('EACCES'));
         const captured = makeCaptured();
-        const code = await runExtract(['b.js', '-o', 'out.json'], makeIo(fs, captured));
-        expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/cannot write output.*EACCES/);
+        await expect(runExtract(['b.js', '-o', 'out.json'], makeIo(fs, captured))).rejects.toThrow(
+            /cannot write output.*EACCES/,
+        );
     });
 
     it('allows -o with a parent-traversal path (operator may write outside CWD)', async () => {
@@ -166,11 +167,11 @@ describe('runExtract', () => {
         expect(JSON.parse(fs.files.get('/tmp/extracted.json')!)).toEqual(map);
     });
 
-    it('exits 1 when -o contains a NUL byte', async () => {
+    it('throws when -o contains a NUL byte', async () => {
         const fs = makeFakeFs({ 'b.js': emitMarkerBlock(minimalMap()) });
         const captured = makeCaptured();
-        const code = await runExtract(['b.js', '-o', 'out.json\0.png'], makeIo(fs, captured));
-        expect(code).toBe(1);
-        expect(captured.stderr[0]).toMatch(/NUL/);
+        await expect(
+            runExtract(['b.js', '-o', 'out.json\0.png'], makeIo(fs, captured)),
+        ).rejects.toThrow(/NUL/);
     });
 });

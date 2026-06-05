@@ -22,7 +22,7 @@ import {
     assertContained,
     assertNoNul,
 } from '../../src/parse/index.js';
-import type { FsLike } from './io.js';
+import type { CommandIo, FsLike } from './io.js';
 import { ensureDir, fileExists } from './io.js';
 
 export interface InitOptions {
@@ -121,12 +121,14 @@ export function defaultOutputPath(app: string, version: string): string {
 }
 
 /**
- * Execute `rosetta init`. Returns the absolute output path on success.
+ * Core of `rosetta init`: scaffold the skeleton map and return the
+ * absolute output path. Kept separate from the I/O-printing `runInit`
+ * wrapper so it can be unit-tested by its return value.
  *
  * @throws RosettaError if the target already exists and `--force` was
  * not passed.
  */
-export async function runInit(argv: readonly string[], fs: FsLike): Promise<string> {
+export async function writeSkeleton(argv: readonly string[], fs: FsLike): Promise<string> {
     const opts = parseInitArgs(argv);
     // Validate the identity tokens BEFORE they are interpolated into a path.
     assertValidApp(opts.app);
@@ -151,4 +153,15 @@ export async function runInit(argv: readonly string[], fs: FsLike): Promise<stri
     await ensureDir(fs, path.dirname(outPath));
     await fs.writeFile(outPath, renderSkeleton(opts.app, opts.version), 'utf8');
     return outPath;
+}
+
+/**
+ * Execute `rosetta init` under the shared command contract: scaffold the
+ * map, report the written path to stdout, and return exit code 0.
+ * Handled failures throw `RosettaError` for the router to format.
+ */
+export async function runInit(argv: readonly string[], io: CommandIo): Promise<number> {
+    const out = await writeSkeleton(argv, io.fs);
+    io.stdout(`wrote ${out}`);
+    return 0;
 }
