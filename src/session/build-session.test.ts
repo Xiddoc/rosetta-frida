@@ -28,7 +28,7 @@ import {
 } from './build-session.js';
 import type { HealthCheckJavaApi } from './health-check.js';
 import type { SignerByteArray, SignerJavaApi } from './signer-detect.js';
-import type { InternalSessionOptions } from './session-options.js';
+import type { InternalSessionOptions } from './session.js';
 
 function buildMap(version = '1.2.3', app = 'com.example.app', versionCode = 1): RosettaMap {
     return {

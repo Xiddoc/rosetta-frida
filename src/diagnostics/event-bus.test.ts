@@ -64,6 +64,20 @@ describe('EventBus.emit — listener isolation', () => {
         spy.mockRestore();
     });
 
+    it('never throws even when the error reporter (console.error) itself throws', () => {
+        const bus = new EventBus();
+        // console.error throws on EVERY call: both the listener-error report
+        // and any subsequent attempt must be swallowed.
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {
+            throw new Error('console boom');
+        });
+        bus.on(() => {
+            throw new Error('listener boom');
+        });
+        expect(() => bus.emit({ type: 'resolve', name: 'X', source: 'map' })).not.toThrow();
+        spy.mockRestore();
+    });
+
     it('isolates a throwing trace formatter from listeners', () => {
         const bus = new EventBus();
         bus.setTrace(true);

@@ -36,7 +36,7 @@ import { detectAppAndVersion } from './auto-detect.js';
 import { runHealthCheck, DEFAULT_HEALTH_CHECK_THRESHOLD } from './health-check.js';
 import { checkSigner, NoSignerReadableError, normalizeSignerHash } from './signer-detect.js';
 import { pickMapForVersion } from './version-match.js';
-import type { InternalSessionOptions } from './session-options.js';
+import type { InternalSessionOptions } from './session.js';
 
 /** A fallible stage's result: a value or a typed error to throw. */
 export type StageResult<T> = { ok: true; value: T } | { ok: false; error: RosettaError };

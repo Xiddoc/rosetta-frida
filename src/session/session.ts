@@ -25,12 +25,32 @@
 import type { EventBus } from '../log.js';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
-import type { FailurePolicy, Session, VersionMatch } from '../types/session.js';
+import type { FailurePolicy, Session, SessionOptions, VersionMatch } from '../types/session.js';
+import type { AutoDetectJavaApi } from './auto-detect.js';
 import { buildSession } from './build-session.js';
-import type { InternalSessionOptions } from './session-options.js';
+import type { HealthCheckJavaApi } from './health-check.js';
+import type { SignerJavaApi } from './signer-detect.js';
 import { isRegistry } from './version-match.js';
 
-export type { InternalSessionOptions } from './session-options.js';
+/**
+ * Internal-only extension of `SessionOptions` that lets the session accept
+ * injected Java runtimes for tests. The public `SessionOptions` locked
+ * contract doesn't expose these. The `buildSession` pipeline imports this
+ * as a TYPE only, so there is no runtime import cycle with this module.
+ */
+export interface InternalSessionOptions extends SessionOptions {
+    /** Test-only: inject the Java API used by auto-detect. */
+    autoDetectJavaApi?: AutoDetectJavaApi;
+    /** Test-only: inject the Java API used by the health check. */
+    healthCheckJavaApi?: HealthCheckJavaApi;
+    /** Test-only: inject the Java API used by the signer-certificate check. */
+    signerJavaApi?: SignerJavaApi;
+    /**
+     * Test-only: provide an explicit EventBus. If omitted, the session
+     * creates its own session-local bus.
+     */
+    events?: EventBus;
+}
 
 export class RosettaSession implements Session {
     /** Public — the active, version-resolved map. */
