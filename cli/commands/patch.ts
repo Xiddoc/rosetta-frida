@@ -25,6 +25,7 @@ import { RosettaError } from '../../src/errors.js';
 import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import type { CommandIo } from './io.js';
 import { errorMessage } from './io.js';
+import { parseArgs, type ArgSpec } from './args.js';
 
 /** Parsed argument shape for the patch command. */
 export interface PatchArgs {
@@ -36,48 +37,32 @@ export interface PatchArgs {
     output: string;
 }
 
+/** Option grammar for `patch`: `--map <path>` and `-o/--output <path>`. */
+const PATCH_SPEC: ArgSpec = {
+    options: [
+        { name: 'map', aliases: ['--map'], takesValue: true },
+        { name: 'output', aliases: ['-o', '--output'], takesValue: true },
+    ],
+};
+
 /**
  * Parse `patch` argv. Required: <bundle> --map <path>. Optional:
  * -o <path> (default = in-place).
  */
 export function parsePatchArgs(argv: readonly string[]): PatchArgs {
-    let bundle: string | undefined;
-    let mapPath: string | undefined;
-    let output: string | undefined;
-    for (let i = 0; i < argv.length; i++) {
-        // `argv[i]` is non-undefined inside the loop bounds; assert
-        // once to satisfy `noUncheckedIndexedAccess`.
-        const a = argv[i] as string;
-        if (a === '--map') {
-            const next = argv[i + 1];
-            if (next === undefined) {
-                throw new Error(`--map requires a path argument`);
-            }
-            mapPath = next;
-            i++;
-        } else if (a === '-o' || a === '--output') {
-            const next = argv[i + 1];
-            if (next === undefined) {
-                throw new Error(`${a} requires a path argument`);
-            }
-            output = next;
-            i++;
-        } else if (!a.startsWith('-')) {
-            if (bundle !== undefined) {
-                throw new Error(`unexpected positional argument: ${a}`);
-            }
-            bundle = a;
-        } else {
-            throw new Error(`unknown option: ${a}`);
-        }
+    const { positionals, values } = parseArgs(argv, PATCH_SPEC);
+    if (positionals.length > 1) {
+        throw new RosettaError(`unexpected positional argument: ${positionals[1]}`);
     }
+    const bundle = positionals[0];
     if (bundle === undefined) {
-        throw new Error('missing required argument: <bundle.js>');
+        throw new RosettaError('missing required argument: <bundle.js>');
     }
+    const mapPath = values.map;
     if (mapPath === undefined) {
-        throw new Error('missing required argument: --map <map.json>');
+        throw new RosettaError('missing required argument: --map <map.json>');
     }
-    return { bundle, map: mapPath, output: output ?? bundle };
+    return { bundle, map: mapPath, output: values.output ?? bundle };
 }
 
 /**

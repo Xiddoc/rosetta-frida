@@ -16,6 +16,7 @@ import { assertNoNul } from '../../src/parse/index.js';
 import { RosettaError } from '../../src/errors.js';
 import type { CommandIo } from './io.js';
 import { errorMessage } from './io.js';
+import { parseArgs, type ArgSpec } from './args.js';
 
 /** Parsed argument shape for the extract command. */
 export interface ExtractArgs {
@@ -28,42 +29,28 @@ export interface ExtractArgs {
 /** Indent for the extracted JSON file (separate from the embed indent). */
 const EXTRACT_JSON_INDENT = 2;
 
+/** Option grammar for `extract`: just `-o/--output <path>`. */
+const EXTRACT_SPEC: ArgSpec = {
+    options: [{ name: 'output', aliases: ['-o', '--output'], takesValue: true }],
+};
+
 /**
  * Parse `extract` argv (everything after the subcommand). Throws on
- * structurally wrong invocations so the dispatcher can print usage.
+ * structurally wrong invocations so the router can format the failure.
  */
 export function parseExtractArgs(argv: readonly string[]): ExtractArgs {
-    let bundle: string | undefined;
-    let output: string | undefined;
-    for (let i = 0; i < argv.length; i++) {
-        // `argv[i]` is non-undefined because `i < argv.length`. The
-        // string-indexed access on a `readonly string[]` widens to
-        // `string | undefined` under `noUncheckedIndexedAccess`, so we
-        // assert non-null once and reuse.
-        const a = argv[i] as string;
-        if (a === '-o' || a === '--output') {
-            const next = argv[i + 1];
-            if (next === undefined) {
-                throw new Error(`${a} requires a path argument`);
-            }
-            output = next;
-            i++;
-        } else if (!a.startsWith('-')) {
-            if (bundle !== undefined) {
-                throw new Error(`unexpected positional argument: ${a}`);
-            }
-            bundle = a;
-        } else {
-            throw new Error(`unknown option: ${a}`);
-        }
+    const { positionals, values } = parseArgs(argv, EXTRACT_SPEC);
+    if (positionals.length > 1) {
+        throw new RosettaError(`unexpected positional argument: ${positionals[1]}`);
     }
+    const bundle = positionals[0];
     if (bundle === undefined) {
-        throw new Error('missing required argument: <bundle.js>');
+        throw new RosettaError('missing required argument: <bundle.js>');
     }
-    if (output === undefined) {
-        throw new Error('missing required argument: -o <out.json>');
+    if (values.output === undefined) {
+        throw new RosettaError('missing required argument: -o <out.json>');
     }
-    return { bundle, output };
+    return { bundle, output: values.output };
 }
 
 /**

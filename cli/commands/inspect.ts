@@ -18,29 +18,28 @@ import { RosettaError } from '../../src/errors.js';
 import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import type { CommandIo } from './io.js';
 import { errorMessage } from './io.js';
+import { parseArgs, type ArgSpec } from './args.js';
 
 /** Parsed argument shape for the inspect command. */
 export interface InspectArgs {
     bundle: string;
 }
 
+/** Option grammar for `inspect`: no options, one positional (V1). */
+const INSPECT_SPEC: ArgSpec = { options: [] };
+
 /**
  * Parse `inspect` argv. Only one positional argument; no options
  * (V1).
  */
 export function parseInspectArgs(argv: readonly string[]): InspectArgs {
-    let bundle: string | undefined;
-    for (const a of argv) {
-        if (a.startsWith('-')) {
-            throw new Error(`unknown option: ${a}`);
-        }
-        if (bundle !== undefined) {
-            throw new Error(`unexpected positional argument: ${a}`);
-        }
-        bundle = a;
+    const { positionals } = parseArgs(argv, INSPECT_SPEC);
+    if (positionals.length > 1) {
+        throw new RosettaError(`unexpected positional argument: ${positionals[1]}`);
     }
+    const bundle = positionals[0];
     if (bundle === undefined) {
-        throw new Error('missing required argument: <bundle.js>');
+        throw new RosettaError('missing required argument: <bundle.js>');
     }
     return { bundle };
 }

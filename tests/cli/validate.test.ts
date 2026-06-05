@@ -48,7 +48,7 @@ describe('parseValidateArgs', () => {
     });
 
     it('errors on flags', () => {
-        expect(() => parseValidateArgs(['--bogus'])).toThrow(/unknown flag/);
+        expect(() => parseValidateArgs(['--bogus'])).toThrow(/unknown option/);
     });
 
     it('errors when positional count is wrong', () => {

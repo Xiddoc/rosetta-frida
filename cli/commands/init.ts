@@ -24,6 +24,7 @@ import {
 } from '../../src/parse/index.js';
 import type { CommandIo, FsLike } from './io.js';
 import { ensureDir, fileExists } from './io.js';
+import { parseArgs, type ArgSpec } from './args.js';
 
 export interface InitOptions {
     app: string;
@@ -34,38 +35,27 @@ export interface InitOptions {
     force?: boolean;
 }
 
+/** Option grammar for `init`: `-o/--output <path>` and `--force/-f`. */
+const INIT_SPEC: ArgSpec = {
+    options: [
+        { name: 'output', aliases: ['-o', '--output'], takesValue: true },
+        { name: 'force', aliases: ['--force', '-f'], takesValue: false },
+    ],
+};
+
 /** CLI parse — returns parsed options or throws RosettaError on bad args. */
 export function parseInitArgs(argv: readonly string[]): InitOptions {
-    const positional: string[] = [];
-    let output: string | undefined;
-    let force = false;
-    for (let i = 0; i < argv.length; i++) {
-        const arg = argv[i];
-        if (arg === '-o' || arg === '--output') {
-            const next = argv[i + 1];
-            if (next === undefined) {
-                throw new RosettaError(`${arg} requires a value`);
-            }
-            output = next;
-            i++;
-        } else if (arg === '--force' || arg === '-f') {
-            force = true;
-        } else if (arg !== undefined && arg.startsWith('-')) {
-            throw new RosettaError(`unknown flag: ${arg}`);
-        } else if (arg !== undefined) {
-            positional.push(arg);
-        }
-    }
-    if (positional.length !== 2) {
+    const { positionals, values, flags } = parseArgs(argv, INIT_SPEC);
+    if (positionals.length !== 2) {
         throw new RosettaError(
-            `init requires exactly two positional args: <app> <version> (got ${positional.length})`,
+            `init requires exactly two positional args: <app> <version> (got ${positionals.length})`,
         );
     }
     return {
-        app: positional[0] as string,
-        version: positional[1] as string,
-        output,
-        force,
+        app: positionals[0] as string,
+        version: positionals[1] as string,
+        output: values.output,
+        force: flags.force ?? false,
     };
 }
 

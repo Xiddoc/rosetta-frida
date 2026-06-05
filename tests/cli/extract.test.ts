@@ -62,7 +62,7 @@ describe('parseExtractArgs', () => {
     });
 
     it('throws on dangling -o', () => {
-        expect(() => parseExtractArgs(['bundle.js', '-o'])).toThrow(/requires a path argument/);
+        expect(() => parseExtractArgs(['bundle.js', '-o'])).toThrow(/requires a value/);
     });
 
     it('throws on unknown option', () => {

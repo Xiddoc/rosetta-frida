@@ -17,26 +17,24 @@ import { parseJson } from '../../src/parse/json.js';
 import { assertNoNul } from '../../src/parse/index.js';
 import type { RosettaMap } from '../../src/types/map.js';
 import type { CommandIo, FsLike } from './io.js';
+import { parseArgs, type ArgSpec } from './args.js';
 
 export interface ValidateOptions {
     inputPath: string;
 }
 
+/** Option grammar for `validate`: no options, one positional. */
+const VALIDATE_SPEC: ArgSpec = { options: [] };
+
 /** Parse argv → ValidateOptions. */
 export function parseValidateArgs(argv: readonly string[]): ValidateOptions {
-    const positional: string[] = [];
-    for (const arg of argv) {
-        if (arg.startsWith('-')) {
-            throw new RosettaError(`unknown flag: ${arg}`);
-        }
-        positional.push(arg);
-    }
-    if (positional.length !== 1) {
+    const { positionals } = parseArgs(argv, VALIDATE_SPEC);
+    if (positionals.length !== 1) {
         throw new RosettaError(
-            `validate requires exactly one positional arg: <map> (got ${positional.length})`,
+            `validate requires exactly one positional arg: <map> (got ${positionals.length})`,
         );
     }
-    return { inputPath: positional[0] as string };
+    return { inputPath: positionals[0] as string };
 }
 
 /**

@@ -23,6 +23,7 @@ import { convertToJson, yamlToMap, refuseModuleInput } from '../../src/convert/i
 import { assertNoNul } from '../../src/parse/index.js';
 import type { CommandIo, FsLike } from './io.js';
 import { ensureDir, fileExists } from './io.js';
+import { parseArgs, type ArgSpec } from './args.js';
 
 export interface ConvertOptions {
     inputPath: string;
@@ -31,37 +32,30 @@ export interface ConvertOptions {
     force?: boolean;
 }
 
+/** Option grammar for `convert`: `-o/--output <path>` and `--force/-f`. */
+const CONVERT_SPEC: ArgSpec = {
+    options: [
+        { name: 'output', aliases: ['-o', '--output'], takesValue: true },
+        { name: 'force', aliases: ['--force', '-f'], takesValue: false },
+    ],
+};
+
 /** Parse argv → ConvertOptions. */
 export function parseConvertArgs(argv: readonly string[]): ConvertOptions {
-    const positional: string[] = [];
-    let output: string | undefined;
-    let force = false;
-    for (let i = 0; i < argv.length; i++) {
-        const arg = argv[i];
-        if (arg === '-o' || arg === '--output') {
-            const next = argv[i + 1];
-            if (next === undefined) {
-                throw new RosettaError(`${arg} requires a value`);
-            }
-            output = next;
-            i++;
-        } else if (arg === '--force' || arg === '-f') {
-            force = true;
-        } else if (arg !== undefined && arg.startsWith('-')) {
-            throw new RosettaError(`unknown flag: ${arg}`);
-        } else if (arg !== undefined) {
-            positional.push(arg);
-        }
-    }
-    if (positional.length !== 1) {
+    const { positionals, values, flags } = parseArgs(argv, CONVERT_SPEC);
+    if (positionals.length !== 1) {
         throw new RosettaError(
-            `convert requires exactly one positional arg: <in> (got ${positional.length})`,
+            `convert requires exactly one positional arg: <in> (got ${positionals.length})`,
         );
     }
-    if (output === undefined) {
+    if (values.output === undefined) {
         throw new RosettaError('convert requires -o <out.json>');
     }
-    return { inputPath: positional[0] as string, outputPath: output, force };
+    return {
+        inputPath: positionals[0] as string,
+        outputPath: values.output,
+        force: flags.force ?? false,
+    };
 }
 
 /**

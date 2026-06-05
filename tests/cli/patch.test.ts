@@ -64,14 +64,12 @@ describe('parsePatchArgs', () => {
     });
 
     it('throws on dangling --map', () => {
-        expect(() => parsePatchArgs(['bundle.js', '--map'])).toThrow(
-            /--map requires a path argument/,
-        );
+        expect(() => parsePatchArgs(['bundle.js', '--map'])).toThrow(/--map requires a value/);
     });
 
     it('throws on dangling -o', () => {
         expect(() => parsePatchArgs(['bundle.js', '--map', 'm.json', '-o'])).toThrow(
-            /-o requires a path argument/,
+            /-o requires a value/,
         );
     });
 

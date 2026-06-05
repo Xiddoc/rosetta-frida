@@ -50,7 +50,7 @@ describe('parseConvertArgs', () => {
 
     it('errors on unknown flag', () => {
         expect(() => parseConvertArgs(['x.yaml', '-o', 'y.json', '--bogus'])).toThrow(
-            /unknown flag/,
+            /unknown option/,
         );
     });
 

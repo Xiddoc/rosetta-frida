@@ -57,7 +57,7 @@ describe('parseInitArgs', () => {
     });
 
     it('errors on unknown flag', () => {
-        expect(() => parseInitArgs(['com.a.b', '1.0', '--bogus'])).toThrow(/unknown flag/);
+        expect(() => parseInitArgs(['com.a.b', '1.0', '--bogus'])).toThrow(/unknown option/);
     });
 
     it('errors when positional count is wrong', () => {
