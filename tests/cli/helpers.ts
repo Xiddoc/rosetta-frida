@@ -48,14 +48,39 @@ export function makeCaptured(): Captured {
     return { stdout: [], stderr: [] };
 }
 
+/** Construct an EEXIST error mirroring what `wx` writes reject with. */
+function eexist(path: string): NodeJS.ErrnoException {
+    const err = new Error(`EEXIST: file already exists, open '${path}'`) as NodeJS.ErrnoException;
+    err.code = 'EEXIST';
+    return err;
+}
+
 /**
  * Build a fully-typed `FsLike` backed by a FakeFs. Implements the whole
- * narrow seam (readFile/writeFile/mkdir/stat) so every command — both
- * the CommandIo-pattern (patch/extract/inspect) and the map-authoring
+ * narrow seam (readFile/writeFile/mkdir) so every command — both the
+ * CommandIo-pattern (patch/extract/inspect) and the map-authoring
  * commands (init/validate/convert) — can share one in-memory fake with
  * no `as unknown as` casts.
+ *
+ * `writeFile` honours the atomic exclusive-create flag (`flag: 'wx'`):
+ * with it set, a write to an existing path rejects with EEXIST, matching
+ * the real fs so `writeNew`'s TOCTOU-safe guard is exercised.
  */
 export function makeFsLike(fs: FakeFs): FsLike {
+    const writeFile = (
+        path: string,
+        data: string,
+        options: 'utf8' | { encoding: 'utf8'; flag: 'wx' },
+    ): Promise<void> => {
+        const err = fs.writeErrors.get(path);
+        if (err) return Promise.reject(err);
+        const exclusive = typeof options === 'object' && options.flag === 'wx';
+        if (exclusive && fs.files.has(path)) {
+            return Promise.reject(eexist(path));
+        }
+        fs.files.set(path, data);
+        return Promise.resolve();
+    };
     return {
         readFile: (path) => {
             const err = fs.readErrors.get(path);
@@ -66,20 +91,10 @@ export function makeFsLike(fs: FakeFs): FsLike {
             }
             return Promise.resolve(content);
         },
-        writeFile: (path, data) => {
-            const err = fs.writeErrors.get(path);
-            if (err) return Promise.reject(err);
-            fs.files.set(path, data);
-            return Promise.resolve();
-        },
+        writeFile,
         mkdir: (path) => {
             fs.dirsCreated.push(path);
             return Promise.resolve(undefined);
-        },
-        stat: (path) => {
-            return fs.files.has(path)
-                ? Promise.resolve({ isFile: () => true })
-                : Promise.reject(new Error(`ENOENT: ${path}`));
         },
     };
 }

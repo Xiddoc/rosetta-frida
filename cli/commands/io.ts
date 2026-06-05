@@ -15,7 +15,7 @@
  * the router entirely.
  */
 
-import { MapValidationError } from '../../src/errors.js';
+import { MapValidationError, RosettaError } from '../../src/errors.js';
 
 /**
  * Subset of `node:fs/promises` the CLI commands need. Kept narrow so the
@@ -23,7 +23,10 @@ import { MapValidationError } from '../../src/errors.js';
  * route its filesystem access through a single injected seam:
  *   - `readFile` / `writeFile` — all commands.
  *   - `mkdir` — init/convert create the output directory.
- *   - `stat` — init/convert probe for an existing file (overwrite guard).
+ *
+ * There is intentionally no `stat`: the overwrite guard is the atomic
+ * `wx` write in {@link writeNew}, not a separate existence probe (which
+ * would reintroduce a TOCTOU window).
  *
  * The signatures are structurally compatible with `node:fs/promises` so
  * the real module satisfies `FsLike` directly (no cast), and so does a
@@ -31,9 +34,16 @@ import { MapValidationError } from '../../src/errors.js';
  */
 export interface FsLike {
     readFile(path: string, encoding: 'utf8'): Promise<string>;
+    /**
+     * Plain UTF-8 write (overwrites). The second overload is the atomic
+     * exclusive-create form (`flag: 'wx'`) used by {@link writeNew} to
+     * close the overwrite-guard TOCTOU window — it rejects with `EEXIST`
+     * when the target already exists, so the existence check and the
+     * write are a single syscall.
+     */
     writeFile(path: string, data: string, encoding: 'utf8'): Promise<void>;
+    writeFile(path: string, data: string, options: { encoding: 'utf8'; flag: 'wx' }): Promise<void>;
     mkdir(path: string, options: { recursive: true }): Promise<string | undefined>;
-    stat(path: string): Promise<unknown>;
 }
 
 /** Stream-like writer abstraction; covers both stdout and stderr. */
@@ -84,22 +94,47 @@ export function formatErrorLines(command: string, err: unknown): string[] {
     return lines;
 }
 
-/**
- * Return whether a file exists at `path`. A failing `stat` (ENOENT or
- * otherwise) is treated as "absent" — the only use is an
- * overwrite/probe guard, where any unreadable path is safe to treat as
- * not-yet-present.
- */
-export async function fileExists(fs: FsLike, path: string): Promise<boolean> {
-    try {
-        await fs.stat(path);
-        return true;
-    } catch {
-        return false;
-    }
-}
-
 /** Create the parent directory of `filePath` (recursive; no-op if present). */
 export async function ensureDir(fs: FsLike, dir: string): Promise<void> {
     await fs.mkdir(dir, { recursive: true });
+}
+
+/**
+ * Write `data` to `path`, refusing to clobber an existing file unless
+ * `force` is set.
+ *
+ * Without `force` it uses an atomic exclusive create (`wx` flag) so the
+ * existence check and the write are a single syscall — closing the
+ * check-then-write (TOCTOU) window that init/convert previously left open
+ * with a separate `stat` probe followed by an unconditional write. With
+ * `force`, an ordinary overwrite is used.
+ *
+ * @throws RosettaError if the target exists and `force` is not set. Any
+ *   other write failure is rethrown unchanged.
+ */
+export async function writeNew(
+    fs: FsLike,
+    path: string,
+    data: string,
+    opts: { force?: boolean } = {},
+): Promise<void> {
+    if (opts.force) {
+        await fs.writeFile(path, data, 'utf8');
+        return;
+    }
+    try {
+        await fs.writeFile(path, data, { encoding: 'utf8', flag: 'wx' });
+    } catch (err) {
+        if (isExistError(err)) {
+            throw new RosettaError(
+                `refusing to overwrite existing file: ${path} (pass --force to overwrite)`,
+            );
+        }
+        throw err;
+    }
+}
+
+/** Whether an fs error is the "already exists" (EEXIST) failure from `wx`. */
+function isExistError(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'EEXIST';
 }

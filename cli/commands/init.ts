@@ -23,7 +23,7 @@ import {
     assertNoNul,
 } from '../../src/parse/index.js';
 import type { CommandIo, FsLike } from './io.js';
-import { ensureDir, fileExists } from './io.js';
+import { ensureDir, writeNew } from './io.js';
 import { parseArgs, type ArgSpec } from './args.js';
 
 export interface InitOptions {
@@ -135,13 +135,10 @@ export async function writeSkeleton(argv: readonly string[], fs: FsLike): Promis
         // final backstop against any edge-case traversal.
         assertContained(outPath);
     }
-    if (!opts.force && (await fileExists(fs, outPath))) {
-        throw new RosettaError(
-            `refusing to overwrite existing file: ${outPath} (pass --force to overwrite)`,
-        );
-    }
     await ensureDir(fs, path.dirname(outPath));
-    await fs.writeFile(outPath, renderSkeleton(opts.app, opts.version), 'utf8');
+    // writeNew is the single overwrite guard: atomic `wx` create unless
+    // --force, closing the stat-then-write TOCTOU window.
+    await writeNew(fs, outPath, renderSkeleton(opts.app, opts.version), { force: opts.force });
     return outPath;
 }
 

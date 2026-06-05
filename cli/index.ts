@@ -13,14 +13,14 @@
  * command) or an unexpected throw that escaped the router.
  */
 
-import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 
 import { route } from './router.js';
 import type { CommandIo } from './commands/io.js';
 
 async function main(): Promise<number> {
     const io: CommandIo = {
-        fs: { readFile, writeFile, mkdir, stat },
+        fs: { readFile, writeFile, mkdir },
         stdout: (line) => process.stdout.write(line + '\n'),
         stderr: (line) => process.stderr.write(line + '\n'),
     };

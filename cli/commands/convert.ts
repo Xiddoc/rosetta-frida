@@ -22,7 +22,7 @@ import { RosettaError } from '../../src/errors.js';
 import { convertToJson, yamlToMap, refuseModuleInput } from '../../src/convert/index.js';
 import { assertNoNul } from '../../src/parse/index.js';
 import type { CommandIo, FsLike } from './io.js';
-import { ensureDir, fileExists } from './io.js';
+import { ensureDir, writeNew } from './io.js';
 import { parseArgs, type ArgSpec } from './args.js';
 
 export interface ConvertOptions {
@@ -73,12 +73,6 @@ export async function convertFile(argv: readonly string[], fs: FsLike): Promise<
     assertNoNul(opts.outputPath);
     const ext = path.extname(opts.inputPath).toLowerCase();
 
-    if (!opts.force && (await fileExists(fs, opts.outputPath))) {
-        throw new RosettaError(
-            `refusing to overwrite existing file: ${opts.outputPath} (pass --force to overwrite)`,
-        );
-    }
-
     let json: string;
     if (ext === '.yaml' || ext === '.yml') {
         const raw = await fs.readFile(opts.inputPath, 'utf8');
@@ -93,7 +87,9 @@ export async function convertFile(argv: readonly string[], fs: FsLike): Promise<
     }
 
     await ensureDir(fs, path.dirname(opts.outputPath));
-    await fs.writeFile(opts.outputPath, json, 'utf8');
+    // writeNew is the single overwrite guard: atomic `wx` create unless
+    // --force, closing the stat-then-write TOCTOU window.
+    await writeNew(fs, opts.outputPath, json, { force: opts.force });
     return opts.outputPath;
 }
 
