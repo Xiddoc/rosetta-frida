@@ -15,7 +15,7 @@ Usage: rosetta <command> [options]
 Commands:
   init <app> <version>                 Scaffold a new map skeleton
   validate <map>                       Schema + sanity check (auto-detect format)
-  convert <in> -o <out>                Convert YAML/TS module to canonical JSON
+  convert <in> -o <out>                Convert YAML map to canonical JSON
   patch <bundle.js> --map <new.json>  Replace embedded map in bundle
   extract <bundle.js> -o <out.json>    Pull embedded map out of bundle (JSON output)
   inspect <bundle.js>                  One-line summary of embedded map
@@ -24,8 +24,8 @@ Commands:
 | Command | What it does | Operates on |
 |---|---|---|
 | [`init`](init.md) | Scaffold a strict-JSON skeleton for a new `(app, version)` pair. | The filesystem — writes `maps/<app>/<version>.json` by default. |
-| [`validate`](validate.md) | Run the schema + sanity check against a map. Auto-detects format from the extension. | One map file (JSON / YAML / TS module). |
-| [`convert`](convert.md) | Convert a YAML or TS-module map to canonical JSON. | One map file. |
+| [`validate`](validate.md) | Run the schema + sanity check against a map. Auto-detects format from the extension. | One map file (JSON / YAML). |
+| [`convert`](convert.md) | Convert a YAML map to canonical JSON. | One map file. |
 | [`patch`](patch.md) | Replace the embedded map in a compiled bundle with a fresh one. In-place by default. | A compiled bundle + a new map. |
 | [`extract`](extract.md) | Pull the embedded map back out of a compiled bundle into a standalone JSON file. | A compiled bundle. |
 | [`inspect`](inspect.md) | Print a one-line summary of the map embedded in a compiled bundle. | A compiled bundle. |

@@ -117,8 +117,9 @@ the full motivating story.
   structured `{path, message}` error reports — no silent corruption
   when a map drifts. The validator tracks the canonical map schema
   owned by [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps).
-- **Comment-bearing authoring inputs.** YAML and TypeScript modules supported
-  via `rosetta convert`.
+- **Comment-bearing authoring input.** YAML supported via `rosetta
+  convert` (TS/JS map modules were removed — they executed arbitrary
+  code at convert time; maps are pure data).
 - **PEM-style marker block.** Maps embed into the compiled bundle
   between `-----BEGIN ROSETTA MAP-----` / `-----END ROSETTA MAP-----`
   comments. Swap maps without recompiling via `rosetta patch`.

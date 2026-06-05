@@ -169,7 +169,8 @@ Run validate before every commit. It catches typos and missing
 fields long before the map ships to a device.
 
 See [CLI — `rosetta validate`](../cli/validate.md) for the full
-reference, including the YAML and TS-module input formats.
+reference. Inputs are JSON or YAML only (TS/JS modules were removed
+for security).
 
 ## 5. Verify on device
 
@@ -257,13 +258,11 @@ If hand-writing JSON isn't your preferred authoring environment:
 
 - **YAML** — write `maps/com.example.app/3.4.5.yaml`, then
   `rosetta convert maps/com.example.app/3.4.5.yaml -o maps/com.example.app/3.4.5.json`.
-- **TypeScript module** — write `maps/com.example.app/3.4.5.ts`
-  with a default export of type `RosettaMap`, then
-  `rosetta convert maps/com.example.app/3.4.5.ts -o maps/com.example.app/3.4.5.json`.
 
-Strict JSON is the canonical on-disk format; YAML and TS are authoring
-conveniences. See [Conversion](conversion.md) for the full converter
-docs.
+Strict JSON is the canonical on-disk format; YAML is the one authoring
+convenience. (TS/JS map modules were removed — they executed arbitrary
+code at convert time. Author as JSON or YAML.) See
+[Conversion](conversion.md) for the full converter docs.
 
 ## Common authoring mistakes
 

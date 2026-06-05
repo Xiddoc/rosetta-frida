@@ -34,7 +34,7 @@ export {
 export type { ParsedMarker, ParsedSingle, ParsedRegistry } from './marker/index.js';
 
 // Converters
-export { yamlToMap, tsModuleToMap, convertToJson, renderJson } from './convert/index.js';
+export { yamlToMap, convertToJson, renderJson } from './convert/index.js';
 export type { ConvertFormat } from './convert/index.js';
 
 // Session + auto-detect + health-check (Wave 2G)

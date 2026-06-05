@@ -20,6 +20,7 @@
 
 import { parseJson } from '../../src/parse/json.js';
 import { patchMarkerBlock } from '../../src/marker/patch.js';
+import { assertContained } from '../../src/parse/index.js';
 import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import type { CommandIo } from './io.js';
 import { errorMessage } from './io.js';
@@ -129,6 +130,8 @@ export async function runPatch(argv: readonly string[], io: CommandIo): Promise<
     let args: PatchArgs;
     try {
         args = parsePatchArgs(argv);
+        // Contain the output path to the project tree before any IO.
+        assertContained(args.output);
     } catch (err) {
         io.stderr(`patch: ${errorMessage(err)}`);
         return 1;

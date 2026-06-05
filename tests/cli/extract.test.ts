@@ -144,4 +144,29 @@ describe('runExtract', () => {
         expect(code).toBe(1);
         expect(captured.stderr[0]).toMatch(/cannot write output.*EACCES/);
     });
+
+    it('exits 1 and writes nothing when -o escapes the project tree', async () => {
+        const fs = makeFakeFs({ 'b.js': emitMarkerBlock(minimalMap()) });
+        const captured = makeCaptured();
+        const code = await runExtract(['b.js', '-o', '../escape.json'], makeIo(fs, captured));
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/extract:.*outside the project tree/);
+        expect(fs.files.has('../escape.json')).toBe(false);
+    });
+
+    it('exits 1 when -o is an absolute path outside the tree', async () => {
+        const fs = makeFakeFs({ 'b.js': emitMarkerBlock(minimalMap()) });
+        const captured = makeCaptured();
+        const code = await runExtract(['b.js', '-o', '/etc/out.json'], makeIo(fs, captured));
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/outside the project tree/);
+    });
+
+    it('exits 1 when -o contains a NUL byte', async () => {
+        const fs = makeFakeFs({ 'b.js': emitMarkerBlock(minimalMap()) });
+        const captured = makeCaptured();
+        const code = await runExtract(['b.js', '-o', 'out.json\0.png'], makeIo(fs, captured));
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/NUL/);
+    });
 });
