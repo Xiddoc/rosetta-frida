@@ -16,6 +16,8 @@
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
 import { CURRENT_SCHEMA_VERSION } from '../../src/types/map.js';
+import type { RosettaMap } from '../../src/types/map.js';
+import { renderJson } from '../../src/convert/json.js';
 import {
     assertValidApp,
     assertValidVersion,
@@ -68,7 +70,7 @@ export function parseInitArgs(argv: readonly string[]): InitOptions {
  * `maps/com.example.app/3.4.5.json` for a fully-worked example.
  */
 export function renderSkeleton(app: string, version: string): string {
-    const skeleton = {
+    const skeleton: RosettaMap = {
         schema_version: CURRENT_SCHEMA_VERSION,
         app,
         version,
@@ -102,7 +104,10 @@ export function renderSkeleton(app: string, version: string): string {
             },
         },
     };
-    return JSON.stringify(skeleton, null, 4) + '\n';
+    // Reuse the canonical renderer (4-space indent + trailing newline) so
+    // the skeleton matches the on-disk artifact byte-for-byte instead of
+    // re-implementing the same JSON.stringify locally.
+    return renderJson(skeleton);
 }
 
 /** Resolve the default output path: `maps/<app>/<version>.json`. */

@@ -14,6 +14,8 @@ import {
     runInit,
 } from '../../cli/commands/init.js';
 import { RosettaError } from '../../src/errors.js';
+import { renderJson } from '../../src/convert/json.js';
+import type { RosettaMap } from '../../src/types/map.js';
 import type { FsLike } from '../../cli/commands/io.js';
 import { makeCaptured, makeFakeFs, makeFsLike, makeIo, type FakeFs } from './helpers.js';
 
@@ -88,6 +90,17 @@ describe('renderSkeleton', () => {
         const a = renderSkeleton('com.example.app', '1.0');
         const b = renderSkeleton('com.example.app', '1.0');
         expect(a).toBe(b);
+    });
+
+    it('uses the canonical renderer: 4-space indent and a trailing newline', () => {
+        // Dedup contract (Task 7): renderSkeleton delegates to src renderJson
+        // rather than re-implementing JSON.stringify. Round-tripping the parse
+        // back through renderJson must reproduce the exact bytes.
+        const out = renderSkeleton('com.example.app', '1.2.3');
+        expect(out.endsWith('}\n')).toBe(true);
+        expect(out).toContain('\n    "app"'); // 4-space indent
+        const reRendered = renderJson(JSON.parse(out) as RosettaMap);
+        expect(reRendered).toBe(out);
     });
 });
 
