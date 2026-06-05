@@ -23,7 +23,12 @@ import {
 } from './resolver.js';
 import { createResolver } from './index.js';
 import { isSentinel, SENTINEL_REAL_NAME } from './sentinel.js';
+import { validateMap } from '../validate/schema.js';
 
+// The resolver consumes the NORMALISED in-memory map (methods always
+// arrays). Fixtures here are authored in the terser single-overload form
+// and run through validateMap so the resolver sees the normalised shape —
+// exactly as production does.
 function buildMap(): RosettaMap {
     return {
         schema_version: 2,
@@ -86,7 +91,8 @@ interface Harness {
 }
 
 function makeHarness(overrides?: { map?: RosettaMap }): Harness {
-    const map = overrides?.map ?? buildMap();
+    // Normalise through the real validator so methods are always arrays.
+    const map = validateMap(overrides?.map ?? buildMap());
     const bus = new EventBus();
     const events: ResolveEvent[] = [];
     bus.onType('resolve', (e) => events.push(e));
@@ -534,7 +540,7 @@ describe('Resolver event-emission shapes', () => {
         };
         try {
             bus.setTrace(true);
-            const resolver = new ResolverImpl({ map: buildMap(), events: bus });
+            const resolver = new ResolverImpl({ map: validateMap(buildMap()), events: bus });
             resolver.resolveClass('com.example.app.IRemoteService$Stub');
         } finally {
             console.error = original;
@@ -546,14 +552,14 @@ describe('Resolver event-emission shapes', () => {
 
 describe('createResolver factory', () => {
     it('returns a Resolver backed by a fresh EventBus when none is supplied', () => {
-        const map = buildMap();
+        const map = validateMap(buildMap());
         const r = createResolver(map);
         const cls = r.resolveClass('com.example.app.IRemoteService$Stub');
         expect(cls.obfName).toBe('aaaa');
     });
 
     it('uses a caller-supplied EventBus and respects the failurePolicy option', () => {
-        const map = buildMap();
+        const map = validateMap(buildMap());
         const bus = new EventBus();
         const events: ResolveEvent[] = [];
         bus.onType('resolve', (e) => events.push(e));
@@ -750,7 +756,7 @@ describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
         const bus = new EventBus();
         const events: ResolveEvent[] = [];
         bus.onType('resolve', (e) => events.push(e));
-        const resolver = new ResolverImpl({ map, events: bus });
+        const resolver = new ResolverImpl({ map: validateMap(map), events: bus });
         return { resolver, events };
     }
 
@@ -824,7 +830,7 @@ describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
     it('an explicit allowlist permits an otherwise-forbidden framework target', () => {
         const bus = new EventBus();
         const resolver = new ResolverImpl({
-            map: maliciousMap(),
+            map: validateMap(maliciousMap()),
             events: bus,
             targetPolicy: { allow: ['java.lang.Runtime'] },
         });
@@ -843,7 +849,11 @@ describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
         };
         // With appPackage = org.other, the org.other.* target is app-owned.
         const bus = new EventBus();
-        const resolver = new ResolverImpl({ map, events: bus, appPackage: 'org.other.app' });
+        const resolver = new ResolverImpl({
+            map: validateMap(map),
+            events: bus,
+            appPackage: 'org.other.app',
+        });
         expect(resolver.resolveClass('Foreign').obfName).toBe('org.other.lib.Thing');
     });
 });

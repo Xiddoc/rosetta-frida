@@ -28,7 +28,7 @@
  * `Stub.requestTicket === Stub.requestTicket` within one proxy.
  */
 import { defaultJavaBridge, javaBridgeFromUse, type JavaBridge } from '../java-bridge.js';
-import type { ClassEntry } from '../types/map.js';
+import type { ClassEntry, MethodEntry } from '../types/map.js';
 import {
     ROSETTA_META,
     type ClassProxy,
@@ -187,8 +187,8 @@ export function makeClassProxy(
                 return cached;
             }
             // Dispatch: methods first (more common access path), then fields.
-            const methodEntry = entry.methods?.[prop];
-            if (methodEntry !== undefined) {
+            const overloads = entry.methods?.[prop];
+            if (overloads !== undefined) {
                 // Pick the first overload's obfuscated name — multiple
                 // overloads of a single real method name all share the
                 // same underlying Frida method object (which then
@@ -198,11 +198,12 @@ export function makeClassProxy(
                 // methods, and *accessing* the method on the class
                 // wrapper must always succeed — the ambiguity check
                 // belongs on `.implementation`, not on the access.
-                const first = Array.isArray(methodEntry) ? methodEntry[0] : methodEntry;
-                // The schema validator (src/validate/schema.ts) rejects
-                // empty overload arrays via `.min(1)`, so `first` is
-                // always defined; the assertion is for the type system.
-                const obfMethod = (first as { obfuscated: string }).obfuscated;
+                //
+                // `overloads` is always a non-empty array post-validation
+                // (the schema's `.min(1)` + single→array normalisation), so
+                // `[0]` is defined; the assertion is for the type system.
+                const first = overloads[0] as MethodEntry;
+                const obfMethod = first.obfuscated;
                 const handle = makeMethodHandle(resolver, realName, prop, native, obfMethod);
                 memberCache.set(prop, handle);
                 return handle;

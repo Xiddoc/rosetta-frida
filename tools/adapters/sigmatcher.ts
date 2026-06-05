@@ -151,18 +151,25 @@ export function sigmatcherRawToRosettaMap(
         classes[realFqn] = finalizeClass(realFqn, entry, options);
     }
 
-    const map: RosettaMap = {
+    // This adapter EMITS an on-disk authoring map, which may use the terse
+    // single-overload scalar form. We validate it for correctness (which
+    // would also normalise methods to arrays) but RETURN the scalar map so
+    // the emitted artifact stays terse — normalisation is an in-memory
+    // concern at load time, not an emit-time one.
+    const map = {
         schema_version: CURRENT_SCHEMA_VERSION,
         app: options.app,
         version: options.version,
         version_code: options.versionCode,
         classes,
-    };
+    } as RosettaMap;
     if (options.capturedAt !== undefined) map.captured_at = options.capturedAt;
     if (options.signerSha256 !== undefined) map.signer_sha256 = options.signerSha256;
     map.sources = [{ tool: 'sigmatcher', classes: Object.keys(classes).length }];
 
-    return validateMap(map);
+    // Validate for structural correctness; discard the normalised result.
+    validateMap(map);
+    return map;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +258,10 @@ function finalizeClass(
             `sigmatcher adapter: no obfuscated short name resolved for class ${realFqn}`,
         );
     }
-    const methods: MethodMap = {};
+    // Authoring/on-disk shape: single overloads emit as a scalar entry,
+    // multiples as an array. (The in-memory MethodMap is always arrays; the
+    // load-time validator normalises this terser emitted form.)
+    const methods: Record<string, MethodEntry | MethodEntry[]> = {};
     for (const [realName, overloads] of Object.entries(wk.methods)) {
         methods[realName] = overloads.length === 1 ? (overloads[0] as MethodEntry) : overloads;
     }
@@ -261,7 +271,7 @@ function finalizeClass(
     };
     const kind = options.classKindMap?.[realFqn];
     if (kind !== undefined) entry.kind = kind;
-    if (Object.keys(methods).length > 0) entry.methods = methods;
+    if (Object.keys(methods).length > 0) entry.methods = methods as MethodMap;
     if (Object.keys(wk.fields).length > 0) entry.fields = wk.fields;
     return entry;
 }

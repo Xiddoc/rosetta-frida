@@ -18,13 +18,14 @@ import { MockFrida, useFridaMock, type JavaWrapper } from '../../tests/mocks/ind
 import { AmbiguousOverloadError } from '../errors.js';
 import { createResolver } from '../resolver/index.js';
 import type { RosettaMap } from '../types/map.js';
+import { validateMap } from '../validate/schema.js';
 import { makeMethodHandle } from './method-handle.js';
 
 // A map with both a single-overload method (`c`) and a multi-overload
 // method (also key `c` in obfuscation — array form). The proxy looks
 // only at the real-name side, so we name them `single` and `multi` at
 // the real level.
-const baseMap: RosettaMap = {
+const baseMap: RosettaMap = validateMap({
     schema_version: 2,
     version_code: 1,
     app: 'com.example.app',
@@ -46,7 +47,7 @@ const baseMap: RosettaMap = {
         },
         'com.example.app.Callback': { obfuscated: 'bbbb' },
     },
-};
+});
 
 describe('makeMethodHandle — overload translation', () => {
     useFridaMock();

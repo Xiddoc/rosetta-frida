@@ -2,11 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResolveError, RosettaError, TargetPolicyError, UnresolvedAccessError } from '../errors.js';
 import { isSentinel } from '../resolver/sentinel.js';
 import type { RosettaMap } from '../types/map.js';
+import { validateMap } from '../validate/schema.js';
 import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/index.js';
 import { _resetCurrentSession, getCurrentSession, rosetta } from './rosetta.js';
 
 function makeMap(): RosettaMap {
-    return {
+    // Sessions consume already-validated (normalised) maps; author in the
+    // terser single-overload form and normalise via validateMap.
+    return validateMap({
         schema_version: 2,
         version_code: 1,
         app: 'com.example.app',
@@ -26,7 +29,7 @@ function makeMap(): RosettaMap {
                 },
             },
         },
-    };
+    });
 }
 
 function registerForResolve(): void {

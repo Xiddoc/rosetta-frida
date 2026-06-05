@@ -218,7 +218,9 @@ export class ResolverImpl implements Resolver {
             );
         }
 
-        const overloads: MethodEntry[] = Array.isArray(raw) ? raw : [raw];
+        // `raw` is always a (non-empty) MethodEntry[] post-validation — the
+        // schema normalises the single-overload authoring form to an array.
+        const overloads: MethodEntry[] = raw;
 
         let picked: MethodEntry;
         if (argTypes === undefined) {

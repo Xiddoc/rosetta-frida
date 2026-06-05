@@ -29,7 +29,6 @@ import {
     zodPathToString,
 } from './schema.js';
 import { MapValidationError } from '../errors.js';
-import type { RosettaMap } from '../types/map.js';
 
 describe('confidenceSchema', () => {
     it('accepts all three confidence values', () => {
@@ -136,12 +135,12 @@ describe('fieldEntrySchema', () => {
 });
 
 describe('methodMapValueSchema', () => {
-    it('accepts a single MethodEntry', () => {
+    it('normalises a single MethodEntry to a one-element array', () => {
         const m = { obfuscated: 'c', signature: '()V' };
-        expect(methodMapValueSchema.parse(m)).toEqual(m);
+        expect(methodMapValueSchema.parse(m)).toEqual([m]);
     });
 
-    it('accepts an array of MethodEntry', () => {
+    it('accepts an array of MethodEntry unchanged', () => {
         const m = [
             { obfuscated: 'c', signature: '()V' },
             { obfuscated: 'd', signature: '(I)V' },
@@ -186,7 +185,17 @@ describe('classEntrySchema', () => {
             source: 'sigmatcher',
             confidence: 'high' as const,
         };
-        expect(classEntrySchema.parse(c)).toEqual(c);
+        // The single-overload `m1` is normalised to a one-element array.
+        expect(classEntrySchema.parse(c)).toEqual({
+            ...c,
+            methods: {
+                m1: [{ obfuscated: 'a', signature: '()V' }],
+                m2: [
+                    { obfuscated: 'b', signature: '(I)V' },
+                    { obfuscated: 'c', signature: '(I;I)V' },
+                ],
+            },
+        });
     });
 
     it('rejects a class without obfuscated', () => {
@@ -233,7 +242,16 @@ describe('rosettaMapSchema', () => {
                 },
             },
         };
-        expect(rosettaMapSchema.parse(m)).toEqual(m);
+        // `bar` is normalised to a one-element array on the way in.
+        expect(rosettaMapSchema.parse(m)).toEqual({
+            ...m,
+            classes: {
+                IFoo: {
+                    obfuscated: 'aaaa',
+                    methods: { bar: [{ obfuscated: 'c', signature: '()V' }] },
+                },
+            },
+        });
     });
 
     it('rejects schema_version other than 2', () => {
@@ -332,9 +350,9 @@ describe('rosettaMapSchema', () => {
 });
 
 describe('validateMap', () => {
-    it('returns the validated map on success', () => {
-        const data: RosettaMap = {
-            schema_version: 2,
+    it('returns the validated (normalised) map on success', () => {
+        const data = {
+            schema_version: 2 as const,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',
@@ -342,13 +360,15 @@ describe('validateMap', () => {
                 IFoo: {
                     obfuscated: 'aaaa',
                     methods: {
+                        // Authored single-overload; normalised to an array.
                         bar: { obfuscated: 'c', signature: '()V' },
                     },
                 },
             },
         };
         const out = validateMap(data);
-        expect(out).toEqual(data);
+        expect(out.classes.IFoo?.methods?.bar).toEqual([{ obfuscated: 'c', signature: '()V' }]);
+        expect(out.app).toBe('com.example.app');
     });
 
     it('throws MapValidationError with structured issues on failure', () => {

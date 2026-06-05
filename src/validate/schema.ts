@@ -162,14 +162,19 @@ export const fieldEntrySchema: z.ZodType<FieldEntry> = z.object({
 
 /**
  * A method-map value is either a single MethodEntry or an array of them
- * (the multi-overload form). Both forms are accepted on input. The
- * array form requires at least one overload — an empty overload list
- * is semantically meaningless.
+ * (the multi-overload form). Both forms are accepted on input; the value is
+ * NORMALISED to an array (the single form becomes a one-element array) so
+ * the in-memory {@link MethodMap} is always `Record<string, MethodEntry[]>`
+ * and consumers never branch on array-vs-single. The array form requires at
+ * least one overload — an empty overload list is semantically meaningless.
  */
-export const methodMapValueSchema: z.ZodType<MethodEntry | MethodEntry[]> = z.union([
-    methodEntrySchema,
-    z.array(methodEntrySchema).min(1).max(MAX_METHOD_OVERLOADS),
-]);
+export const methodMapValueSchema: z.ZodType<
+    MethodEntry[],
+    z.ZodTypeDef,
+    MethodEntry | MethodEntry[]
+> = z
+    .union([methodEntrySchema, z.array(methodEntrySchema).min(1).max(MAX_METHOD_OVERLOADS)])
+    .transform((value) => (Array.isArray(value) ? value : [value]));
 
 export const methodMapSchema = boundedRecord(
     z.record(z.string(), methodMapValueSchema),

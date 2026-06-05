@@ -42,11 +42,13 @@ describe('yamlToMap', () => {
         const klass = map.classes['com.example.app.IRemoteService$Stub'];
         expect(klass?.obfuscated).toBe('aaaa');
         expect(klass?.kind).toBe('aidl_stub');
+        // Methods are normalised to arrays by validation (single-overload
+        // authoring form becomes a one-element array).
         const method = klass?.methods?.requestTicket;
         expect(method).toBeDefined();
-        if (Array.isArray(method)) throw new Error('expected single-overload form');
-        expect(method?.obfuscated).toBe('c');
-        expect(method?.aidl_txn).toBe(2);
+        if (!Array.isArray(method)) throw new Error('expected normalised array form');
+        expect(method[0]?.obfuscated).toBe('c');
+        expect(method[0]?.aidl_txn).toBe(2);
     });
 
     it('parses overload-array form for methods', () => {

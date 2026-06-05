@@ -10,10 +10,11 @@ import { ResolveError } from '../errors.js';
 import type { RosettaMap } from '../types/map.js';
 import { createSession } from '../session/session.js';
 import type { HealthCheckJavaApi } from '../session/health-check.js';
+import { validateMap } from '../validate/schema.js';
 import { createMapApi } from './map.js';
 
 function buildMap(): RosettaMap {
-    return {
+    return validateMap({
         schema_version: 2,
         version_code: 1,
         app: 'com.example.app',
@@ -29,7 +30,7 @@ function buildMap(): RosettaMap {
                 },
             },
         },
-    };
+    });
 }
 
 function makeHealthJavaApi(): HealthCheckJavaApi {

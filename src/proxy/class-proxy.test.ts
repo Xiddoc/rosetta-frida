@@ -21,9 +21,12 @@ import { createResolver } from '../resolver/index.js';
 import { isSentinel } from '../resolver/sentinel.js';
 import type { RosettaMap } from '../types/map.js';
 import { ROSETTA_META, type ProxyMeta } from '../types/proxy.js';
+import { validateMap } from '../validate/schema.js';
 import { makeClassProxy } from './class-proxy.js';
 
-const map: RosettaMap = {
+// Authored in the terser single-overload form; validateMap normalises
+// methods to arrays so the proxy/resolver see the in-memory shape.
+const map: RosettaMap = validateMap({
     schema_version: 2,
     version_code: 1,
     app: 'com.example.app',
@@ -48,7 +51,7 @@ const map: RosettaMap = {
         },
         'com.example.app.Callback': { obfuscated: 'bbbb' },
     },
-};
+});
 
 function registerStub(): void {
     MockFrida.registerClass('bbbb', {});
@@ -293,7 +296,7 @@ function registerStubViaCustomRegistry(): void {
 describe('makeClassProxy — $-metadata collision', () => {
     useFridaMock();
 
-    const collidingMap: RosettaMap = {
+    const collidingMap: RosettaMap = validateMap({
         schema_version: 2,
         version_code: 1,
         app: 'com.example.app',
@@ -306,7 +309,7 @@ describe('makeClassProxy — $-metadata collision', () => {
                 fields: { $native: { obfuscated: 'v', type: 'I', static: true } },
             },
         },
-    };
+    });
 
     function registerWeird(): void {
         MockFrida.registerClass('wwww', {
@@ -381,10 +384,11 @@ describe('makeClassProxy — override invalidation (live proxy revalidation)', (
         const beforeNative = Stub.$native as { $className: string };
         expect(beforeNative.$className).toBe('aaaa');
 
-        // Override the class to a new obfuscated name + member set.
+        // Override the class to a new obfuscated name + member set. Override
+        // entries are in-memory ClassEntry values (methods are arrays).
         resolver.override('com.example.app.Stub', {
             obfuscated: 'zzzz',
-            methods: { ping: { obfuscated: 'e', signature: '(Landroid/os/Bundle;)V' } },
+            methods: { ping: [{ obfuscated: 'e', signature: '(Landroid/os/Bundle;)V' }] },
             fields: { COUNT: { obfuscated: 't', type: 'I', static: true } },
         });
 

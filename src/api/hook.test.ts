@@ -18,6 +18,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AmbiguousOverloadError, ResolveError } from '../errors.js';
 import { createResolver } from '../resolver/index.js';
+import { validateMap } from '../validate/schema.js';
 import type { RosettaMap } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
 import { javaBridgeFromUse, JAVA_UNAVAILABLE_MESSAGE } from '../java-bridge.js';
@@ -71,7 +72,7 @@ interface Harness {
 
 /** Set up a fresh resolver + mock registry + Java.use cache for one test. */
 function makeHarness(): Harness {
-    const map = buildMap();
+    const map = validateMap(buildMap());
     const resolver = createResolver(map);
 
     MockFrida.registerClass('aaaa', {
@@ -445,7 +446,7 @@ describe('hook — failurePolicy', () => {
 
     it('is a no-op (already-detached handle) for a missing method under warn', () => {
         // Build a warn-policy resolver + mock registry inline.
-        const resolver = createResolver(buildMap(), { failurePolicy: 'warn' });
+        const resolver = createResolver(validateMap(buildMap()), { failurePolicy: 'warn' });
         MockFrida.registerClass('aaaa', {
             methods: { a: [{ argumentTypes: [], returnType: { className: 'void' } }] },
         });
@@ -557,7 +558,7 @@ describe('hook — descriptor parser edge cases', () => {
                 },
             },
         };
-        const resolver = createResolver(map);
+        const resolver = createResolver(validateMap(map));
         MockFrida.registerClass('k', {
             methods: {
                 m: [{ argumentTypes: args, returnType: { className: 'void' } }],

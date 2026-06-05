@@ -12,6 +12,7 @@ export type {
     MethodEntry,
     FieldEntry,
     MethodMap,
+    MethodMapInput,
     FieldMap,
     ClassEntry,
     ClassMap,
