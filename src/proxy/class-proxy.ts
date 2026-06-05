@@ -74,37 +74,71 @@ export function makeClassProxy(
     realName: string,
     options: ClassProxyOptions = {},
 ): ClassProxy {
-    const resolved = resolver.resolveClass(realName);
-    const entry: ClassEntry = resolved.entry;
-    const obfName = resolved.obfName;
-
     const bridge = resolveBridge(options);
-    const native = bridge.use(obfName);
 
-    // Memoized per-member handles. Same real name → same handle object.
+    // Mutable proxy state, re-derived whenever the resolver's cache epoch
+    // moves (a tier-3 override invalidates caches and bumps the epoch).
+    // Without this revalidation a live proxy built before an override would
+    // keep handing back the pre-override class entry / native wrapper /
+    // memoized member handles. See Resolver.cacheEpoch.
+    let entry: ClassEntry;
+    let obfName: string;
+    let native: unknown;
+    let epoch = -1;
+
+    // Memoized per-member handles. Same real name → same handle object,
+    // until an override forces a rebuild.
     const memberCache = new Map<string, MethodHandle | FieldAccessor<unknown>>();
 
     const metadata: Record<string, unknown> = {
         $realName: realName,
-        $obfName: obfName,
-        $native: native,
+        get $obfName(): string {
+            revalidate();
+            return obfName;
+        },
+        get $native(): unknown {
+            revalidate();
+            return native;
+        },
         $resolver: resolver,
         $new(...args: unknown[]): unknown {
+            revalidate();
             const nativeWrapper = native as { $new: (...a: unknown[]) => unknown };
             const instance = nativeWrapper.$new(...args);
             return makeInstanceProxy(resolver, realName, instance);
         },
     };
 
+    /**
+     * Re-resolve the class (and rebuild the native wrapper + drop the
+     * member cache) if the resolver's epoch has advanced since we last
+     * looked. The first call (epoch === -1) performs the initial resolve.
+     */
+    function revalidate(): void {
+        const current = resolver.cacheEpoch();
+        if (current === epoch) return;
+        const resolved = resolver.resolveClass(realName);
+        entry = resolved.entry;
+        obfName = resolved.obfName;
+        native = bridge.use(obfName);
+        memberCache.clear();
+        epoch = current;
+    }
+
+    // Resolve eagerly so a bad real name (or a denied target) throws at
+    // construction, matching the pre-revalidation contract.
+    revalidate();
+
     return new Proxy(metadata, {
         get(_t, prop): unknown {
             if (typeof prop !== 'string') {
                 return undefined;
             }
-            // Metadata + $new shortcut.
+            // Metadata + $new shortcut (the getters self-revalidate).
             if (prop in metadata) {
                 return metadata[prop];
             }
+            revalidate();
             // `.class` passes through to the underlying Java Class<?>
             // reflection object. This is the only non-metadata property
             // we intentionally surface without resolver translation.

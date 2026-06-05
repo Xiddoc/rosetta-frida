@@ -97,4 +97,31 @@ export interface Resolver {
 
     /** Look up the FieldEntry on a class without resolving it. */
     lookupField(className: string, fieldName: string): FieldEntry | undefined;
+
+    /**
+     * True if `realName` is a known class real-name (via runtime override
+     * or the loaded map). The boolean form of `resolveClass` that doesn't
+     * throw — part of the contract so introspection callers depend on the
+     * interface, not the concrete impl.
+     */
+    hasClass(realName: string): boolean;
+
+    /**
+     * Reverse-lookup an obfuscated class short name to its real FQN, or
+     * `undefined` if no mapping exists. Part of the contract so callers
+     * (e.g. `rosetta.field`) depend on the interface, not a duck-typed
+     * probe. Reflects runtime overrides.
+     */
+    reverseLookup(obfName: string): string | undefined;
+
+    /**
+     * A monotonically-increasing stamp that changes whenever a cached
+     * resolution may have become stale — i.e. on every `override(...)` or
+     * `invalidate(...)`. Long-lived consumers that keep their OWN caches
+     * (the tier-2 proxies' per-member handle caches) read this on each
+     * access and drop their cache when it moves, so a tier-3 override is
+     * reflected in already-built live proxies. Opaque: compare for
+     * equality only, do not interpret the magnitude.
+     */
+    cacheEpoch(): number;
 }

@@ -287,3 +287,68 @@ function registerStubViaCustomRegistry(): void {
         class: { getName: () => 'aaaa' },
     });
 }
+
+describe('makeClassProxy — override invalidation (live proxy revalidation)', () => {
+    useFridaMock();
+
+    function registerOverrideTarget(): void {
+        // A second native class the override can re-map the proxy onto.
+        MockFrida.registerClass('zzzz', {
+            methods: {
+                e: [
+                    {
+                        argumentTypes: [{ className: 'android.os.Bundle' }],
+                        returnType: { className: 'void' },
+                    },
+                ],
+            },
+            fields: { t: { type: 'I', static: true, initial: 99 } },
+        });
+    }
+
+    it('reflects a tier-3 override in a live proxy built before the override', () => {
+        registerStub();
+        registerOverrideTarget();
+        const resolver = createResolver(map);
+        const Stub = makeClassProxy(resolver, 'com.example.app.Stub');
+        // Sanity: pre-override the proxy points at 'aaaa'.
+        expect(Stub.$obfName).toBe('aaaa');
+        const beforeNative = Stub.$native as { $className: string };
+        expect(beforeNative.$className).toBe('aaaa');
+
+        // Override the class to a new obfuscated name + member set.
+        resolver.override('com.example.app.Stub', {
+            obfuscated: 'zzzz',
+            methods: { ping: { obfuscated: 'e', signature: '(Landroid/os/Bundle;)V' } },
+            fields: { COUNT: { obfuscated: 't', type: 'I', static: true } },
+        });
+
+        // The same live proxy now resolves through the override.
+        expect(Stub.$obfName).toBe('zzzz');
+        expect((Stub.$native as { $className: string }).$className).toBe('zzzz');
+        // New member is reachable; the new field reads from the new class.
+        const count = Stub.COUNT as { value: number };
+        expect(count.value).toBe(99);
+    });
+
+    it('drops a stale memoized member handle after an override', () => {
+        registerStub();
+        registerOverrideTarget();
+        const resolver = createResolver(map);
+        const Stub = makeClassProxy(resolver, 'com.example.app.Stub');
+        // Cache the static-field accessor for the pre-override class.
+        const before = Stub.STATIC_F as { value: number };
+        expect(before.value).toBe(42);
+
+        resolver.override('com.example.app.Stub', {
+            obfuscated: 'zzzz',
+            fields: { STATIC_F: { obfuscated: 't', type: 'I', static: true } },
+        });
+
+        // After the override, the cached accessor must be rebuilt against
+        // the new class — not return the stale handle.
+        const after = Stub.STATIC_F as { value: number };
+        expect(after).not.toBe(before);
+        expect(after.value).toBe(99);
+    });
+});

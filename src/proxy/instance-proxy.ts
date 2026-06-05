@@ -37,15 +37,29 @@ export function makeInstanceProxy(
     realName: string,
     instance: unknown,
 ): InstanceProxy {
-    const obfName = resolver.resolveClass(realName).obfName;
-
     // Per-instance memoization of field accessors so repeated reads of
-    // the same field return the same wrapper object.
+    // the same field return the same wrapper object — dropped when the
+    // resolver's cache epoch moves (a tier-3 override) so a re-mapped
+    // field's obfuscated name is picked up by a live instance proxy.
     const fieldCache = new Map<string, FieldAccessor<unknown>>();
+    // Resolve eagerly so a bad real name throws at construction (matching
+    // the prior contract); the result is re-read lazily via $obfName.
+    resolver.resolveClass(realName);
+    let epoch = resolver.cacheEpoch();
+
+    /** Drop the field cache if an override invalidated resolver caches. */
+    function revalidate(): void {
+        const current = resolver.cacheEpoch();
+        if (current === epoch) return;
+        fieldCache.clear();
+        epoch = current;
+    }
 
     const metadata: Record<string, unknown> = {
         $realName: realName,
-        $obfName: obfName,
+        get $obfName(): string {
+            return resolver.resolveClass(realName).obfName;
+        },
         $native: instance,
     };
 
@@ -59,6 +73,7 @@ export function makeInstanceProxy(
             if (prop in metadata) {
                 return metadata[prop];
             }
+            revalidate();
             const cached = fieldCache.get(prop);
             if (cached !== undefined) {
                 return cached;

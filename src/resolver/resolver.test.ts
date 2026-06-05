@@ -397,6 +397,29 @@ describe('ResolverImpl.override', () => {
         const f = h.resolver.lookupField('com.example.app.IOverride', 'x');
         expect(f?.obfuscated).toBe('o');
     });
+
+    it('advances the cache epoch so live consumers can detect staleness', () => {
+        const before = h.resolver.cacheEpoch();
+        h.resolver.override('com.example.app.IRemoteService$Stub', { obfuscated: 'zzzz' });
+        const after = h.resolver.cacheEpoch();
+        expect(after).not.toBe(before);
+    });
+});
+
+describe('ResolverImpl.cacheEpoch', () => {
+    let h: Harness;
+    beforeEach(() => {
+        h = makeHarness();
+    });
+
+    it('is stable across plain resolves and advances on invalidate', () => {
+        const start = h.resolver.cacheEpoch();
+        h.resolver.resolveClass('com.example.app.IRemoteService$Stub');
+        // Reads alone never move the epoch.
+        expect(h.resolver.cacheEpoch()).toBe(start);
+        h.resolver.invalidate('com.example.app.IRemoteService$Stub');
+        expect(h.resolver.cacheEpoch()).toBe(start + 1);
+    });
 });
 
 describe('ResolverImpl.invalidate', () => {

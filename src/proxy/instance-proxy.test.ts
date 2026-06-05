@@ -85,4 +85,31 @@ describe('makeInstanceProxy', () => {
         const sym = Symbol('x');
         expect((inst as unknown as Record<symbol, unknown>)[sym]).toBeUndefined();
     });
+
+    it('drops a stale field accessor after a tier-3 override', () => {
+        const { resolver, instance } = setup();
+        const inst = makeInstanceProxy(resolver, 'com.example.app.Klass', instance);
+        // Cache the accessor for fieldA → obf 'a' ('hello').
+        const before = inst.fieldA as { value: string };
+        expect(before.value).toBe('hello');
+
+        // Override so fieldA now maps to obf 'b' (an int field on the
+        // same instance, initial 1).
+        resolver.override('com.example.app.Klass', {
+            obfuscated: 'aaaa',
+            fields: { fieldA: { obfuscated: 'b', type: 'I' } },
+        });
+
+        const after = inst.fieldA as { value: number };
+        expect(after).not.toBe(before);
+        expect(after.value).toBe(1);
+    });
+
+    it('reflects the overridden $obfName on a live instance proxy', () => {
+        const { resolver, instance } = setup();
+        const inst = makeInstanceProxy(resolver, 'com.example.app.Klass', instance);
+        expect(inst.$obfName).toBe('aaaa');
+        resolver.override('com.example.app.Klass', { obfuscated: 'cccc' });
+        expect(inst.$obfName).toBe('cccc');
+    });
 });

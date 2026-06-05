@@ -105,6 +105,13 @@ export class ResolverImpl implements Resolver {
     /** The app's own namespace prefix, derived once from the app package. */
     readonly #appPrefix: string;
 
+    /**
+     * Cache epoch — bumped on every cache invalidation (which `override`
+     * triggers). Lets long-lived consumers with their own caches (proxies)
+     * detect staleness. See {@link cacheEpoch}.
+     */
+    #epoch = 0;
+
     constructor(options: ResolverOptions) {
         this.#map = options.map;
         this.#events = options.events;
@@ -355,6 +362,14 @@ export class ResolverImpl implements Resolver {
                 this.#fieldCache.delete(key);
             }
         }
+        // Signal long-lived consumers (proxies) that their own caches may
+        // now be stale, so a subsequent override is reflected in live
+        // tier-2 proxies built before the override landed.
+        this.#epoch += 1;
+    }
+
+    cacheEpoch(): number {
+        return this.#epoch;
     }
 
     override(realName: string, entry: ClassEntry): void {
@@ -372,9 +387,8 @@ export class ResolverImpl implements Resolver {
 
     /**
      * Reverse-lookup an obfuscated class short name to its real FQN.
-     * Returns undefined if no mapping exists. Exposed for tier-3
-     * callers and downstream proxy layers; not part of the locked
-     * Resolver interface so its absence elsewhere is intentional.
+     * Returns undefined if no mapping exists. Part of the locked
+     * {@link Resolver} contract; the index reflects runtime overrides.
      */
     reverseLookup(obfName: string): string | undefined {
         return this.#reverseClassIndex.get(obfName);
