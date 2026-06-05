@@ -14,8 +14,17 @@ on:
             - 'src/parse/**'
             - 'src/validate/**'
             - '.github/workflows/pipeline.yml'
+    # AIDL root-cause follow-up: run on PRs targeting ANY branch (not
+    # just master) so a fixture/adapter/AIDL change that breaks the real
+    # APK build surfaces on the *feature-branch* PR that introduces it —
+    # not weeks later on master or the Monday canary. (The original
+    # `branches: [master]` gate is exactly how the duplicate-AIDL-method
+    # regression slipped through; see docs/roadmap.md.) The path filter
+    # is kept as-is: `tests/fixtures/test-app/**` already covers the Java
+    # sources, AIDL, signatures, and goldens that drive the build / diff,
+    # so the job still skips pure docs / unrelated-source churn while now
+    # firing on the PR that actually touches those inputs.
     pull_request:
-        branches: [master]
         paths:
             - 'tests/fixtures/test-app/**'
             - 'tools/adapters/**'
@@ -30,6 +39,11 @@ on:
         - cron: '0 13 * * MON'
     workflow_dispatch: {}
 
+# Least-privilege default token: build + diff only reads the repo and
+# uploads an artifact via the actions API. No `contents: write` needed.
+permissions:
+    contents: read
+
 concurrency:
     group: pipeline-${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
@@ -39,6 +53,21 @@ jobs:
         name: build + sigmatcher + adapter + golden-diff
         runs-on: ubuntu-latest
         timeout-minutes: 30
+        # ADVISORY / non-blocking by design. This job needs the Android
+        # SDK and pulls AGP/Gradle deps from network-restricted Google
+        # Maven hosts (dl.google.com / maven.google.com), which are
+        # routinely unreachable or rate-limited in CI. Making it a *hard*
+        # required check on every-branch PRs would let an SDK/Maven
+        # outage block unrelated merges. So it runs as an informational
+        # signal: `continue-on-error` means a failure (incl. infra rot)
+        # is reported on the PR but does NOT mark the check failed/red as
+        # a merge gate. The fast, deterministic, SDK-free `verify` job in
+        # ci.yml — which now includes the SDK-free `aidl:lint` guard that
+        # catches the duplicate-AIDL-method class of regression on every
+        # branch — remains the *required* gate. Promote this job to
+        # required only once the build is reliably green in a network
+        # environment where the Google Maven hosts are allowlisted.
+        continue-on-error: true
 
         steps:
             - uses: actions/checkout@v4
@@ -50,7 +79,8 @@ jobs:
                   java-version: '17'
 
             - name: Set up Android SDK
-              uses: android-actions/setup-android@v3
+              # Pinned to v3.2.2 by commit SHA (third-party action).
+              uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
 
             - name: Set up Node.js 24
               uses: actions/setup-node@v4
@@ -59,7 +89,8 @@ jobs:
                   cache: npm
 
             - name: Install uv (for sigmatcher install)
-              uses: astral-sh/setup-uv@v3
+              # Pinned to v3.2.4 by commit SHA (third-party action).
+              uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39
               with:
                   enable-cache: true
 
@@ -83,12 +114,25 @@ jobs:
               # it keeps the golden-diff reproducible byte-for-byte. (Also drives
               # which unpack flags sigmatcher uses: >= 2.12.0 → `--only-manifest`.)
               run: |
+                  set -euo pipefail
                   APKTOOL_VERSION=3.0.2
-                  sudo curl -fsSL -o /usr/local/bin/apktool \
+                  # Pinned SHA256s for the v3.0.2 wrapper script + jar.
+                  # Verifying these turns the remote download into a
+                  # supply-chain-checked artifact: a tampered or swapped
+                  # binary (CDN compromise, MITM, upstream re-tag) fails
+                  # the build instead of silently driving the golden diff.
+                  # If you bump APKTOOL_VERSION, recompute both hashes
+                  # (sha256sum) and update them here in the same commit.
+                  APKTOOL_SCRIPT_SHA256=493a9c98df968a25c373ca9df871ca77730c82954be4959b74e90adaf91a0e77
+                  APKTOOL_JAR_SHA256=eee4669a704a14e0623407e6701b0b91887e61e1e4049cb7a82833e14ae8b5fd
+                  curl -fsSL -o /tmp/apktool \
                       "https://raw.githubusercontent.com/iBotPeaches/Apktool/v${APKTOOL_VERSION}/scripts/linux/apktool"
-                  sudo curl -fsSL -o /usr/local/bin/apktool.jar \
+                  curl -fsSL -o /tmp/apktool.jar \
                       "https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VERSION}/apktool_${APKTOOL_VERSION}.jar"
-                  sudo chmod +x /usr/local/bin/apktool /usr/local/bin/apktool.jar
+                  echo "${APKTOOL_SCRIPT_SHA256}  /tmp/apktool"     | sha256sum -c -
+                  echo "${APKTOOL_JAR_SHA256}  /tmp/apktool.jar"    | sha256sum -c -
+                  sudo install -m 0755 /tmp/apktool     /usr/local/bin/apktool
+                  sudo install -m 0755 /tmp/apktool.jar /usr/local/bin/apktool.jar
                   apktool --version
 
             - name: Install npm dependencies (npm ci)
