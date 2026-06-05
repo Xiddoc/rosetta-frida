@@ -5,6 +5,7 @@
  */
 
 import type { ClassEntry, MethodEntry, FieldEntry } from './map.js';
+import type { FailurePolicy } from './session.js';
 
 /** Result of resolving a class. */
 export interface ResolvedClass {
@@ -60,6 +61,17 @@ export interface ResolvedField {
  *   3. Throw ResolveError (V1) — V2+ runs discovery strategies here
  */
 export interface Resolver {
+    /**
+     * The effective failure policy this resolver was built with. Callers
+     * that surface misses to user code (the tier-1/2 factories) dispatch
+     * through the `resolve*OrSentinel` wrappers using this: 'strict' →
+     * throw at the call site; 'warn' → emit a miss event and return a
+     * sentinel that throws only when the unresolved entity is actually
+     * used. The plain `resolve*` methods below ALWAYS throw on a miss
+     * regardless of policy — the sentinel decision happens one level up.
+     */
+    readonly failurePolicy: FailurePolicy;
+
     /** Resolve a class by real name. */
     resolveClass(realName: string): ResolvedClass;
 

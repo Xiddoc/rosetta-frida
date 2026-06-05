@@ -34,6 +34,8 @@ import type { Resolver } from '../types/resolver.js';
 import { makeFieldAccessor } from './field-accessor.js';
 import { makeInstanceProxy } from './instance-proxy.js';
 import { makeMethodHandle } from './method-handle.js';
+import { resolveClassOrSentinel } from '../resolver/resolver.js';
+import { isSentinel } from '../resolver/sentinel.js';
 
 /** Options accepted by `makeClassProxy`. */
 export interface ClassProxyOptions {
@@ -75,6 +77,17 @@ export function makeClassProxy(
     options: ClassProxyOptions = {},
 ): ClassProxy {
     const bridge = resolveBridge(options);
+
+    // Honour the session failure policy at the class boundary: under
+    // 'warn', an unknown class yields a sentinel (the resolver emits the
+    // miss event) and the WHOLE proxy becomes that sentinel — any member
+    // access or call throws UnresolvedAccessError clearly, rather than the
+    // script blowing up at `rosetta.use(...)` time. Under 'strict' this
+    // rethrows the ResolveError, matching the eager-resolve contract.
+    const initial = resolveClassOrSentinel(resolver, realName);
+    if (isSentinel(initial)) {
+        return initial as unknown as ClassProxy;
+    }
 
     // Mutable proxy state, re-derived whenever the resolver's cache epoch
     // moves (a tier-3 override invalidates caches and bumps the epoch).

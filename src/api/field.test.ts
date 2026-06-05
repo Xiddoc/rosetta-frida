@@ -3,8 +3,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ResolveError, RosettaError } from '../errors.js';
+import { ResolveError, RosettaError, UnresolvedAccessError } from '../errors.js';
 import { createResolver } from '../resolver/index.js';
+import { isSentinel } from '../resolver/sentinel.js';
 import type { RosettaMap } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
 import { field, setField } from './field.js';
@@ -165,5 +166,40 @@ describe('setField', () => {
         expect(() => setField(42, 'sessionId', 'x', { resolver: h.resolver })).toThrow(
             RosettaError,
         );
+    });
+});
+
+describe('field/setField — failurePolicy=warn', () => {
+    /** Like makeHarness but the resolver defers misses to a sentinel. */
+    function makeWarnHarness(): Harness {
+        const resolver = createResolver(buildMap(), { failurePolicy: 'warn' });
+        MockFrida.registerClass('aaaa', {
+            fields: {
+                a: { type: 'java.lang.String', initial: 'hello' },
+                b: { type: 'I', initial: 42 },
+            },
+        });
+        const wrapper = Java.use('aaaa');
+        const instance = wrapper.$new();
+        return { resolver, wrapper, instance };
+    }
+
+    it('field returns a sentinel (throws on use) for a missing field', () => {
+        const h = makeWarnHarness();
+        const result = field(h.instance, 'notAField', { resolver: h.resolver });
+        expect(isSentinel(result)).toBe(true);
+        expect(() => (result as { x: unknown }).x).toThrow(UnresolvedAccessError);
+    });
+
+    it('field still reads a present field under warn', () => {
+        const h = makeWarnHarness();
+        expect(field(h.instance, 'sessionId', { resolver: h.resolver })).toBe('hello');
+    });
+
+    it('setField is a no-op for a missing field under warn', () => {
+        const h = makeWarnHarness();
+        expect(() =>
+            setField(h.instance, 'notAField', 'x', { resolver: h.resolver }),
+        ).not.toThrow();
     });
 });

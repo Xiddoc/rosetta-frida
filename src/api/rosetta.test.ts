@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RosettaError, TargetPolicyError } from '../errors.js';
+import { ResolveError, RosettaError, TargetPolicyError, UnresolvedAccessError } from '../errors.js';
+import { isSentinel } from '../resolver/sentinel.js';
 import type { RosettaMap } from '../types/map.js';
 import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/index.js';
 import { _resetCurrentSession, getCurrentSession, rosetta } from './rosetta.js';
@@ -112,6 +113,34 @@ describe('rosetta ambient namespace', () => {
         const Stub = rosetta.use('com.example.app.IFoo$Stub');
         expect(Stub.$realName).toBe('com.example.app.IFoo$Stub');
         expect(Stub.$obfName).toBe('aaaa');
+    });
+
+    it('use() defers a missing class to a sentinel under the default warn policy', () => {
+        registerForResolve();
+        // Default session failurePolicy is 'warn'; the policy must flow all
+        // the way to rosetta.use so a missing class no longer crashes the
+        // call but throws clearly only when the proxy is used.
+        rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        const Missing = rosetta.use('com.example.app.NotInMap');
+        expect(isSentinel(Missing)).toBe(true);
+        expect(() => (Missing as { whatever: unknown }).whatever).toThrow(UnresolvedAccessError);
+    });
+
+    it('use() throws for a missing class under explicit strict policy', () => {
+        registerForResolve();
+        rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+            failurePolicy: 'strict',
+        });
+        expect(() => rosetta.use('com.example.app.NotInMap')).toThrow(ResolveError);
     });
 
     it('type() translates a real-name type to obfuscated', () => {

@@ -15,9 +15,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { MockFrida, useFridaMock } from '../../tests/mocks/index.js';
-import { ResolveError } from '../errors.js';
+import { ResolveError, UnresolvedAccessError } from '../errors.js';
 import { javaBridgeFromUse } from '../java-bridge.js';
 import { createResolver } from '../resolver/index.js';
+import { isSentinel } from '../resolver/sentinel.js';
 import type { RosettaMap } from '../types/map.js';
 import { makeClassProxy } from './class-proxy.js';
 
@@ -329,6 +330,24 @@ describe('makeClassProxy — override invalidation (live proxy revalidation)', (
         // New member is reachable; the new field reads from the new class.
         const count = Stub.COUNT as { value: number };
         expect(count.value).toBe(99);
+    });
+
+    it('returns a sentinel for an unknown class under failurePolicy=warn', () => {
+        registerStub();
+        const resolver = createResolver(map, { failurePolicy: 'warn' });
+        // Building the proxy must NOT throw — the miss is deferred.
+        const Missing = makeClassProxy(resolver, 'com.example.app.DoesNotExist');
+        expect(isSentinel(Missing)).toBe(true);
+        // Using it throws clearly at the point of misuse.
+        expect(() => (Missing as { anything: unknown }).anything).toThrow(UnresolvedAccessError);
+    });
+
+    it('still throws for an unknown class under the default strict policy', () => {
+        registerStub();
+        const resolver = createResolver(map); // default 'strict'
+        expect(() => makeClassProxy(resolver, 'com.example.app.DoesNotExist')).toThrow(
+            ResolveError,
+        );
     });
 
     it('drops a stale memoized member handle after an override', () => {

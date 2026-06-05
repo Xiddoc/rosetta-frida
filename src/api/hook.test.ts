@@ -433,6 +433,32 @@ describe('hook + proceed', () => {
     });
 });
 
+describe('hook — failurePolicy', () => {
+    it('throws ResolveError for a missing method under strict (default)', () => {
+        const h = makeHarness();
+        expect(() =>
+            hook('com.example.app.IRemoteService$Stub.noSuchMethod', () => undefined, {
+                resolver: h.resolver,
+            }),
+        ).toThrow(ResolveError);
+    });
+
+    it('is a no-op (already-detached handle) for a missing method under warn', () => {
+        // Build a warn-policy resolver + mock registry inline.
+        const resolver = createResolver(buildMap(), { failurePolicy: 'warn' });
+        MockFrida.registerClass('aaaa', {
+            methods: { a: [{ argumentTypes: [], returnType: { className: 'void' } }] },
+        });
+        MockFrida.registerClass('bbbb', {});
+        const handle = hook('com.example.app.IRemoteService$Stub.noSuchMethod', () => undefined, {
+            resolver,
+        });
+        expect(handle.detached).toBe(true);
+        // detach() on the no-op handle is safe.
+        expect(() => handle.detach()).not.toThrow();
+    });
+});
+
 describe('hook — environment errors', () => {
     it('throws the canonical error when the Java bridge is unavailable', () => {
         const h = makeHarness();

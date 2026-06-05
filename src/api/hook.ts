@@ -37,6 +37,8 @@
 
 import { RosettaError } from '../errors.js';
 import { defaultJavaBridge, type JavaBridge } from '../java-bridge.js';
+import { resolveMethodOrSentinel } from '../resolver/resolver.js';
+import { isSentinel } from '../resolver/sentinel.js';
 import type { Resolver, ResolvedMethod } from '../types/resolver.js';
 import { pushProceedFrame, type ProceedFrame } from './proceed.js';
 
@@ -82,9 +84,13 @@ export type HookImpl = (this: unknown, ...args: unknown[]) => unknown;
  * Install a tier-1 hook. Returns a handle whose `.detach()` reverts
  * the installation.
  *
- * Throws `ResolveError` if the class/method isn't in the map, and
- * `AmbiguousOverloadError` if the string form names a multi-overload
- * method without disambiguating args.
+ * Honours the resolver's failure policy: under 'strict' a missing
+ * class/method throws `ResolveError` at the call site; under 'warn' the
+ * resolver emits a miss event and `hook` becomes a no-op, returning an
+ * already-detached handle (a hook is an immediate action, so there is
+ * nothing to defer to a sentinel — the warning is the miss event).
+ * `AmbiguousOverloadError` always throws regardless of policy (the
+ * string form named a multi-overload method without disambiguating args).
  */
 export function hook(
     target: string | HookTarget,
@@ -95,12 +101,17 @@ export function hook(
     const bridge = options.javaBridge ?? defaultJavaBridge;
     const { className, methodName, argTypes } = parseTarget(target);
 
-    // Resolve the method; resolver applies overload selection when
-    // argTypes is provided, or picks the sole overload otherwise. The
-    // resolver's own errors (ResolveError + AmbiguousOverloadError)
-    // already carry good context, so we let them propagate unchanged
-    // for callers to pattern-match on.
-    const resolved: ResolvedMethod = resolver.resolveMethod(className, methodName, argTypes);
+    // Resolve the method, honouring the session failure policy. Under
+    // 'warn' a miss yields a sentinel (the resolver already emitted the
+    // miss event); installing a hook on an unresolved method is a no-op,
+    // so we return an already-detached handle instead of throwing or
+    // touching Frida. `AmbiguousOverloadError` is not a ResolveError, so
+    // it still propagates from the resolver unchanged.
+    const maybe = resolveMethodOrSentinel(resolver, className, methodName, argTypes);
+    if (isSentinel(maybe)) {
+        return { detached: true, detach() {} };
+    }
+    const resolved: ResolvedMethod = maybe;
 
     // Java.use(obfClass) — get the native class wrapper, via the bridge.
     const wrapper = bridge.use(resolved.className) as Record<string, unknown>;

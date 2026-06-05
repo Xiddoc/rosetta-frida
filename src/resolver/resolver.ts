@@ -29,13 +29,13 @@ export interface ResolverOptions {
     /** Where to emit resolution events. Required — diagnostics is core. */
     events: EventBus;
     /**
-     * Failure policy. Default 'strict' (throw on miss). The sentinel-
-     * returning 'warn' path is only used when the Resolver is asked to
-     * resolve through a sentinel-aware wrapper (see resolveOrSentinel).
-     * Plain `resolveClass/Method/Field` always throw, regardless of
-     * policy, so internal callers always get a guaranteed-resolved
-     * structure or an exception — the sentinel decision happens one
-     * level up.
+     * Failure policy. Default 'strict' (throw on miss). Stored on the
+     * resolver and exposed via {@link Resolver.failurePolicy}; the tier-1/2
+     * factories (`makeClassProxy` / `hook` / `field`) dispatch through the
+     * sentinel-aware wrappers (`resolve*OrSentinel`) using it, so 'warn'
+     * emits a miss event + returns a sentinel that throws only on use.
+     * Plain `resolveClass/Method/Field` always throw, regardless of policy
+     * — the sentinel decision happens one level up.
      */
     failurePolicy?: FailurePolicy;
     /**
@@ -81,6 +81,9 @@ function fieldCacheKey(className: string, fieldName: string): string {
 }
 
 export class ResolverImpl implements Resolver {
+    /** Effective failure policy (see {@link Resolver.failurePolicy}). */
+    readonly failurePolicy: FailurePolicy;
+
     readonly #map: RosettaMap;
     readonly #events: EventBus;
 
@@ -113,6 +116,7 @@ export class ResolverImpl implements Resolver {
     #epoch = 0;
 
     constructor(options: ResolverOptions) {
+        this.failurePolicy = options.failurePolicy ?? 'strict';
         this.#map = options.map;
         this.#events = options.events;
         this.#targetPolicy = options.targetPolicy ?? {};
@@ -415,11 +419,15 @@ export class ResolverImpl implements Resolver {
  * a miss returns a sentinel proxy (UnresolvedAccessError on access)
  * instead of throwing. Internal subsystems that want strict behaviour
  * should call the Resolver methods directly.
+ *
+ * The `policy` argument defaults to the resolver's own
+ * {@link Resolver.failurePolicy}, so the session's configured policy
+ * flows through automatically; pass an explicit policy only to override.
  */
 export function resolveClassOrSentinel(
     resolver: Resolver,
     realName: string,
-    policy: FailurePolicy,
+    policy: FailurePolicy = resolver.failurePolicy,
 ): ResolvedClass | ReturnType<typeof makeSentinel> {
     try {
         return resolver.resolveClass(realName);
@@ -436,7 +444,7 @@ export function resolveMethodOrSentinel(
     className: string,
     methodName: string,
     argTypes: readonly string[] | undefined,
-    policy: FailurePolicy,
+    policy: FailurePolicy = resolver.failurePolicy,
 ): ResolvedMethod | ReturnType<typeof makeSentinel> {
     try {
         return resolver.resolveMethod(className, methodName, argTypes);
@@ -452,7 +460,7 @@ export function resolveFieldOrSentinel(
     resolver: Resolver,
     className: string,
     fieldName: string,
-    policy: FailurePolicy,
+    policy: FailurePolicy = resolver.failurePolicy,
 ): ResolvedField | ReturnType<typeof makeSentinel> {
     try {
         return resolver.resolveField(className, fieldName);

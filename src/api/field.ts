@@ -28,6 +28,8 @@
  */
 
 import { ResolveError, RosettaError } from '../errors.js';
+import { resolveFieldOrSentinel } from '../resolver/resolver.js';
+import { isSentinel } from '../resolver/sentinel.js';
 import type { Resolver } from '../types/resolver.js';
 
 /** Options for the field helpers — resolver injection (Wave 2G ambient later). */
@@ -46,7 +48,14 @@ export interface FieldOptions {
  */
 export function field(instance: unknown, realFieldName: string, options: FieldOptions): unknown {
     const realClass = classNameFor(instance, options.resolver);
-    const resolved = options.resolver.resolveField(realClass, realFieldName);
+    // Honour the session failure policy: under 'warn' a missing field
+    // yields a sentinel (miss event already emitted) that throws on use,
+    // so the returned value loudly signals the problem at the point of
+    // misuse rather than crashing the read site.
+    const resolved = resolveFieldOrSentinel(options.resolver, realClass, realFieldName);
+    if (isSentinel(resolved)) {
+        return resolved;
+    }
     return readFromInstance(instance, resolved.obfName).value;
 }
 
@@ -64,7 +73,12 @@ export function setField(
     options: FieldOptions,
 ): void {
     const realClass = classNameFor(instance, options.resolver);
-    const resolved = options.resolver.resolveField(realClass, realFieldName);
+    // A write is an immediate action: under 'warn' a missing field is a
+    // no-op (the resolver emitted the miss event), mirroring `hook`.
+    const resolved = resolveFieldOrSentinel(options.resolver, realClass, realFieldName);
+    if (isSentinel(resolved)) {
+        return;
+    }
     readFromInstance(instance, resolved.obfName).value = value;
 }
 
