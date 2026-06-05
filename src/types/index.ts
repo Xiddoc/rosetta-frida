@@ -12,10 +12,14 @@ export type {
     MethodEntry,
     FieldEntry,
     MethodMap,
+    MethodMapInput,
     FieldMap,
     ClassEntry,
+    ClassEntryInput,
     ClassMap,
+    ClassMapInput,
     RosettaMap,
+    RosettaMapInput,
     RosettaMapRegistry,
 } from './map.js';
 
@@ -29,12 +33,14 @@ export type {
 
 export type { ResolvedClass, ResolvedMethod, ResolvedField, Resolver } from './resolver.js';
 
+export { ROSETTA_META } from './proxy.js';
 export type {
     MethodHandle,
     OverloadHandle,
     FieldAccessor,
     ClassProxy,
     InstanceProxy,
+    ProxyMeta,
 } from './proxy.js';
 
 export type {
@@ -42,6 +48,7 @@ export type {
     HealthCheckEvent,
     DetectEvent,
     MapLoadEvent,
+    SignerCheckEvent,
     DiagnosticEvent,
     EventListener,
 } from './events.js';

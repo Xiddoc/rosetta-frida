@@ -11,20 +11,36 @@
  * one per invalid field — so callers can render a useful failure
  * report without parsing message strings.
  *
- * Unknown keys are accepted (and stripped) so additive schema
- * evolution doesn't break older library versions reading newer maps.
+ * Compatibility story (one story, not two):
+ *
+ *   - `schema_version` is a HARD GATE (`z.literal(CURRENT_SCHEMA_VERSION)`).
+ *     A map whose `schema_version` differs — older OR newer — is REJECTED.
+ *     There is deliberately NO cross-version forward-compat: a wrong-version
+ *     map silently corrupts hooks, so an exact miss must fail loudly (RFC
+ *     0001 Decision 7 / AGENTS.md §7). Bumping the format means re-emitting
+ *     the map at the new version, not best-effort reading the old/new one.
+ *
+ *   - WITHIN the pinned version, unknown object keys are accepted and
+ *     STRIPPED (Zod's default object behaviour). This tolerates additive,
+ *     non-breaking annotations a newer minor emitter might attach to a
+ *     `schema_version: 2` map (extra provenance, hints, etc.) without
+ *     failing validation — they simply don't surface in the typed result.
+ *
+ * So: strict on the version key, lenient on unknown sibling keys at the
+ * same version. The two are not in tension — they operate at different
+ * granularities (whole-format vs. individual fields).
  */
 
 import { z } from 'zod';
 import { CURRENT_SCHEMA_VERSION } from '../types/map.js';
 import type {
-    ClassEntry,
     ClassKind,
     Confidence,
     FieldEntry,
     MapSource,
     MethodEntry,
     RosettaMap,
+    RosettaMapInput,
 } from '../types/map.js';
 import { MapValidationError } from '../errors.js';
 
@@ -91,7 +107,11 @@ function boundedRecord<T extends z.ZodTypeAny>(
     schema: z.ZodRecord<z.ZodString, T>,
     maxEntries: number,
     label: string,
-): z.ZodType<z.infer<z.ZodRecord<z.ZodString, T>>> {
+): z.ZodType<
+    z.output<z.ZodRecord<z.ZodString, T>>,
+    z.ZodTypeDef,
+    z.input<z.ZodRecord<z.ZodString, T>>
+> {
     const guard = z.unknown().superRefine((value, ctx) => {
         if (typeof value !== 'object' || value === null || Array.isArray(value)) {
             // Shape errors are reported by the piped record schema.
@@ -114,7 +134,11 @@ function boundedRecord<T extends z.ZodTypeAny>(
             }
         }
     });
-    return guard.pipe(schema) as unknown as z.ZodType<z.infer<z.ZodRecord<z.ZodString, T>>>;
+    return guard.pipe(schema) as unknown as z.ZodType<
+        z.output<z.ZodRecord<z.ZodString, T>>,
+        z.ZodTypeDef,
+        z.input<z.ZodRecord<z.ZodString, T>>
+    >;
 }
 
 // ---------------------------------------------------------------------------
@@ -162,14 +186,19 @@ export const fieldEntrySchema: z.ZodType<FieldEntry> = z.object({
 
 /**
  * A method-map value is either a single MethodEntry or an array of them
- * (the multi-overload form). Both forms are accepted on input. The
- * array form requires at least one overload — an empty overload list
- * is semantically meaningless.
+ * (the multi-overload form). Both forms are accepted on input; the value is
+ * NORMALISED to an array (the single form becomes a one-element array) so
+ * the in-memory {@link MethodMap} is always `Record<string, MethodEntry[]>`
+ * and consumers never branch on array-vs-single. The array form requires at
+ * least one overload — an empty overload list is semantically meaningless.
  */
-export const methodMapValueSchema: z.ZodType<MethodEntry | MethodEntry[]> = z.union([
-    methodEntrySchema,
-    z.array(methodEntrySchema).min(1).max(MAX_METHOD_OVERLOADS),
-]);
+export const methodMapValueSchema: z.ZodType<
+    MethodEntry[],
+    z.ZodTypeDef,
+    MethodEntry | MethodEntry[]
+> = z
+    .union([methodEntrySchema, z.array(methodEntrySchema).min(1).max(MAX_METHOD_OVERLOADS)])
+    .transform((value) => (Array.isArray(value) ? value : [value]));
 
 export const methodMapSchema = boundedRecord(
     z.record(z.string(), methodMapValueSchema),
@@ -183,7 +212,7 @@ export const fieldMapSchema = boundedRecord(
     'fields',
 );
 
-export const classEntrySchema: z.ZodType<ClassEntry> = z.object({
+export const classEntrySchema = z.object({
     obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
     extends: z.string().max(MAX_FREE_STRING_LEN).optional(),
     kind: classKindSchema.optional(),
@@ -221,7 +250,16 @@ export const APP_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
  */
 export const SIGNER_SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
-export const rosettaMapSchema: z.ZodType<RosettaMap> = z.object({
+/**
+ * Top-level map schema. Intentionally UNANNOTATED so Zod infers both sides
+ * of the transform: `z.input<typeof rosettaMapSchema>` is the authoring
+ * shape (scalar-or-array methods, i.e. {@link RosettaMapInput}) and
+ * `z.output<typeof rosettaMapSchema>` is the normalised {@link RosettaMap}
+ * (always-array methods). Annotating it `z.ZodType<RosettaMap>` would erase
+ * `z.input`, leaving emitters of the authoring form (the sigmatcher adapter)
+ * with nowhere to hand their value but a lying cast.
+ */
+export const rosettaMapSchema = z.object({
     schema_version: z.literal(CURRENT_SCHEMA_VERSION),
     app: z.string().min(1).max(MAX_APP_LEN).regex(APP_PATTERN, {
         message: 'app must be a dotted package name (e.g. com.example.app)',
@@ -240,6 +278,24 @@ export const rosettaMapSchema: z.ZodType<RosettaMap> = z.object({
     sources: z.array(mapSourceSchema).max(MAX_SOURCES).optional(),
     classes: classMapSchema,
 });
+
+/**
+ * The authoring/input type the schema accepts. Equal to the hand-written
+ * {@link RosettaMapInput} contract (scalar-or-array methods) — kept provably
+ * in lockstep via the assertions below.
+ */
+export type RosettaMapSchemaInput = z.input<typeof rosettaMapSchema>;
+/** The normalised output type the schema produces (always-array methods). */
+export type RosettaMapSchemaOutput = z.output<typeof rosettaMapSchema>;
+
+// Compile-time lock: the inferred input/output match the hand-written
+// contracts. If the schema and `src/types/map.ts` ever drift, one of these
+// stops type-checking. (`Extends` is a structural mutual-assignability check.)
+type Extends<A, B> = A extends B ? (B extends A ? true : never) : never;
+const _inputMatches: Extends<RosettaMapSchemaInput, RosettaMapInput> = true;
+const _outputMatches: Extends<RosettaMapSchemaOutput, RosettaMap> = true;
+void _inputMatches;
+void _outputMatches;
 
 // ---------------------------------------------------------------------------
 // Public validator entry point

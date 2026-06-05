@@ -8,10 +8,15 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type * as fsMod from 'node:fs/promises';
 import * as path from 'node:path';
 import { parseValidateArgs, loadMap, runValidate } from '../../cli/commands/validate.js';
-import { RosettaError } from '../../src/errors.js';
+import { RosettaError, MapValidationError } from '../../src/errors.js';
+import type { CommandIo, FsLike } from '../../cli/commands/io.js';
+import { makeCaptured, makeFakeFs, makeFsLike, makeIo } from './helpers.js';
+
+// The committed sample map is validated against the real filesystem; that
+// one case needs the production fs (read-only).
+import * as realFs from 'node:fs/promises';
 
 const VALID_JSON = `{
     "schema_version": 2,
@@ -33,20 +38,8 @@ classes:
     obfuscated: aaaa
 `;
 
-function enoent(p: string): NodeJS.ErrnoException {
-    const err = new Error(`ENOENT: ${p}`) as NodeJS.ErrnoException;
-    err.code = 'ENOENT';
-    return err;
-}
-
-function makeFs(initial: Record<string, string>): typeof fsMod {
-    const files = new Map<string, string>(Object.entries(initial));
-    return {
-        readFile(p: string) {
-            const v = files.get(p);
-            return v === undefined ? Promise.reject(enoent(p)) : Promise.resolve(v);
-        },
-    } as unknown as typeof fsMod;
+function makeFs(initial: Record<string, string>): FsLike {
+    return makeFsLike(makeFakeFs(initial));
 }
 
 describe('parseValidateArgs', () => {
@@ -55,7 +48,7 @@ describe('parseValidateArgs', () => {
     });
 
     it('errors on flags', () => {
-        expect(() => parseValidateArgs(['--bogus'])).toThrow(/unknown flag/);
+        expect(() => parseValidateArgs(['--bogus'])).toThrow(/unknown option/);
     });
 
     it('errors when positional count is wrong', () => {
@@ -115,54 +108,63 @@ describe('loadMap', () => {
 });
 
 describe('runValidate', () => {
-    it('reports OK for a valid map', async () => {
-        const fs = makeFs({ '/m.json': VALID_JSON });
-        const result = await runValidate(['/m.json'], fs);
-        expect(result.ok).toBe(true);
-        expect(result.output[0]).toMatch(/^OK/);
-        expect(result.output[0]).toContain('com.example.app@1.0.0');
-        expect(result.output[0]).toContain('1 class');
+    // Success prints a one-line OK summary via io.stdout and returns 0.
+    // Failures THROW (the router formats them under the unified prefix and
+    // folds a MapValidationError's issue list); see router.test.ts.
+    it('returns an OK summary message for a valid map', async () => {
+        const fake = makeFakeFs({ '/m.json': VALID_JSON });
+        const captured = makeCaptured();
+        // run* returns the success message; the router owns the prefix +
+        // stdout, so command-level tests assert on the return value.
+        const msg = await runValidate(['/m.json'], makeIo(fake, captured));
+        expect(msg).toMatch(/^OK/);
+        expect(msg).toContain('com.example.app@1.0.0');
+        expect(msg).toContain('1 class');
     });
 
-    it('reports structured errors for a malformed map', async () => {
-        const fs = makeFs({
+    it('throws a MapValidationError (with issues) for a malformed map', async () => {
+        const fake = makeFakeFs({
             '/m.json':
                 '{"schema_version": 2, "version_code": 1, "app": "x", "classes": {"IFoo": {}}}',
         });
-        const result = await runValidate(['/m.json'], fs);
-        expect(result.ok).toBe(false);
-        expect(result.output[0]).toMatch(/^FAIL/);
-        // Should include indented issue lines.
-        expect(result.output.length).toBeGreaterThan(1);
-        // At least one issue line should reference a Zod field path.
-        expect(result.output.some((l) => l.includes('  at '))).toBe(true);
+        const captured = makeCaptured();
+        await expect(runValidate(['/m.json'], makeIo(fake, captured))).rejects.toThrow(
+            MapValidationError,
+        );
     });
 
-    it('reports issues with empty-path (top-level) cleanly', async () => {
-        // Feed YAML that produces an empty document — yamlToMap throws a
-        // MapValidationError whose only issue has `path: ''` (empty).
-        const fs = makeFs({ '/m.yaml': '' });
-        const result = await runValidate(['/m.yaml'], fs);
-        expect(result.ok).toBe(false);
-        // The empty-path issue should render without "at ..." prefix.
-        expect(result.output.some((l) => /^ {2}document is null/.test(l))).toBe(true);
+    it('throws on an empty YAML document (top-level issue)', async () => {
+        const fake = makeFakeFs({ '/m.yaml': '' });
+        const captured = makeCaptured();
+        await expect(runValidate(['/m.yaml'], makeIo(fake, captured))).rejects.toThrow(
+            /empty document/,
+        );
     });
 
-    it('reports a single-line failure for a non-MapValidationError RosettaError', async () => {
-        const fs = makeFs({ '/m.txt': 'whatever' });
-        const result = await runValidate(['/m.txt'], fs);
-        expect(result.ok).toBe(false);
-        expect(result.output).toHaveLength(1);
-        expect(result.output[0]).toMatch(/unsupported map extension/);
+    it('throws a RosettaError for an unsupported extension', async () => {
+        const fake = makeFakeFs({ '/m.txt': 'whatever' });
+        const captured = makeCaptured();
+        await expect(runValidate(['/m.txt'], makeIo(fake, captured))).rejects.toThrow(
+            /unsupported map extension/,
+        );
     });
 
-    it('reports a single-line failure for a non-Rosetta error', async () => {
-        // Use a path that the mock fs reports as missing — readFile throws
-        // a plain Error with `code: ENOENT`, which is NOT a RosettaError.
-        const fs = makeFs({});
-        const result = await runValidate(['/missing.json'], fs);
-        expect(result.ok).toBe(false);
-        expect(result.output[0]).toMatch(/^FAIL/);
+    it('wraps a missing-file read error in the uniform `cannot read` message', async () => {
+        // Missing file → the fake's readFile rejects with a plain ENOENT;
+        // loadMap wraps it so it reads the same as patch/extract/inspect.
+        const fake = makeFakeFs({});
+        const captured = makeCaptured();
+        await expect(runValidate(['/missing.json'], makeIo(fake, captured))).rejects.toThrow(
+            /cannot read \/missing\.json/,
+        );
+    });
+
+    it('wraps a missing-file read error for YAML inputs too', async () => {
+        const fake = makeFakeFs({});
+        const captured = makeCaptured();
+        await expect(runValidate(['/missing.yaml'], makeIo(fake, captured))).rejects.toThrow(
+            /cannot read \/missing\.yaml/,
+        );
     });
 
     it('validates the canonical sample map on disk', async () => {
@@ -175,22 +177,14 @@ describe('runValidate', () => {
             '..',
             'maps/com.example.app/3.4.5.json',
         );
-        const result = await runValidate([sample]);
-        expect(result.ok).toBe(true);
-    });
-});
-
-describe('validate error wrapping', () => {
-    it('wraps unknown errors with FAIL prefix', async () => {
-        const fs = {
-            readFile() {
-                // Plain non-Rosetta error.
-                return Promise.reject(new Error('boom'));
-            },
-        } as unknown as typeof fsMod;
-        const result = await runValidate(['/x.json'], fs);
-        expect(result.ok).toBe(false);
-        expect(result.output[0]).toContain('FAIL');
+        const captured = makeCaptured();
+        const io: CommandIo = {
+            fs: realFs,
+            stdout: (l) => captured.stdout.push(l),
+            stderr: (l) => captured.stderr.push(l),
+        };
+        const msg = await runValidate([sample], io);
+        expect(msg).toMatch(/^OK/);
     });
 });
 

@@ -36,6 +36,10 @@
  */
 
 import { RosettaError } from '../errors.js';
+import { defaultJavaBridge, type JavaBridge } from '../java-bridge.js';
+import { resolveMethodOrSentinel } from '../resolver/resolver.js';
+import { extractArgRegion, parseDescriptorArgs } from '../resolver/signature.js';
+import { isSentinel } from '../resolver/sentinel.js';
 import type { Resolver, ResolvedMethod } from '../types/resolver.js';
 import { pushProceedFrame, type ProceedFrame } from './proceed.js';
 
@@ -66,6 +70,12 @@ export interface HookHandle {
 export interface HookOptions {
     /** Resolver for real→obf translation. Required until session ambient lands. */
     readonly resolver: Resolver;
+    /**
+     * The seam onto Frida's global `Java`. Defaults to the global-reading
+     * {@link defaultJavaBridge}. Tests inject a fake bridge instead of
+     * mutating `globalThis`.
+     */
+    readonly javaBridge?: JavaBridge;
 }
 
 /** Shape of the user-supplied implementation. Untyped args by design. */
@@ -75,9 +85,13 @@ export type HookImpl = (this: unknown, ...args: unknown[]) => unknown;
  * Install a tier-1 hook. Returns a handle whose `.detach()` reverts
  * the installation.
  *
- * Throws `ResolveError` if the class/method isn't in the map, and
- * `AmbiguousOverloadError` if the string form names a multi-overload
- * method without disambiguating args.
+ * Honours the resolver's failure policy: under 'strict' a missing
+ * class/method throws `ResolveError` at the call site; under 'warn' the
+ * resolver emits a miss event and `hook` becomes a no-op, returning an
+ * already-detached handle (a hook is an immediate action, so there is
+ * nothing to defer to a sentinel — the warning is the miss event).
+ * `AmbiguousOverloadError` always throws regardless of policy (the
+ * string form named a multi-overload method without disambiguating args).
  */
 export function hook(
     target: string | HookTarget,
@@ -85,23 +99,23 @@ export function hook(
     options: HookOptions,
 ): HookHandle {
     const { resolver } = options;
+    const bridge = options.javaBridge ?? defaultJavaBridge;
     const { className, methodName, argTypes } = parseTarget(target);
 
-    // Resolve the method; resolver applies overload selection when
-    // argTypes is provided, or picks the sole overload otherwise. The
-    // resolver's own errors (ResolveError + AmbiguousOverloadError)
-    // already carry good context, so we let them propagate unchanged
-    // for callers to pattern-match on.
-    const resolved: ResolvedMethod = resolver.resolveMethod(className, methodName, argTypes);
-
-    // Java.use(obfClass) — get the native class wrapper.
-    const javaUse = (globalThis as { Java?: { use?: (n: string) => unknown } }).Java?.use;
-    if (typeof javaUse !== 'function') {
-        throw new RosettaError(
-            'rosetta.hook called without Frida Java bridge available (globalThis.Java.use is missing).',
-        );
+    // Resolve the method, honouring the session failure policy. Under
+    // 'warn' a miss yields a sentinel (the resolver already emitted the
+    // miss event); installing a hook on an unresolved method is a no-op,
+    // so we return an already-detached handle instead of throwing or
+    // touching Frida. `AmbiguousOverloadError` is not a ResolveError, so
+    // it still propagates from the resolver unchanged.
+    const maybe = resolveMethodOrSentinel(resolver, className, methodName, argTypes);
+    if (isSentinel(maybe)) {
+        return { detached: true, detach() {} };
     }
-    const wrapper = javaUse(resolved.className) as Record<string, unknown>;
+    const resolved: ResolvedMethod = maybe;
+
+    // Java.use(obfClass) — get the native class wrapper, via the bridge.
+    const wrapper = bridge.use(resolved.className) as Record<string, unknown>;
 
     // Look up the method bundle on the wrapper. For mock + real Frida
     // alike, this returns an object with `.overload(...)` and a
@@ -113,8 +127,9 @@ export function hook(
         );
     }
 
-    // Select the right overload via translated arg types.
-    const translatedArgs = parseSignatureToTranslatedArgs(resolved.signature);
+    // Select the right overload via Frida-shaped arg types, parsed from the
+    // resolved JVM descriptor signature by the shared descriptor parser.
+    const translatedArgs = parseDescriptorArgs(extractArgRegion(resolved.signature), 'frida');
     const overload = callOverload(methodBundle, translatedArgs);
 
     // Capture the pre-hook implementation so detach can restore it.
@@ -179,87 +194,6 @@ function parseTarget(target: string | HookTarget): {
         argTypes: target.args,
     };
 }
-
-/**
- * Convert the resolved method signature into the args list expected
- * by Frida's `.overload(...)`. The signature in the resolver result
- * is a JVM descriptor like `(Landroid/os/Bundle;Lbbbb;)V` — Frida
- * `.overload` takes class-name-style strings (e.g. `'android.os.Bundle'`,
- * `'bbbb'`). We parse the descriptor and convert each arg.
- *
- * Pulled out as a separate helper so the inversion is testable and
- * the main hook flow stays readable.
- */
-function parseSignatureToTranslatedArgs(signature: string): string[] {
-    // Extract the parenthesised arg list.
-    const close = signature.indexOf(')');
-    if (!signature.startsWith('(') || close < 0) {
-        throw new RosettaError(
-            `rosetta.hook: malformed signature '${signature}' — expected JVM descriptor.`,
-        );
-    }
-    const inner = signature.slice(1, close);
-    return parseDescriptorArgs(inner);
-}
-
-/**
- * Parse a JVM descriptor arg list (the part between `(` and `)`) into
- * an array of Frida-compatible class/primitive names.
- *
- * Examples:
- *   `Landroid/os/Bundle;Lbbbb;`   → ['android.os.Bundle', 'bbbb']
- *   `I`                            → ['int']
- *   `[Ljava/lang/String;`          → ['[Ljava.lang.String;']   (array form)
- */
-function parseDescriptorArgs(desc: string): string[] {
-    const out: string[] = [];
-    let i = 0;
-    while (i < desc.length) {
-        let arrayPrefix = '';
-        while (desc[i] === '[') {
-            arrayPrefix += '[';
-            i += 1;
-        }
-        const ch = desc[i];
-        if (ch === undefined) {
-            throw new RosettaError(`rosetta.hook: malformed descriptor '${desc}'.`);
-        }
-        if (ch === 'L') {
-            const end = desc.indexOf(';', i);
-            if (end < 0) {
-                throw new RosettaError(`rosetta.hook: unterminated class ref in '${desc}'.`);
-            }
-            const fqn = desc.slice(i + 1, end).replace(/\//g, '.');
-            // Frida convention for object arg types in .overload:
-            //   non-array:  'android.os.Bundle'
-            //   array:      '[Landroid.os.Bundle;'
-            out.push(arrayPrefix === '' ? fqn : `${arrayPrefix}L${fqn};`);
-            i = end + 1;
-        } else {
-            const name = PRIMITIVE_NAMES[ch];
-            if (name === undefined) {
-                throw new RosettaError(
-                    `rosetta.hook: unknown primitive descriptor '${ch}' in '${desc}'.`,
-                );
-            }
-            out.push(arrayPrefix === '' ? name : `${arrayPrefix}${ch}`);
-            i += 1;
-        }
-    }
-    return out;
-}
-
-const PRIMITIVE_NAMES: Record<string, string> = {
-    Z: 'boolean',
-    B: 'byte',
-    C: 'char',
-    S: 'short',
-    I: 'int',
-    J: 'long',
-    F: 'float',
-    D: 'double',
-    V: 'void',
-};
 
 /**
  * Invoke `.overload(...args)` on a method bundle. Tiny wrapper that

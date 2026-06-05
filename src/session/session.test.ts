@@ -22,7 +22,7 @@ import {
     MissingSignerError,
     SignerMismatchError,
 } from '../errors.js';
-import { EventBus } from '../log.js';
+import { EventBus } from '../diagnostics/event-bus.js';
 import type { DiagnosticEvent } from '../types/events.js';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
 import { createSession, RosettaSession, isRegistry } from './session.js';
@@ -108,6 +108,27 @@ describe('createSession — explicit app/version', () => {
         expect(session.failurePolicy).toBe('warn');
         expect(session.versionMatch).toBe('exact');
         expect(session.healthy).toBe(true);
+    });
+
+    it('exposes the detected version_code on the public Session view', () => {
+        const session = createSession({
+            map: buildMap('1.2.3', 'com.example.app', 30405),
+            app: 'com.example.app',
+            version: '1.2.3',
+            versionCode: 30405,
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(session.versionCode).toBe(30405);
+    });
+
+    it('leaves versionCode undefined when none was supplied or detected', () => {
+        const session = createSession({
+            map: buildMap('1.2.3'),
+            app: 'com.example.app',
+            version: '1.2.3',
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(session.versionCode).toBeUndefined();
     });
 
     it('emits a detect event with source=override when given explicit values', () => {

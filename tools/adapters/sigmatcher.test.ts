@@ -6,9 +6,10 @@
  * scenario below.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import { sigmatcherRawToRosettaMap, type SigmatcherAdapterOptions } from './sigmatcher.js';
 import { MapValidationError, RosettaError } from '../../src/errors.js';
+import type { MethodEntry, RosettaMapInput } from '../../src/types/map.js';
 
 const BASE_OPTIONS: SigmatcherAdapterOptions = {
     app: 'com.example.testapp',
@@ -156,7 +157,16 @@ describe('sigmatcherRawToRosettaMap — multi-overload remerging', () => {
             },
         };
         const map = sigmatcherRawToRosettaMap(raw, BASE_OPTIONS);
+        // The adapter EMITS the authoring (input) shape — `RosettaMapInput` —
+        // not the normalised in-memory `RosettaMap`. The previous code lied
+        // with `as MethodMap`/`as RosettaMap`; the return type now advertises
+        // the scalar-or-array `methods` form directly, so no cast is needed.
+        expectTypeOf(map).toEqualTypeOf<RosettaMapInput>();
         const cls = map.classes['com.example.testapp.BlobCache']!;
+        // `methods` value is the authoring union (`MethodEntry | MethodEntry[]`),
+        // which is exactly why the scalar assertion below is sound at the type
+        // level — not hidden behind a cast.
+        expectTypeOf(cls.methods!['get']).toEqualTypeOf<MethodEntry | MethodEntry[]>();
         expect(Array.isArray(cls.methods!['get'])).toBe(false);
         expect(cls.methods!['get']).toEqual({
             obfuscated: 'c',

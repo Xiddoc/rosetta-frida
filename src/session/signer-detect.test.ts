@@ -10,6 +10,7 @@
 import { createHash } from 'node:crypto';
 import { describe, it, expect, afterEach } from 'vitest';
 import { MalformedSignerError } from '../errors.js';
+import { javaBridgeFromUse } from '../java-bridge.js';
 import {
     detectSigners,
     checkSigner,
@@ -223,6 +224,22 @@ describe('detectSigners', () => {
     it('throws a clear error when Java is unavailable globally', () => {
         delete (globalThis as { Java?: unknown }).Java;
         expect(() => detectSigners()).toThrow(/global Java is unavailable/);
+    });
+
+    it('falls back to an injected JavaBridge when no api is passed', () => {
+        delete (globalThis as { Java?: unknown }).Java;
+        const certs = [[7, 7, 7]];
+        const inner = buildSignerApi({ signingInfoCerts: certs });
+        const bridge = javaBridgeFromUse((name) => inner.use(name));
+        const result = detectSigners(undefined, bridge);
+        expect(result.hashes).toEqual([sha256Hex(certs[0])]);
+    });
+
+    it('throws a clear error when the injected bridge is unavailable', () => {
+        delete (globalThis as { Java?: unknown }).Java;
+        expect(() => detectSigners(undefined, javaBridgeFromUse(undefined))).toThrow(
+            /global Java is unavailable/,
+        );
     });
 });
 

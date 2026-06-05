@@ -8,6 +8,14 @@
 export * from './errors.js';
 export * from './types/index.js';
 
+// Java bridge — the single seam onto Frida's global `Java`.
+export {
+    defaultJavaBridge,
+    javaBridgeFromUse,
+    JAVA_UNAVAILABLE_MESSAGE,
+    type JavaBridge,
+} from './java-bridge.js';
+
 // Diagnostics
 export { EventBus, formatEvent, createSilentBus } from './diagnostics/index.js';
 

@@ -3,35 +3,30 @@
     "app": "com.example.testapp",
     "version": "1.1.0",
     "version_code": 2,
-    "sources": [
-        {
-            "tool": "sigmatcher",
-            "classes": 17
-        }
-    ],
     "classes": {
         "com.example.testapp.IRemoteService": {
             "obfuscated": "IRemoteService",
-            "kind": "interface",
-            "source": "sigmatcher"
+            "source": "sigmatcher",
+            "kind": "interface"
         },
         "com.example.testapp.IRemoteService$Stub": {
             "obfuscated": "IRemoteService$Stub",
-            "kind": "aidl_stub",
-            "source": "sigmatcher"
+            "source": "sigmatcher",
+            "kind": "aidl_stub"
         },
         "com.example.testapp.IServiceCallback": {
             "obfuscated": "IServiceCallback",
-            "kind": "aidl_callback",
-            "source": "sigmatcher"
+            "source": "sigmatcher",
+            "kind": "aidl_callback"
         },
         "com.example.testapp.IServiceCallback$Stub": {
             "obfuscated": "IServiceCallback$Stub",
-            "kind": "aidl_stub",
-            "source": "sigmatcher"
+            "source": "sigmatcher",
+            "kind": "aidl_stub"
         },
         "com.example.testapp.Config": {
             "obfuscated": "ddde",
+            "source": "sigmatcher",
             "kind": "class",
             "fields": {
                 "ROSETTA_ANCHOR": {
@@ -58,11 +53,11 @@
                     "obfuscated": "f",
                     "type": "I"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.BlobCache": {
             "obfuscated": "cccc",
+            "source": "sigmatcher",
             "kind": "class",
             "methods": {
                 "get": {
@@ -99,11 +94,11 @@
                     "obfuscated": "f",
                     "type": "Ljava/lang/String;"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.RemoteService": {
             "obfuscated": "RemoteService",
+            "source": "sigmatcher",
             "kind": "class",
             "fields": {
                 "ROSETTA_ANCHOR": {
@@ -122,11 +117,11 @@
                     "obfuscated": "d",
                     "type": "Lcom/example/testapp/IRemoteService$Stub;"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.RemoteService$1": {
             "obfuscated": "bbbc",
+            "source": "sigmatcher",
             "kind": "anonymous",
             "methods": {
                 "requestTicket": {
@@ -143,11 +138,11 @@
                     "obfuscated": "a",
                     "type": "Lcom/example/testapp/RemoteService;"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.RemoteService$1$1": {
             "obfuscated": "bbbc$a",
+            "source": "sigmatcher",
             "kind": "anonymous",
             "methods": {
                 "run": {
@@ -164,11 +159,11 @@
                     "obfuscated": "b",
                     "type": "Landroid/os/Bundle;"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.Ticket": {
             "obfuscated": "eeef",
+            "source": "sigmatcher",
             "kind": "class",
             "methods": {
                 "fromBytes": {
@@ -197,11 +192,11 @@
                     "obfuscated": "b",
                     "type": "J"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.Ticket$Companion": {
             "obfuscated": "fffg",
+            "source": "sigmatcher",
             "kind": "synthetic",
             "methods": {
                 "create": {
@@ -214,11 +209,11 @@
                     "obfuscated": "a",
                     "type": "Ljava/lang/String;"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.Ticket$Reader": {
             "obfuscated": "gggh",
+            "source": "sigmatcher",
             "kind": "class",
             "methods": {
                 "readValue": {
@@ -239,11 +234,11 @@
                     "obfuscated": "a",
                     "type": "Leeef;"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.ErrorCode": {
             "obfuscated": "hhhi",
+            "source": "sigmatcher",
             "kind": "enum",
             "methods": {
                 "getCode": {
@@ -264,11 +259,11 @@
                     "obfuscated": "e",
                     "type": "[Lhhhi;"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.AbstractServiceClient": {
             "obfuscated": "iiij",
+            "source": "sigmatcher",
             "kind": "class",
             "methods": {
                 "disconnect": {
@@ -293,11 +288,11 @@
                     "obfuscated": "b",
                     "type": "Landroid/content/Context;"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.AbstractServiceClient$1": {
             "obfuscated": "jjjk",
+            "source": "sigmatcher",
             "kind": "anonymous",
             "methods": {
                 "run": {
@@ -310,11 +305,11 @@
                     "obfuscated": "a",
                     "type": "Liiij;"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.RemoteServiceClient": {
             "obfuscated": "kkkl",
+            "source": "sigmatcher",
             "kind": "class",
             "methods": {
                 "connect": {
@@ -343,11 +338,11 @@
                     "obfuscated": "d",
                     "type": "I"
                 }
-            },
-            "source": "sigmatcher"
+            }
         },
         "com.example.testapp.PromiseCallback": {
             "obfuscated": "lllm",
+            "source": "sigmatcher",
             "kind": "interface",
             "methods": {
                 "apply": {
@@ -360,8 +355,13 @@
                     "obfuscated": "e",
                     "type": "Ljava/lang/String;"
                 }
-            },
-            "source": "sigmatcher"
+            }
         }
-    }
+    },
+    "sources": [
+        {
+            "tool": "sigmatcher",
+            "classes": 17
+        }
+    ]
 }

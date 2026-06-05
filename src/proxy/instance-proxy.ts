@@ -20,7 +20,12 @@
  * Java field.
  */
 import { makeFieldAccessor } from './field-accessor.js';
-import type { FieldAccessor, InstanceProxy } from '../types/proxy.js';
+import {
+    ROSETTA_META,
+    type FieldAccessor,
+    type InstanceProxy,
+    type ProxyMeta,
+} from '../types/proxy.js';
 import type { Resolver } from '../types/resolver.js';
 
 /**
@@ -37,15 +42,29 @@ export function makeInstanceProxy(
     realName: string,
     instance: unknown,
 ): InstanceProxy {
-    const obfName = resolver.resolveClass(realName).obfName;
-
     // Per-instance memoization of field accessors so repeated reads of
-    // the same field return the same wrapper object.
+    // the same field return the same wrapper object — dropped when the
+    // resolver's cache epoch moves (a tier-3 override) so a re-mapped
+    // field's obfuscated name is picked up by a live instance proxy.
     const fieldCache = new Map<string, FieldAccessor<unknown>>();
+    // Resolve eagerly so a bad real name throws at construction (matching
+    // the prior contract); the result is re-read lazily via $obfName.
+    resolver.resolveClass(realName);
+    let epoch = resolver.cacheEpoch();
+
+    /** Drop the field cache if an override invalidated resolver caches. */
+    function revalidate(): void {
+        const current = resolver.cacheEpoch();
+        if (current === epoch) return;
+        fieldCache.clear();
+        epoch = current;
+    }
 
     const metadata: Record<string, unknown> = {
         $realName: realName,
-        $obfName: obfName,
+        get $obfName(): string {
+            return resolver.resolveClass(realName).obfName;
+        },
         $native: instance,
     };
 
@@ -53,12 +72,26 @@ export function makeInstanceProxy(
 
     return new Proxy(target, {
         get(_t, prop): unknown {
+            // Collision-proof metadata accessor (see class-proxy).
+            if (prop === ROSETTA_META) {
+                const meta: ProxyMeta = {
+                    realName,
+                    obfName: resolver.resolveClass(realName).obfName,
+                    native: instance,
+                    resolver,
+                };
+                return meta;
+            }
             if (typeof prop !== 'string') {
                 return undefined;
             }
-            if (prop in metadata) {
+            // A real map field of the same name as a `$`-metadata accessor
+            // must not be shadowed; the field wins, metadata is the
+            // fallback. ROSETTA_META is the guaranteed-metadata path.
+            if (prop in metadata && resolver.lookupField(realName, prop) === undefined) {
                 return metadata[prop];
             }
+            revalidate();
             const cached = fieldCache.get(prop);
             if (cached !== undefined) {
                 return cached;

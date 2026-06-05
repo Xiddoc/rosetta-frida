@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
+import { javaBridgeFromUse } from '../java-bridge.js';
 import {
     detectAppAndVersion,
     type AutoDetectJavaApi,
@@ -74,6 +75,21 @@ describe('detectAppAndVersion', () => {
     it('throws a clear error when Java is unavailable globally', () => {
         delete (globalThis as { Java?: unknown }).Java;
         expect(() => detectAppAndVersion()).toThrow(/cannot auto-detect/);
+    });
+
+    it('falls back to an injected JavaBridge when no api is passed', () => {
+        delete (globalThis as { Java?: unknown }).Java;
+        const inner = buildJavaApi('com.example.app', '4.5.6');
+        const bridge = javaBridgeFromUse((name) => inner.use(name));
+        const result = detectAppAndVersion(undefined, bridge);
+        expect(result).toEqual({ app: 'com.example.app', version: '4.5.6' });
+    });
+
+    it('throws a clear error when the injected bridge is unavailable', () => {
+        delete (globalThis as { Java?: unknown }).Java;
+        expect(() => detectAppAndVersion(undefined, javaBridgeFromUse(undefined))).toThrow(
+            /cannot auto-detect/,
+        );
     });
 
     it('propagates errors thrown by the chain', () => {

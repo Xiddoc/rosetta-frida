@@ -13,16 +13,20 @@
  * Refuses to overwrite an existing file unless `--force` is passed.
  */
 
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
 import { CURRENT_SCHEMA_VERSION } from '../../src/types/map.js';
+import type { RosettaMapInput } from '../../src/types/map.js';
+import { renderJson } from '../../src/convert/json.js';
 import {
     assertValidApp,
     assertValidVersion,
     assertContained,
     assertNoNul,
 } from '../../src/parse/index.js';
+import type { CommandIo, FsLike } from './io.js';
+import { writeNew } from './io.js';
+import { parseArgs, type ArgSpec } from './args.js';
 
 export interface InitOptions {
     app: string;
@@ -33,38 +37,27 @@ export interface InitOptions {
     force?: boolean;
 }
 
+/** Option grammar for `init`: `-o/--output <path>` and `--force/-f`. */
+const INIT_SPEC: ArgSpec = {
+    options: [
+        { name: 'output', aliases: ['-o', '--output'], takesValue: true },
+        { name: 'force', aliases: ['--force', '-f'], takesValue: false },
+    ],
+};
+
 /** CLI parse — returns parsed options or throws RosettaError on bad args. */
 export function parseInitArgs(argv: readonly string[]): InitOptions {
-    const positional: string[] = [];
-    let output: string | undefined;
-    let force = false;
-    for (let i = 0; i < argv.length; i++) {
-        const arg = argv[i];
-        if (arg === '-o' || arg === '--output') {
-            const next = argv[i + 1];
-            if (next === undefined) {
-                throw new RosettaError(`${arg} requires a value`);
-            }
-            output = next;
-            i++;
-        } else if (arg === '--force' || arg === '-f') {
-            force = true;
-        } else if (arg !== undefined && arg.startsWith('-')) {
-            throw new RosettaError(`unknown flag: ${arg}`);
-        } else if (arg !== undefined) {
-            positional.push(arg);
-        }
-    }
-    if (positional.length !== 2) {
+    const { positionals, values, flags } = parseArgs(argv, INIT_SPEC);
+    if (positionals.length !== 2) {
         throw new RosettaError(
-            `init requires exactly two positional args: <app> <version> (got ${positional.length})`,
+            `init requires exactly two positional args: <app> <version> (got ${positionals.length})`,
         );
     }
     return {
-        app: positional[0] as string,
-        version: positional[1] as string,
-        output,
-        force,
+        app: positionals[0] as string,
+        version: positionals[1] as string,
+        output: values.output,
+        force: flags.force ?? false,
     };
 }
 
@@ -77,7 +70,7 @@ export function parseInitArgs(argv: readonly string[]): InitOptions {
  * `maps/com.example.app/3.4.5.json` for a fully-worked example.
  */
 export function renderSkeleton(app: string, version: string): string {
-    const skeleton = {
+    const skeleton: RosettaMapInput = {
         schema_version: CURRENT_SCHEMA_VERSION,
         app,
         version,
@@ -111,7 +104,10 @@ export function renderSkeleton(app: string, version: string): string {
             },
         },
     };
-    return JSON.stringify(skeleton, null, 4) + '\n';
+    // Reuse the canonical renderer (4-space indent + trailing newline) so
+    // the skeleton matches the on-disk artifact byte-for-byte instead of
+    // re-implementing the same JSON.stringify locally.
+    return renderJson(skeleton);
 }
 
 /** Resolve the default output path: `maps/<app>/<version>.json`. */
@@ -120,12 +116,14 @@ export function defaultOutputPath(app: string, version: string): string {
 }
 
 /**
- * Execute `rosetta init`. Returns the absolute output path on success.
+ * Core of `rosetta init`: scaffold the skeleton map and return the
+ * absolute output path. Kept separate from the I/O-printing `runInit`
+ * wrapper so it can be unit-tested by its return value.
  *
  * @throws RosettaError if the target already exists and `--force` was
  * not passed.
  */
-export async function runInit(argv: readonly string[], fsImpl: typeof fs = fs): Promise<string> {
+export async function writeSkeleton(argv: readonly string[], fs: FsLike): Promise<string> {
     const opts = parseInitArgs(argv);
     // Validate the identity tokens BEFORE they are interpolated into a path.
     assertValidApp(opts.app);
@@ -142,21 +140,20 @@ export async function runInit(argv: readonly string[], fsImpl: typeof fs = fs): 
         // final backstop against any edge-case traversal.
         assertContained(outPath);
     }
-    if (!opts.force && (await fileExists(outPath, fsImpl))) {
-        throw new RosettaError(
-            `refusing to overwrite existing file: ${outPath} (pass --force to overwrite)`,
-        );
-    }
-    await fsImpl.mkdir(path.dirname(outPath), { recursive: true });
-    await fsImpl.writeFile(outPath, renderSkeleton(opts.app, opts.version), 'utf8');
+    // writeNew is the single emit seam: it creates the parent directory,
+    // then does an atomic `wx` create (the overwrite guard) unless --force,
+    // closing the stat-then-write TOCTOU window.
+    await writeNew(fs, outPath, renderSkeleton(opts.app, opts.version), { force: opts.force });
     return outPath;
 }
 
-async function fileExists(p: string, fsImpl: typeof fs): Promise<boolean> {
-    try {
-        await fsImpl.stat(p);
-        return true;
-    } catch {
-        return false;
-    }
+/**
+ * Execute `rosetta init` under the shared command contract: scaffold the
+ * map and return the success message (the router prints it under the
+ * uniform `rosetta init:` prefix). Handled failures throw `RosettaError`
+ * for the router to format.
+ */
+export async function runInit(argv: readonly string[], io: CommandIo): Promise<string> {
+    const out = await writeSkeleton(argv, io.fs);
+    return `wrote ${out}`;
 }

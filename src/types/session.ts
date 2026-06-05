@@ -165,8 +165,15 @@ export interface Session {
     readonly map: RosettaMap;
     /** Detected or user-supplied app name. */
     readonly app: string;
-    /** Detected or user-supplied version. */
+    /** Detected or user-supplied version label. */
     readonly version: string;
+    /**
+     * Detected or user-supplied authoritative `version_code`
+     * (PackageInfo.versionCode / longVersionCode) — the primary, O(1) map
+     * selection key (RFC 0001 Decision 3). Undefined when neither supplied
+     * nor auto-detectable (selection then fell back to the version label).
+     */
+    readonly versionCode?: number;
     /** Effective failure policy. */
     readonly failurePolicy: FailurePolicy;
     /** Whether the attach-time health check has passed. */

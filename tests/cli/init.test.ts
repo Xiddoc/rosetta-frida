@@ -6,51 +6,31 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type * as fsMod from 'node:fs/promises';
 import {
     parseInitArgs,
     renderSkeleton,
     defaultOutputPath,
+    writeSkeleton,
     runInit,
 } from '../../cli/commands/init.js';
 import { RosettaError } from '../../src/errors.js';
-
-function enoent(p: string): NodeJS.ErrnoException {
-    const err = new Error(`ENOENT: ${p}`) as NodeJS.ErrnoException;
-    err.code = 'ENOENT';
-    return err;
-}
+import { renderJson } from '../../src/convert/json.js';
+import type { RosettaMap } from '../../src/types/map.js';
+import type { FsLike } from '../../cli/commands/io.js';
+import { makeCaptured, makeFakeFs, makeFsLike, makeIo, type FakeFs } from './helpers.js';
 
 /**
- * Minimal in-memory fs that backs the subset of node:fs/promises that
- * runInit uses. Returns a `Promise.reject(...)` with `ENOENT` for missing
- * files (so `stat` mimics the real behavior). Each operation returns
- * a Promise directly rather than being an async function, so eslint's
- * `require-await` doesn't complain.
+ * Build a fully-typed `FsLike` (no casts) backed by the shared in-memory
+ * FakeFs. Returns the live `files` / `dirsCreated` views so assertions
+ * can inspect post-run state.
  */
 function makeFs(initial: Record<string, string> = {}): {
-    fs: typeof fsMod;
+    fs: FsLike;
     files: Map<string, string>;
     dirsCreated: string[];
 } {
-    const files = new Map<string, string>(Object.entries(initial));
-    const dirsCreated: string[] = [];
-    const fs = {
-        stat(p: string) {
-            return files.has(p)
-                ? Promise.resolve({ isFile: () => true } as fsMod.Stats)
-                : Promise.reject(enoent(p));
-        },
-        mkdir(p: string) {
-            dirsCreated.push(p);
-            return Promise.resolve(undefined);
-        },
-        writeFile(p: string, content: string) {
-            files.set(p, content);
-            return Promise.resolve();
-        },
-    } as unknown as typeof fsMod;
-    return { fs, files, dirsCreated };
+    const fake: FakeFs = makeFakeFs(initial);
+    return { fs: makeFsLike(fake), files: fake.files, dirsCreated: fake.dirsCreated };
 }
 
 describe('parseInitArgs', () => {
@@ -79,7 +59,7 @@ describe('parseInitArgs', () => {
     });
 
     it('errors on unknown flag', () => {
-        expect(() => parseInitArgs(['com.a.b', '1.0', '--bogus'])).toThrow(/unknown flag/);
+        expect(() => parseInitArgs(['com.a.b', '1.0', '--bogus'])).toThrow(/unknown option/);
     });
 
     it('errors when positional count is wrong', () => {
@@ -96,6 +76,8 @@ describe('renderSkeleton', () => {
         expect(out).toContain('"version": "1.2.3"');
         expect(out).toContain('"schema_version": 2');
         expect(out).toContain('"version_code": 0');
+        // captured_at is an explicit empty-string placeholder for the author.
+        expect(out).toContain('"captured_at": ""');
     });
 
     it('includes a worked example class and parses as strict JSON', () => {
@@ -111,6 +93,17 @@ describe('renderSkeleton', () => {
         const b = renderSkeleton('com.example.app', '1.0');
         expect(a).toBe(b);
     });
+
+    it('uses the canonical renderer: 4-space indent and a trailing newline', () => {
+        // Dedup contract (Task 7): renderSkeleton delegates to src renderJson
+        // rather than re-implementing JSON.stringify. Round-tripping the parse
+        // back through renderJson must reproduce the exact bytes.
+        const out = renderSkeleton('com.example.app', '1.2.3');
+        expect(out.endsWith('}\n')).toBe(true);
+        expect(out).toContain('\n    "app"'); // 4-space indent
+        const reRendered = renderJson(JSON.parse(out) as RosettaMap);
+        expect(reRendered).toBe(out);
+    });
 });
 
 describe('defaultOutputPath', () => {
@@ -121,10 +114,10 @@ describe('defaultOutputPath', () => {
     });
 });
 
-describe('runInit', () => {
+describe('writeSkeleton', () => {
     it('writes to the default path when none is provided', async () => {
         const { fs, files } = makeFs();
-        const out = await runInit(['com.example.app', '1.2.3'], fs);
+        const out = await writeSkeleton(['com.example.app', '1.2.3'], fs);
         expect(out).toMatch(/com\.example\.app[\\/]1\.2\.3\.json$/);
         expect(files.has(out)).toBe(true);
         expect(files.get(out)).toContain('"app": "com.example.app"');
@@ -132,53 +125,55 @@ describe('runInit', () => {
 
     it('writes to a custom output path with -o (within the project tree)', async () => {
         const { fs, files } = makeFs();
-        await runInit(['com.example.app', '1.2.3', '-o', 'out/x.json'], fs);
+        await writeSkeleton(['com.example.app', '1.2.3', '-o', 'out/x.json'], fs);
         expect(files.has('out/x.json')).toBe(true);
     });
 
     it('creates parent directories', async () => {
         const { fs, dirsCreated } = makeFs();
-        await runInit(['com.example.app', '1.2.3', '-o', 'deep/nested/path.json'], fs);
+        await writeSkeleton(['com.example.app', '1.2.3', '-o', 'deep/nested/path.json'], fs);
         expect(dirsCreated).toContain('deep/nested');
     });
 
     it('refuses to overwrite without --force', async () => {
         const { fs } = makeFs({ 'existing.json': 'previous' });
         await expect(
-            runInit(['com.example.app', '1.2.3', '-o', 'existing.json'], fs),
+            writeSkeleton(['com.example.app', '1.2.3', '-o', 'existing.json'], fs),
         ).rejects.toThrow(RosettaError);
     });
 
     it('overwrites with --force', async () => {
         const { fs, files } = makeFs({ 'existing.json': 'previous' });
-        await runInit(['com.example.app', '1.2.3', '-o', 'existing.json', '--force'], fs);
+        await writeSkeleton(['com.example.app', '1.2.3', '-o', 'existing.json', '--force'], fs);
         expect(files.get('existing.json')).not.toBe('previous');
         expect(files.get('existing.json')).toContain('"app": "com.example.app"');
     });
 
     it('rejects an invalid app name before building a path', async () => {
         const { fs, files } = makeFs();
-        await expect(runInit(['../../etc', '1.2.3'], fs)).rejects.toThrow(/invalid app name/);
+        await expect(writeSkeleton(['../../etc', '1.2.3'], fs)).rejects.toThrow(/invalid app name/);
         expect(files.size).toBe(0);
     });
 
     it('rejects an invalid version before building a path', async () => {
         const { fs, files } = makeFs();
-        await expect(runInit(['com.example.app', '../1.0'], fs)).rejects.toThrow(/invalid version/);
+        await expect(writeSkeleton(['com.example.app', '../1.0'], fs)).rejects.toThrow(
+            /invalid version/,
+        );
         expect(files.size).toBe(0);
     });
 
     it('allows an -o output that points outside the project tree (e.g. ../escape.json)', async () => {
         // Operator-supplied -o is not contained to CWD; only NUL is rejected.
         const { fs, files } = makeFs();
-        const out = await runInit(['com.example.app', '1.2.3', '-o', '../escape.json'], fs);
+        const out = await writeSkeleton(['com.example.app', '1.2.3', '-o', '../escape.json'], fs);
         expect(out).toBe('../escape.json');
         expect(files.has('../escape.json')).toBe(true);
     });
 
     it('allows an absolute -o output outside the project tree', async () => {
         const { fs, files } = makeFs();
-        const out = await runInit(['com.example.app', '1.2.3', '-o', '/tmp/out.json'], fs);
+        const out = await writeSkeleton(['com.example.app', '1.2.3', '-o', '/tmp/out.json'], fs);
         expect(out).toBe('/tmp/out.json');
         expect(files.has('/tmp/out.json')).toBe(true);
     });
@@ -186,7 +181,7 @@ describe('runInit', () => {
     it('rejects a NUL byte in the explicit -o output path', async () => {
         const { fs, files } = makeFs();
         await expect(
-            runInit(['com.example.app', '1.2.3', '-o', 'out.json\0.png'], fs),
+            writeSkeleton(['com.example.app', '1.2.3', '-o', 'out.json\0.png'], fs),
         ).rejects.toThrow(/NUL/);
         expect(files.size).toBe(0);
     });
@@ -200,7 +195,30 @@ describe('runInit', () => {
         // since valid app/version tokens can never produce a traversal path,
         // we just confirm the token validators already block traversal tokens.
         const { fs, files } = makeFs();
-        await expect(runInit(['../../etc', '1.2.3'], fs)).rejects.toThrow(/invalid app name/);
+        await expect(writeSkeleton(['../../etc', '1.2.3'], fs)).rejects.toThrow(/invalid app name/);
         expect(files.size).toBe(0);
+    });
+});
+
+describe('runInit (command wrapper)', () => {
+    it('writes the skeleton and returns the success message', async () => {
+        const fakeFs = makeFakeFs();
+        const captured = makeCaptured();
+        // run* returns the success message; the router owns the prefix +
+        // stdout, so command-level tests assert on the return value.
+        const msg = await runInit(
+            ['com.example.app', '1.2.3', '-o', 'm.json'],
+            makeIo(fakeFs, captured),
+        );
+        expect(fakeFs.files.has('m.json')).toBe(true);
+        expect(msg).toBe('wrote m.json');
+    });
+
+    it('propagates a RosettaError (router formats it) instead of catching', async () => {
+        const fakeFs = makeFakeFs({ 'm.json': 'existing' });
+        const captured = makeCaptured();
+        await expect(
+            runInit(['com.example.app', '1.2.3', '-o', 'm.json'], makeIo(fakeFs, captured)),
+        ).rejects.toThrow(RosettaError);
     });
 });

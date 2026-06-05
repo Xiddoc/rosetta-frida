@@ -33,14 +33,14 @@
 
 import { CURRENT_SCHEMA_VERSION } from '../../src/types/map.js';
 import type {
-    ClassEntry,
+    ClassEntryInput,
     ClassKind,
-    ClassMap,
+    ClassMapInput,
     FieldEntry,
     FieldMap,
     MethodEntry,
-    MethodMap,
-    RosettaMap,
+    MethodMapInput,
+    RosettaMapInput,
 } from '../../src/types/map.js';
 import { validateMap } from '../../src/validate/index.js';
 import { RosettaError } from '../../src/errors.js';
@@ -114,7 +114,11 @@ interface RawDefinition {
 // ---------------------------------------------------------------------------
 
 /**
- * Convert sigmatcher's `raw`-format JSON output into a `RosettaMap`.
+ * Convert sigmatcher's `raw`-format JSON output into the authoring-shape
+ * `RosettaMapInput` (the on-disk artifact, with the terser scalar-or-array
+ * `methods` form). It is validated against the schema before return but the
+ * returned value keeps the authoring shape; load-time normalisation widens
+ * single overloads to one-element arrays.
  *
  * @param raw     Parsed sigmatcher output (the object loaded from the
  *                file `sigmatcher analyze --output-format raw` writes).
@@ -125,7 +129,7 @@ interface RawDefinition {
 export function sigmatcherRawToRosettaMap(
     raw: unknown,
     options: SigmatcherAdapterOptions,
-): RosettaMap {
+): RosettaMapInput {
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
         throw new RosettaError('sigmatcher raw output must be a JSON object');
     }
@@ -146,12 +150,20 @@ export function sigmatcherRawToRosettaMap(
         ingestDefinition(defName, def, options, working);
     }
 
-    const classes: ClassMap = {};
+    const classes: ClassMapInput = {};
     for (const [realFqn, entry] of working) {
         classes[realFqn] = finalizeClass(realFqn, entry, options);
     }
 
-    const map: RosettaMap = {
+    // This adapter EMITS an on-disk authoring map, which may use the terse
+    // single-overload scalar form. We validate it for correctness (which
+    // would also normalise methods to arrays) but RETURN the scalar map so
+    // the emitted artifact stays terse — normalisation is an in-memory
+    // concern at load time, not an emit-time one. The return type is the
+    // authoring-shape `RosettaMapInput` (= `z.input<typeof rosettaMapSchema>`),
+    // so no casts are needed: the scalar-or-array `methods` shape is exactly
+    // what the type advertises.
+    const map: RosettaMapInput = {
         schema_version: CURRENT_SCHEMA_VERSION,
         app: options.app,
         version: options.version,
@@ -162,7 +174,9 @@ export function sigmatcherRawToRosettaMap(
     if (options.signerSha256 !== undefined) map.signer_sha256 = options.signerSha256;
     map.sources = [{ tool: 'sigmatcher', classes: Object.keys(classes).length }];
 
-    return validateMap(map);
+    // Validate for structural correctness; discard the normalised result.
+    validateMap(map);
+    return map;
 }
 
 // ---------------------------------------------------------------------------
@@ -245,17 +259,22 @@ function finalizeClass(
     realFqn: string,
     wk: ClassWorkingEntry,
     options: SigmatcherAdapterOptions,
-): ClassEntry {
+): ClassEntryInput {
     if (!wk.obfuscated) {
         throw new RosettaError(
             `sigmatcher adapter: no obfuscated short name resolved for class ${realFqn}`,
         );
     }
-    const methods: MethodMap = {};
+    // Authoring/on-disk shape: single overloads emit as a scalar entry,
+    // multiples as an array. (The in-memory MethodMap is always arrays; the
+    // load-time validator normalises this terser emitted form.) The local
+    // is typed `MethodMapInput` — the scalar-or-array authoring shape — so
+    // the scalar assignment below is sound, not a cast.
+    const methods: MethodMapInput = {};
     for (const [realName, overloads] of Object.entries(wk.methods)) {
         methods[realName] = overloads.length === 1 ? (overloads[0] as MethodEntry) : overloads;
     }
-    const entry: ClassEntry = {
+    const entry: ClassEntryInput = {
         obfuscated: wk.obfuscated,
         source: 'sigmatcher',
     };

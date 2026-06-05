@@ -21,7 +21,13 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
-import { AmbiguousOverloadError, ResolveError, RosettaError } from '../../src/errors.js';
+import {
+    AmbiguousOverloadError,
+    MapValidationError,
+    ResolveError,
+    RosettaError,
+    UnknownArgTypeError,
+} from '../../src/errors.js';
 import { createResolver, parseSignatureArgs, toJvmDescriptor } from '../../src/resolver/index.js';
 import type { ResolverImpl } from '../../src/resolver/index.js';
 import { validateMap } from '../../src/validate/schema.js';
@@ -45,13 +51,22 @@ const FIXTURES: readonly string[] = [
     'signatures.json',
     'type-translation.json',
     'introspection.json',
+    'errors.json',
+    'validation.json',
 ];
 
 /** A single conformance case as it appears on disk (loosely typed). */
 interface ConformanceCase {
     readonly name: string;
     readonly kind: string;
-    readonly expectError?: 'Resolve' | 'AmbiguousOverload' | 'IllegalArgument';
+    readonly expectError?:
+        | 'Resolve'
+        | 'UnknownArgType'
+        | 'AmbiguousOverload'
+        | 'IllegalArgument'
+        | 'MapValidation';
+    readonly inputMap?: unknown;
+    readonly expectValid?: boolean;
     readonly class?: string;
     readonly method?: string;
     readonly field?: string;
@@ -193,8 +208,17 @@ function assertError(resolver: ResolverImpl | null, c: ConformanceCase): void {
         }
     }).toThrow();
     switch (c.expectError) {
+        case 'UnknownArgType':
+            // The DISTINCT precise subtype. Asserted before 'Resolve' so a
+            // generic ResolveError can't satisfy an UnknownArgType case (it
+            // is a ResolveError subtype).
+            expect(thrown).toBeInstanceOf(UnknownArgTypeError);
+            return;
         case 'Resolve':
+            // A generic Resolve case must NOT be the precise subtype, so a
+            // resolver that wrongly raised UnknownArgType here is caught.
             expect(thrown).toBeInstanceOf(ResolveError);
+            expect(thrown).not.toBeInstanceOf(UnknownArgTypeError);
             return;
         case 'AmbiguousOverload':
             expect(thrown).toBeInstanceOf(AmbiguousOverloadError);
@@ -203,10 +227,44 @@ function assertError(resolver: ResolverImpl | null, c: ConformanceCase): void {
             expect(thrown).toBeInstanceOf(Error);
             expect(thrown).not.toBeInstanceOf(RosettaError);
             return;
+        case 'MapValidation':
+            expect(thrown).toBeInstanceOf(MapValidationError);
+            return;
         /* c8 ignore next 2 -- unreachable: fixture taxonomy is closed */
         default:
             throw new Error(`unknown expectError '${String(c.expectError)}'`);
     }
+}
+
+/**
+ * Run a `validate`-kind case: validate the case's own inline `inputMap`
+ * through the real schema and assert it is accepted (`expectValid: true`)
+ * or rejected (`expectError: 'MapValidation'`). This is how the oracle
+ * covers VALIDATION semantics (e.g. the `minLength: 1` non-empty
+ * `obfuscated` rule) on top of resolution semantics — the Kotlin twin runs
+ * the same `inputMap` through `MapLoader.validate`.
+ */
+function runValidateCase(c: ConformanceCase): void {
+    // A malformed fixture that sets neither expectation would otherwise fall
+    // through to `expect(undefined).toBe(true)` (a cryptic "expected undefined
+    // to be true"). Fail with a field-naming diagnostic instead, mirroring the
+    // Kotlin runner's "validate success case must set expectValid: true".
+    /* c8 ignore next 5 -- defensive guard: every vendored validate case is
+       well-formed, so this never fires; it exists to give a field-naming
+       diagnostic if a future fixture is malformed. */
+    if (c.expectError === undefined && c.expectValid !== true) {
+        throw new Error(
+            `validate case '${c.name}' must set either expectError: 'MapValidation' or expectValid: true`,
+        );
+    }
+    if (c.expectError !== undefined) {
+        expect(c.expectError).toBe('MapValidation');
+        expect(() => validateMap(c.inputMap)).toThrow(MapValidationError);
+        return;
+    }
+    expect(c.expectValid).toBe(true);
+    // Throws on failure → the case fails, which is the assertion.
+    validateMap(c.inputMap);
 }
 
 for (const file of FIXTURES) {
@@ -214,7 +272,9 @@ for (const file of FIXTURES) {
     describe(`conformance :: ${file}`, () => {
         for (const c of fixture.cases) {
             it(c.name, () => {
-                if (c.expectError !== undefined) {
+                if (c.kind === 'validate') {
+                    runValidateCase(c);
+                } else if (c.expectError !== undefined) {
                     assertError(resolver, c);
                 } else {
                     assertSuccess(resolver, c);

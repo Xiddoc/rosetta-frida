@@ -68,11 +68,22 @@ export interface FieldEntry {
 }
 
 /**
- * Methods are keyed by real name. The value is either a single
- * MethodEntry (the common case — only one overload) or an array of
- * MethodEntry (when the real name has multiple overloads).
+ * AUTHORING / on-disk method-map shape. A real method name maps to either
+ * a single MethodEntry (the common single-overload case — terser to author)
+ * or an array of MethodEntry (multiple overloads). This is the shape the
+ * Zod validator ACCEPTS; it normalises every value to an array on the way
+ * in (see {@link MethodMap}).
  */
-export type MethodMap = Record<string, MethodEntry | MethodEntry[]>;
+export type MethodMapInput = Record<string, MethodEntry | MethodEntry[]>;
+
+/**
+ * IN-MEMORY method-map shape. After validation, a method name ALWAYS maps
+ * to a (non-empty) array of overloads — the single-entry authoring form is
+ * normalised to a one-element array by the validator's `.transform(...)`.
+ * Consumers (the resolver, the proxy) therefore never branch on
+ * array-vs-single; they always iterate.
+ */
+export type MethodMap = Record<string, MethodEntry[]>;
 
 /** Fields are keyed by real name. */
 export type FieldMap = Record<string, FieldEntry>;
@@ -110,6 +121,21 @@ export interface ClassEntry {
 
 /** Classes are keyed by real fully-qualified name. */
 export type ClassMap = Record<string, ClassEntry>;
+
+/**
+ * AUTHORING / on-disk class entry. Identical to {@link ClassEntry} except
+ * `methods` is the terser {@link MethodMapInput} (scalar-or-array) shape the
+ * validator accepts and normalises. Emitters of the on-disk artifact (the
+ * sigmatcher adapter) produce this; the validator's `.transform(...)`
+ * narrows it to {@link ClassEntry} on load.
+ */
+export interface ClassEntryInput extends Omit<ClassEntry, 'methods'> {
+    /** Methods keyed by real name, in the scalar-or-array authoring shape. */
+    methods?: MethodMapInput;
+}
+
+/** AUTHORING / on-disk class-map shape (values are {@link ClassEntryInput}). */
+export type ClassMapInput = Record<string, ClassEntryInput>;
 
 /**
  * The current map schema version — the single source of truth.
@@ -180,6 +206,19 @@ export interface RosettaMap {
     sources?: MapSource[];
     /** The classes themselves. */
     classes: ClassMap;
+}
+
+/**
+ * AUTHORING / on-disk map shape — the input the Zod validator ACCEPTS.
+ * Identical to {@link RosettaMap} except `classes` uses the terser
+ * {@link ClassMapInput} (scalar-or-array method) shape. This is what
+ * emitters of the on-disk artifact (the sigmatcher adapter) produce and
+ * what `z.input<typeof rosettaMapSchema>` is; the validator normalises it
+ * to {@link RosettaMap} (`z.output<...>`) on load.
+ */
+export interface RosettaMapInput extends Omit<RosettaMap, 'classes'> {
+    /** The classes themselves, in the scalar-or-array authoring shape. */
+    classes: ClassMapInput;
 }
 
 /**

@@ -5,6 +5,7 @@
  */
 
 import type { ClassEntry, MethodEntry, FieldEntry } from './map.js';
+import type { FailurePolicy } from './session.js';
 
 /** Result of resolving a class. */
 export interface ResolvedClass {
@@ -60,6 +61,17 @@ export interface ResolvedField {
  *   3. Throw ResolveError (V1) — V2+ runs discovery strategies here
  */
 export interface Resolver {
+    /**
+     * The effective failure policy this resolver was built with. Callers
+     * that surface misses to user code (the tier-1/2 factories) dispatch
+     * through the `resolve*OrSentinel` wrappers using this: 'strict' →
+     * throw at the call site; 'warn' → emit a miss event and return a
+     * sentinel that throws only when the unresolved entity is actually
+     * used. The plain `resolve*` methods below ALWAYS throw on a miss
+     * regardless of policy — the sentinel decision happens one level up.
+     */
+    readonly failurePolicy: FailurePolicy;
+
     /** Resolve a class by real name. */
     resolveClass(realName: string): ResolvedClass;
 
@@ -97,4 +109,31 @@ export interface Resolver {
 
     /** Look up the FieldEntry on a class without resolving it. */
     lookupField(className: string, fieldName: string): FieldEntry | undefined;
+
+    /**
+     * True if `realName` is a known class real-name (via runtime override
+     * or the loaded map). The boolean form of `resolveClass` that doesn't
+     * throw — part of the contract so introspection callers depend on the
+     * interface, not the concrete impl.
+     */
+    hasClass(realName: string): boolean;
+
+    /**
+     * Reverse-lookup an obfuscated class short name to its real FQN, or
+     * `undefined` if no mapping exists. Part of the contract so callers
+     * (e.g. `rosetta.field`) depend on the interface, not a duck-typed
+     * probe. Reflects runtime overrides.
+     */
+    reverseLookup(obfName: string): string | undefined;
+
+    /**
+     * A monotonically-increasing stamp that changes whenever a cached
+     * resolution may have become stale — i.e. on every `override(...)` or
+     * `invalidate(...)`. Long-lived consumers that keep their OWN caches
+     * (the tier-2 proxies' per-member handle caches) read this on each
+     * access and drop their cache when it moves, so a tier-3 override is
+     * reflected in already-built live proxies. Opaque: compare for
+     * equality only, do not interpret the magnitude.
+     */
+    cacheEpoch(): number;
 }

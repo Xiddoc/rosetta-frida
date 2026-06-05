@@ -10,9 +10,10 @@ import {
     AmbiguousOverloadError,
     ResolveError,
     TargetPolicyError,
+    UnknownArgTypeError,
     UnresolvedAccessError,
 } from '../errors.js';
-import { EventBus } from '../log.js';
+import { EventBus } from '../diagnostics/event-bus.js';
 import type { ClassEntry, RosettaMap } from '../types/map.js';
 import type { ResolveEvent } from '../types/events.js';
 import {
@@ -23,7 +24,12 @@ import {
 } from './resolver.js';
 import { createResolver } from './index.js';
 import { isSentinel, SENTINEL_REAL_NAME } from './sentinel.js';
+import { validateMap } from '../validate/schema.js';
 
+// The resolver consumes the NORMALISED in-memory map (methods always
+// arrays). Fixtures here are authored in the terser single-overload form
+// and run through validateMap so the resolver sees the normalised shape —
+// exactly as production does.
 function buildMap(): RosettaMap {
     return {
         schema_version: 2,
@@ -86,7 +92,8 @@ interface Harness {
 }
 
 function makeHarness(overrides?: { map?: RosettaMap }): Harness {
-    const map = overrides?.map ?? buildMap();
+    // Normalise through the real validator so methods are always arrays.
+    const map = validateMap(overrides?.map ?? buildMap());
     const bus = new EventBus();
     const events: ResolveEvent[] = [];
     bus.onType('resolve', (e) => events.push(e));
@@ -139,6 +146,12 @@ describe('ResolverImpl.resolveClass', () => {
     it('hasClass reports map membership', () => {
         expect(h.resolver.hasClass('com.example.app.IRemoteService$Stub')).toBe(true);
         expect(h.resolver.hasClass('com.example.app.IMissing')).toBe(false);
+    });
+
+    it('hasClass returns true for an overridden class not in the original map', () => {
+        expect(h.resolver.hasClass('com.example.app.NewClass')).toBe(false);
+        h.resolver.override('com.example.app.NewClass', { obfuscated: 'xxxx' });
+        expect(h.resolver.hasClass('com.example.app.NewClass')).toBe(true);
     });
 });
 
@@ -228,6 +241,45 @@ describe('ResolverImpl.resolveMethod', () => {
             expect.fail('expected throw');
         } catch (e) {
             expect(e).toBeInstanceOf(ResolveError);
+        }
+    });
+
+    it('throws UnknownArgTypeError when an overload arg type is an unmapped class', () => {
+        try {
+            // Right arity (2 args) but the 2nd arg type is a dotted class name
+            // the map does not know AND no overload declares its descriptor —
+            // the precise unknown-arg-type case, mirroring the Kotlin twin.
+            h.resolver.resolveMethod('com.example.app.IRemoteService$Stub', 'requestTicket', [
+                'android.os.Bundle',
+                'com.example.app.NotInMap',
+            ]);
+            expect.fail('expected throw');
+        } catch (e) {
+            // It IS a ResolveError subtype, so generic handlers still catch it,
+            // but it carries the distinct identity + offending arg type.
+            expect(e).toBeInstanceOf(ResolveError);
+            expect(e).toBeInstanceOf(UnknownArgTypeError);
+            const err = e as UnknownArgTypeError;
+            expect(err.kind).toBe('method');
+            expect(err.classScope).toBe('com.example.app.IRemoteService$Stub');
+            expect(err.argType).toBe('com.example.app.NotInMap');
+            expect(err.message).toMatch(/not a known class/);
+        }
+        expect(h.events.some((e) => e.miss)).toBe(true);
+    });
+
+    it('throws the generic ResolveError (not UnknownArgType) when arg types are all known but no overload matches', () => {
+        // Both arg types ARE known map classes / declared descriptors, so this
+        // is a legitimate no-overload-matches miss, not an unmapped arg type.
+        try {
+            h.resolver.resolveMethod('com.example.app.IRemoteService$Stub', 'requestTicket', [
+                'IServiceCallback',
+            ]);
+            expect.fail('expected throw');
+        } catch (e) {
+            expect(e).toBeInstanceOf(ResolveError);
+            expect(e).not.toBeInstanceOf(UnknownArgTypeError);
+            expect((e as ResolveError).message).toMatch(/no overload/);
         }
     });
 
@@ -397,6 +449,29 @@ describe('ResolverImpl.override', () => {
         const f = h.resolver.lookupField('com.example.app.IOverride', 'x');
         expect(f?.obfuscated).toBe('o');
     });
+
+    it('advances the cache epoch so live consumers can detect staleness', () => {
+        const before = h.resolver.cacheEpoch();
+        h.resolver.override('com.example.app.IRemoteService$Stub', { obfuscated: 'zzzz' });
+        const after = h.resolver.cacheEpoch();
+        expect(after).not.toBe(before);
+    });
+});
+
+describe('ResolverImpl.cacheEpoch', () => {
+    let h: Harness;
+    beforeEach(() => {
+        h = makeHarness();
+    });
+
+    it('is stable across plain resolves and advances on invalidate', () => {
+        const start = h.resolver.cacheEpoch();
+        h.resolver.resolveClass('com.example.app.IRemoteService$Stub');
+        // Reads alone never move the epoch.
+        expect(h.resolver.cacheEpoch()).toBe(start);
+        h.resolver.invalidate('com.example.app.IRemoteService$Stub');
+        expect(h.resolver.cacheEpoch()).toBe(start + 1);
+    });
 });
 
 describe('ResolverImpl.invalidate', () => {
@@ -511,7 +586,7 @@ describe('Resolver event-emission shapes', () => {
         };
         try {
             bus.setTrace(true);
-            const resolver = new ResolverImpl({ map: buildMap(), events: bus });
+            const resolver = new ResolverImpl({ map: validateMap(buildMap()), events: bus });
             resolver.resolveClass('com.example.app.IRemoteService$Stub');
         } finally {
             console.error = original;
@@ -523,14 +598,14 @@ describe('Resolver event-emission shapes', () => {
 
 describe('createResolver factory', () => {
     it('returns a Resolver backed by a fresh EventBus when none is supplied', () => {
-        const map = buildMap();
+        const map = validateMap(buildMap());
         const r = createResolver(map);
         const cls = r.resolveClass('com.example.app.IRemoteService$Stub');
         expect(cls.obfName).toBe('aaaa');
     });
 
     it('uses a caller-supplied EventBus and respects the failurePolicy option', () => {
-        const map = buildMap();
+        const map = validateMap(buildMap());
         const bus = new EventBus();
         const events: ResolveEvent[] = [];
         bus.onType('resolve', (e) => events.push(e));
@@ -727,7 +802,7 @@ describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
         const bus = new EventBus();
         const events: ResolveEvent[] = [];
         bus.onType('resolve', (e) => events.push(e));
-        const resolver = new ResolverImpl({ map, events: bus });
+        const resolver = new ResolverImpl({ map: validateMap(map), events: bus });
         return { resolver, events };
     }
 
@@ -801,7 +876,7 @@ describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
     it('an explicit allowlist permits an otherwise-forbidden framework target', () => {
         const bus = new EventBus();
         const resolver = new ResolverImpl({
-            map: maliciousMap(),
+            map: validateMap(maliciousMap()),
             events: bus,
             targetPolicy: { allow: ['java.lang.Runtime'] },
         });
@@ -820,7 +895,11 @@ describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
         };
         // With appPackage = org.other, the org.other.* target is app-owned.
         const bus = new EventBus();
-        const resolver = new ResolverImpl({ map, events: bus, appPackage: 'org.other.app' });
+        const resolver = new ResolverImpl({
+            map: validateMap(map),
+            events: bus,
+            appPackage: 'org.other.app',
+        });
         expect(resolver.resolveClass('Foreign').obfName).toBe('org.other.lib.Thing');
     });
 });

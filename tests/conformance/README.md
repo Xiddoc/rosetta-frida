@@ -34,6 +34,20 @@ would silently fork the parity oracle. If a case here reveals a genuine
 TS-vs-Kotlin resolver behaviour divergence, that is a parity bug to
 escalate, not a fixture to "fix" locally.
 
+### Automated sync guard
+
+A CI-enforced guard makes the byte-identity obligation un-skippable:
+`scripts/check-conformance-fixtures.sh` (run via
+`npm run conformance:fixtures:check`, wired into `npm run verify` and the
+CI workflow) recomputes a SHA-256 manifest over `fixtures/` and diffs it
+against `scripts/conformance-fixtures.sha256`. The **same manifest file**
+is carried byte-identical in rosetta-xposed, whose CI runs the same check
+against its own copy — so if either repo's fixtures drift from the shared
+baseline, that repo's CI fails. **rosetta-xposed owns the authoritative
+copy** (`core/src/test/resources/conformance/`); rosetta-frida vendors
+from it. An intentional fixture change must re-vendor BOTH repos
+byte-identical AND regenerate the manifest in BOTH (see the script header).
+
 ## Explicit manifest
 
 `conformance.test.ts` enumerates fixtures from an **explicit manifest**

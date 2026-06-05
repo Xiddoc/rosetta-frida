@@ -4,7 +4,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseSignatureArgs, toJvmDescriptor } from './signature.js';
+import {
+    extractArgRegion,
+    parseDescriptorArgs,
+    parseSignatureArgs,
+    toJvmDescriptor,
+} from './signature.js';
 
 const identity = (s: string): string => s;
 
@@ -110,5 +115,55 @@ describe('parseSignatureArgs', () => {
 
     it('throws on an unknown descriptor character', () => {
         expect(() => parseSignatureArgs('(X)V')).toThrow(/unknown descriptor char 'X'/);
+    });
+});
+
+describe('parseDescriptorArgs — output forms', () => {
+    it('descriptor form keeps slashes and array prefixes', () => {
+        expect(parseDescriptorArgs('Landroid/os/Bundle;Lbbbb;I', 'descriptor')).toEqual([
+            'Landroid/os/Bundle;',
+            'Lbbbb;',
+            'I',
+        ]);
+        expect(parseDescriptorArgs('[Ljava/lang/String;[I', 'descriptor')).toEqual([
+            '[Ljava/lang/String;',
+            '[I',
+        ]);
+    });
+
+    it('frida form dots object types and names primitives', () => {
+        expect(parseDescriptorArgs('Landroid/os/Bundle;Lbbbb;I', 'frida')).toEqual([
+            'android.os.Bundle',
+            'bbbb',
+            'int',
+        ]);
+    });
+
+    it('frida form renders object arrays as [Lpkg.Cls; and primitive arrays as [I', () => {
+        expect(parseDescriptorArgs('[Ljava/lang/String;[I', 'frida')).toEqual([
+            '[Ljava.lang.String;',
+            '[I',
+        ]);
+    });
+
+    it('handles an empty region (no args)', () => {
+        expect(parseDescriptorArgs('', 'descriptor')).toEqual([]);
+        expect(parseDescriptorArgs('', 'frida')).toEqual([]);
+    });
+
+    it('parseSignatureArgs delegates to the descriptor form', () => {
+        expect(parseSignatureArgs('(Landroid/os/Bundle;I)V')).toEqual(['Landroid/os/Bundle;', 'I']);
+    });
+});
+
+describe('extractArgRegion', () => {
+    it('extracts the parenthesised region', () => {
+        expect(extractArgRegion('(Landroid/os/Bundle;)V')).toBe('Landroid/os/Bundle;');
+        expect(extractArgRegion('()V')).toBe('');
+    });
+
+    it('throws on a missing open or close paren', () => {
+        expect(() => extractArgRegion('I)V')).toThrow(/must start with/);
+        expect(() => extractArgRegion('(I')).toThrow(/missing/);
     });
 });

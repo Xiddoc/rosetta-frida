@@ -6,7 +6,7 @@
  * the recommended entry point is `createResolver(map, options)`.
  */
 
-import { EventBus } from '../log.js';
+import { EventBus } from '../diagnostics/event-bus.js';
 import type { RosettaMap } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
 import type { FailurePolicy, TargetPolicy } from '../types/session.js';
@@ -20,7 +20,13 @@ export {
 } from './resolver.js';
 export type { ResolverOptions } from './resolver.js';
 export { makeSentinel, isSentinel, SENTINEL_REAL_NAME } from './sentinel.js';
-export { parseSignatureArgs, toJvmDescriptor } from './signature.js';
+export {
+    parseSignatureArgs,
+    parseDescriptorArgs,
+    extractArgRegion,
+    toJvmDescriptor,
+    type DescriptorArgForm,
+} from './signature.js';
 export {
     DEFAULT_DENY_PREFIXES,
     DEFAULT_APP_NAMESPACE_LABELS,

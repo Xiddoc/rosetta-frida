@@ -6,6 +6,13 @@
  * to the bound session's Resolver. Users reach for this when they
  * need raw obfuscated names, bridge to plain `Java.use`, or install
  * temporary overrides for hot-patching.
+ *
+ * Failure policy: tier-3 `resolve*` are explicit resolution REQUESTS
+ * whose whole point is to hand back the resolved structure, so they
+ * always throw `ResolveError` on a miss regardless of the session's
+ * `failurePolicy`. The 'warn' sentinel-deferral applies to the tier-1/2
+ * ergonomic surfaces (`rosetta.use` / `hook` / `field`), where there is
+ * a later point-of-use to surface the failure at.
  */
 
 import type { ClassEntry, RosettaMap } from '../types/map.js';
@@ -14,7 +21,7 @@ import type { RosettaSession } from '../session/session.js';
 
 /** The shape of the Tier 3 `rosetta.map` surface. */
 export interface MapApi {
-    /** Resolve a class by real name. Throws ResolveError on miss in strict mode. */
+    /** Resolve a class by real name. Always throws ResolveError on miss (tier-3 is strict). */
     resolveClass(realName: string): ResolvedClass;
     /**
      * Resolve a method by real names. If multiple overloads exist,

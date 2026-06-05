@@ -40,8 +40,9 @@
         "schema-version:check": "node scripts/check-schema-version.mjs",
         "schema-version:fix": "node scripts/check-schema-version.mjs --fix",
         "aidl:lint": "node scripts/lint-aidl.mjs",
-        "verify": "npm run typecheck && npm run lint && npm run format:check && npm run schema-version:check && npm run aidl:lint && npm run test:coverage",
-        "verify:fast": "npm run typecheck && npm run lint && npm run format:check && npm run schema-version:check && npm run aidl:lint",
+        "conformance:fixtures:check": "sh scripts/check-conformance-fixtures.sh",
+        "verify": "npm run typecheck && npm run lint && npm run format:check && npm run schema-version:check && npm run aidl:lint && npm run conformance:fixtures:check && npm run test:coverage",
+        "verify:fast": "npm run typecheck && npm run lint && npm run format:check && npm run schema-version:check && npm run aidl:lint && npm run conformance:fixtures:check",
         "cli": "tsx cli/index.ts",
         "prepare": "husky"
     },

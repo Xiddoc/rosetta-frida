@@ -17,11 +17,13 @@
  * as `rosetta init`'s default) are separately contained to the project tree.
  */
 
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
 import { convertToJson, yamlToMap, refuseModuleInput } from '../../src/convert/index.js';
 import { assertNoNul } from '../../src/parse/index.js';
+import type { CommandIo, FsLike } from './io.js';
+import { errorMessage, writeNew } from './io.js';
+import { parseArgs, type ArgSpec } from './args.js';
 
 export interface ConvertOptions {
     inputPath: string;
@@ -30,41 +32,38 @@ export interface ConvertOptions {
     force?: boolean;
 }
 
+/** Option grammar for `convert`: `-o/--output <path>` and `--force/-f`. */
+const CONVERT_SPEC: ArgSpec = {
+    options: [
+        { name: 'output', aliases: ['-o', '--output'], takesValue: true },
+        { name: 'force', aliases: ['--force', '-f'], takesValue: false },
+    ],
+};
+
 /** Parse argv → ConvertOptions. */
 export function parseConvertArgs(argv: readonly string[]): ConvertOptions {
-    const positional: string[] = [];
-    let output: string | undefined;
-    let force = false;
-    for (let i = 0; i < argv.length; i++) {
-        const arg = argv[i];
-        if (arg === '-o' || arg === '--output') {
-            const next = argv[i + 1];
-            if (next === undefined) {
-                throw new RosettaError(`${arg} requires a value`);
-            }
-            output = next;
-            i++;
-        } else if (arg === '--force' || arg === '-f') {
-            force = true;
-        } else if (arg !== undefined && arg.startsWith('-')) {
-            throw new RosettaError(`unknown flag: ${arg}`);
-        } else if (arg !== undefined) {
-            positional.push(arg);
-        }
-    }
-    if (positional.length !== 1) {
+    const { positionals, values, flags } = parseArgs(argv, CONVERT_SPEC);
+    if (positionals.length !== 1) {
         throw new RosettaError(
-            `convert requires exactly one positional arg: <in> (got ${positional.length})`,
+            `convert requires exactly one positional arg: <in> (got ${positionals.length})`,
         );
     }
-    if (output === undefined) {
+    if (values.output === undefined) {
         throw new RosettaError('convert requires -o <out.json>');
     }
-    return { inputPath: positional[0] as string, outputPath: output, force };
+    return {
+        inputPath: positionals[0] as string,
+        outputPath: values.output,
+        force: flags.force ?? false,
+    };
 }
 
-/** Run `rosetta convert`. Returns the absolute output path on success. */
-export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs): Promise<string> {
+/**
+ * Core of `rosetta convert`: render the input to canonical JSON and write
+ * it, returning the output path. Separated from the I/O-printing
+ * `runConvert` wrapper so it stays unit-testable by return value.
+ */
+export async function convertFile(argv: readonly string[], fs: FsLike): Promise<string> {
     const opts = parseConvertArgs(argv);
     assertNoNul(opts.inputPath);
     // Reject NUL in the output path. Containment to the project tree is NOT
@@ -74,15 +73,14 @@ export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs
     assertNoNul(opts.outputPath);
     const ext = path.extname(opts.inputPath).toLowerCase();
 
-    if (!opts.force && (await fileExists(opts.outputPath, fsImpl))) {
-        throw new RosettaError(
-            `refusing to overwrite existing file: ${opts.outputPath} (pass --force to overwrite)`,
-        );
-    }
-
     let json: string;
     if (ext === '.yaml' || ext === '.yml') {
-        const raw = await fsImpl.readFile(opts.inputPath, 'utf8');
+        let raw: string;
+        try {
+            raw = await fs.readFile(opts.inputPath, 'utf8');
+        } catch (err) {
+            throw new RosettaError(`cannot read ${opts.inputPath}: ${errorMessage(err)}`);
+        }
         json = await convertToJson(raw, 'yaml');
     } else if (ext === '.ts' || ext === '.js' || ext === '.mjs' || ext === '.cjs') {
         // Maps are pure data — never import a contributor-supplied module.
@@ -93,18 +91,22 @@ export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs
         throw new RosettaError(`unsupported input format: ${ext} (path: ${opts.inputPath})`);
     }
 
-    await fsImpl.mkdir(path.dirname(opts.outputPath), { recursive: true });
-    await fsImpl.writeFile(opts.outputPath, json, 'utf8');
+    // writeNew is the single emit seam: it creates the parent directory,
+    // then does an atomic `wx` create (the overwrite guard) unless --force,
+    // closing the stat-then-write TOCTOU window.
+    await writeNew(fs, opts.outputPath, json, { force: opts.force });
     return opts.outputPath;
 }
 
-async function fileExists(p: string, fsImpl: typeof fs): Promise<boolean> {
-    try {
-        await fsImpl.stat(p);
-        return true;
-    } catch {
-        return false;
-    }
+/**
+ * Execute `rosetta convert` under the shared command contract: convert
+ * and return the success message (the router prints it under the uniform
+ * `rosetta convert:` prefix). Handled failures throw `RosettaError` for
+ * the router to format.
+ */
+export async function runConvert(argv: readonly string[], io: CommandIo): Promise<string> {
+    const out = await convertFile(argv, io.fs);
+    return `wrote ${out}`;
 }
 
 // Re-export for tests that want to round-trip through the same entry that the

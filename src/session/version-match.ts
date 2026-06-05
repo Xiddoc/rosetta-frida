@@ -9,10 +9,10 @@
  *
  * Selection precedence (RFC 0001 Decision 3):
  *   1. `version_code` — the authoritative, O(1) key. When the caller
- *      supplies a detected/overridden `versionCode`, we scan the
- *      registry values for the map whose `version_code` equals it and
- *      return that map regardless of its label. This is exact, never
- *      fuzzy.
+ *      supplies a detected/overridden `versionCode`, we look it up in a
+ *      `version_code → key` index memoised on the registry (built once in
+ *      O(n), then O(1) per lookup) and return that map regardless of its
+ *      label. This is exact, never fuzzy.
  *   2. version *label* — the fallback when no `versionCode` is available
  *      or no map carries the detected code. Behaves as before:
  *      - 'exact' (default) — registry must contain an entry whose key
@@ -71,6 +71,34 @@ export function isRegistry(input: RosettaMap | RosettaMapRegistry): input is Ros
 }
 
 /**
+ * Per-registry `version_code → registry key` index, memoised on the
+ * registry object so the authoritative selection is genuinely O(1) across
+ * repeated lookups (the first lookup builds it in O(n); subsequent lookups
+ * — e.g. multiple sessions over the same bundle — are constant-time). A
+ * `WeakMap` keys off the registry identity so the index is GC'd with it and
+ * we never mutate the caller's object.
+ *
+ * When two maps share a `version_code` (shouldn't happen in a well-formed
+ * bundle) the first one wins, matching the previous linear-scan order.
+ */
+const versionCodeIndexCache = new WeakMap<RosettaMapRegistry, Map<number, string>>();
+
+function versionCodeIndex(registry: RosettaMapRegistry): Map<number, string> {
+    let index = versionCodeIndexCache.get(registry);
+    if (index === undefined) {
+        index = new Map<number, string>();
+        for (const key of Object.keys(registry)) {
+            const candidate = registry[key];
+            if (candidate && !index.has(candidate.version_code)) {
+                index.set(candidate.version_code, key);
+            }
+        }
+        versionCodeIndexCache.set(registry, index);
+    }
+    return index;
+}
+
+/**
  * Pick a `RosettaMap` for the given version.
  *
  * - For a single-map input: always returns it (the session-layer
@@ -95,11 +123,14 @@ export function pickMapForVersion(
         );
     }
 
-    // 1. Authoritative selection by version_code (RFC 0001 Decision 3).
+    // 1. Authoritative selection by version_code (RFC 0001 Decision 3),
+    //    via the memoised version_code → key index — genuinely O(1) per
+    //    lookup (the index is built once per registry object).
     if (versionCode !== undefined) {
-        for (const key of keys) {
+        const key = versionCodeIndex(input).get(versionCode);
+        if (key !== undefined) {
             const candidate = input[key];
-            if (candidate && candidate.version_code === versionCode) {
+            if (candidate) {
                 return { map: candidate, fromRegistry: true, fuzzy: false, registryKey: key };
             }
         }

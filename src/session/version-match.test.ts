@@ -108,6 +108,24 @@ describe('pickMapForVersion — version_code (authoritative)', () => {
             /no map for version '3\.0\.0'/,
         );
     });
+
+    it('returns the same map on repeated version_code lookups (memoised index)', () => {
+        const a = pickMapForVersion(registry, { version: 'x', versionCode: 200 });
+        const b = pickMapForVersion(registry, { version: 'y', versionCode: 200 });
+        // Same registry object → memoised index → consistent O(1) result.
+        expect(a.map).toBe(b.map);
+        expect(a.registryKey).toBe('2.0.0');
+        expect(b.registryKey).toBe('2.0.0');
+    });
+
+    it('keeps the first key when two maps share a version_code', () => {
+        const dupRegistry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0', 'com.example.app', 500),
+            '1.0.1': buildMap('1.0.1', 'com.example.app', 500),
+        };
+        const picked = pickMapForVersion(dupRegistry, { version: 'z', versionCode: 500 });
+        expect(picked.registryKey).toBe('1.0.0');
+    });
 });
 
 describe('pickMapForVersion — fuzzy', () => {

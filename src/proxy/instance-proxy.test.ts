@@ -14,6 +14,7 @@ import { MockFrida, useFridaMock, type JavaWrapper } from '../../tests/mocks/ind
 import { ResolveError } from '../errors.js';
 import { createResolver } from '../resolver/index.js';
 import type { RosettaMap } from '../types/map.js';
+import { ROSETTA_META, type ProxyMeta } from '../types/proxy.js';
 import { makeInstanceProxy } from './instance-proxy.js';
 
 const map: RosettaMap = {
@@ -84,5 +85,57 @@ describe('makeInstanceProxy', () => {
         const inst = makeInstanceProxy(resolver, 'com.example.app.Klass', instance);
         const sym = Symbol('x');
         expect((inst as unknown as Record<symbol, unknown>)[sym]).toBeUndefined();
+    });
+
+    it('drops a stale field accessor after a tier-3 override', () => {
+        const { resolver, instance } = setup();
+        const inst = makeInstanceProxy(resolver, 'com.example.app.Klass', instance);
+        // Cache the accessor for fieldA → obf 'a' ('hello').
+        const before = inst.fieldA as { value: string };
+        expect(before.value).toBe('hello');
+
+        // Override so fieldA now maps to obf 'b' (an int field on the
+        // same instance, initial 1).
+        resolver.override('com.example.app.Klass', {
+            obfuscated: 'aaaa',
+            fields: { fieldA: { obfuscated: 'b', type: 'I' } },
+        });
+
+        const after = inst.fieldA as { value: number };
+        expect(after).not.toBe(before);
+        expect(after.value).toBe(1);
+    });
+
+    it('reflects the overridden $obfName on a live instance proxy', () => {
+        const { resolver, instance } = setup();
+        const inst = makeInstanceProxy(resolver, 'com.example.app.Klass', instance);
+        expect(inst.$obfName).toBe('aaaa');
+        resolver.override('com.example.app.Klass', { obfuscated: 'cccc' });
+        expect(inst.$obfName).toBe('cccc');
+    });
+
+    it('does not let a map field named $native shadow metadata; ROSETTA_META is collision-proof', () => {
+        const collidingMap: RosettaMap = {
+            schema_version: 2,
+            version_code: 1,
+            app: 'com.example.app',
+            version: '1.0.0',
+            classes: {
+                'com.example.app.Klass': {
+                    obfuscated: 'aaaa',
+                    fields: { $native: { obfuscated: 'b', type: 'I' } },
+                },
+            },
+        };
+        MockFrida.registerClass('aaaa', { fields: { b: { type: 'I', initial: 5 } } });
+        const resolver = createResolver(collidingMap);
+        const instance = (Java.use('aaaa') as JavaWrapper).$new();
+        const inst = makeInstanceProxy(resolver, 'com.example.app.Klass', instance);
+        // $native is the MAP field, not the native instance.
+        expect((inst.$native as { value: number }).value).toBe(5);
+        // The Symbol path always returns the real native instance.
+        const meta = (inst as unknown as Record<symbol, ProxyMeta>)[ROSETTA_META];
+        expect(meta.native).toBe(instance);
+        expect(meta.obfName).toBe('aaaa');
     });
 });

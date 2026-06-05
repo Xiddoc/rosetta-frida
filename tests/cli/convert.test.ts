@@ -3,9 +3,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type * as fsMod from 'node:fs/promises';
-import { parseConvertArgs, runConvert } from '../../cli/commands/convert.js';
+import { parseConvertArgs, convertFile, runConvert } from '../../cli/commands/convert.js';
 import { RosettaError } from '../../src/errors.js';
+import type { FsLike } from '../../cli/commands/io.js';
+import { makeCaptured, makeFakeFs, makeFsLike, makeIo, type FakeFs } from './helpers.js';
 
 const VALID_YAML = `
 schema_version: 2
@@ -17,36 +18,12 @@ classes:
     obfuscated: aaaa
 `;
 
-function enoent(p: string): NodeJS.ErrnoException {
-    const err = new Error(`ENOENT: ${p}`) as NodeJS.ErrnoException;
-    err.code = 'ENOENT';
-    return err;
-}
-
 function makeFs(initial: Record<string, string> = {}): {
-    fs: typeof fsMod;
+    fs: FsLike;
     files: Map<string, string>;
 } {
-    const files = new Map<string, string>(Object.entries(initial));
-    const fs = {
-        readFile(p: string) {
-            const v = files.get(p);
-            return v === undefined ? Promise.reject(enoent(p)) : Promise.resolve(v);
-        },
-        writeFile(p: string, content: string) {
-            files.set(p, content);
-            return Promise.resolve();
-        },
-        mkdir() {
-            return Promise.resolve(undefined);
-        },
-        stat(p: string) {
-            return files.has(p)
-                ? Promise.resolve({ isFile: () => true } as fsMod.Stats)
-                : Promise.reject(enoent(p));
-        },
-    } as unknown as typeof fsMod;
-    return { fs, files };
+    const fake: FakeFs = makeFakeFs(initial);
+    return { fs: makeFsLike(fake), files: fake.files };
 }
 
 describe('parseConvertArgs', () => {
@@ -73,7 +50,7 @@ describe('parseConvertArgs', () => {
 
     it('errors on unknown flag', () => {
         expect(() => parseConvertArgs(['x.yaml', '-o', 'y.json', '--bogus'])).toThrow(
-            /unknown flag/,
+            /unknown option/,
         );
     });
 
@@ -86,10 +63,10 @@ describe('parseConvertArgs', () => {
     });
 });
 
-describe('runConvert', () => {
+describe('convertFile', () => {
     it('converts a YAML file to canonical strict JSON', async () => {
         const { fs, files } = makeFs({ '/in.yaml': VALID_YAML });
-        const out = await runConvert(['/in.yaml', '-o', 'out.json'], fs);
+        const out = await convertFile(['/in.yaml', '-o', 'out.json'], fs);
         expect(out).toBe('out.json');
         const written = files.get('out.json');
         expect(written).toContain('"app": "com.example.app"');
@@ -100,82 +77,111 @@ describe('runConvert', () => {
 
     it('converts a .yml file', async () => {
         const { fs, files } = makeFs({ '/in.yml': VALID_YAML });
-        await runConvert(['/in.yml', '-o', 'out.json'], fs);
+        await convertFile(['/in.yml', '-o', 'out.json'], fs);
         expect(files.get('out.json')).toContain('"app": "com.example.app"');
     });
 
     it('refuses a TS/JS-module input (never imported)', async () => {
         const { fs } = makeFs();
-        await expect(runConvert(['/some/fixture.mjs', '-o', 'out.json'], fs)).rejects.toThrow(
+        await expect(convertFile(['/some/fixture.mjs', '-o', 'out.json'], fs)).rejects.toThrow(
             /no longer supported/,
         );
     });
 
     it('refuses a .ts module input', async () => {
         const { fs } = makeFs();
-        await expect(runConvert(['/some/fixture.ts', '-o', 'out.json'], fs)).rejects.toThrow(
+        await expect(convertFile(['/some/fixture.ts', '-o', 'out.json'], fs)).rejects.toThrow(
             RosettaError,
         );
     });
 
     it('allows a parent-traversal output path (operator may write outside CWD)', async () => {
         const { fs, files } = makeFs({ '/in.yaml': VALID_YAML });
-        await runConvert(['/in.yaml', '-o', '../escape.json'], fs);
+        await convertFile(['/in.yaml', '-o', '../escape.json'], fs);
         expect(files.get('../escape.json')).toContain('"app": "com.example.app"');
     });
 
     it('allows an absolute output path outside the project tree', async () => {
         const { fs, files } = makeFs({ '/in.yaml': VALID_YAML });
-        await runConvert(['/in.yaml', '-o', '/tmp/out.json'], fs);
+        await convertFile(['/in.yaml', '-o', '/tmp/out.json'], fs);
         expect(files.get('/tmp/out.json')).toContain('"app": "com.example.app"');
     });
 
     it('refuses a NUL byte in the input path', async () => {
         const { fs } = makeFs({ '/in.yaml': VALID_YAML });
-        await expect(runConvert(['/in.yaml\0.png', '-o', 'out.json'], fs)).rejects.toThrow(/NUL/);
+        await expect(convertFile(['/in.yaml\0.png', '-o', 'out.json'], fs)).rejects.toThrow(/NUL/);
     });
 
     it('refuses a NUL byte in the output path', async () => {
         const { fs } = makeFs({ '/in.yaml': VALID_YAML });
-        await expect(runConvert(['/in.yaml', '-o', 'out.json\0.png'], fs)).rejects.toThrow(/NUL/);
+        await expect(convertFile(['/in.yaml', '-o', 'out.json\0.png'], fs)).rejects.toThrow(/NUL/);
     });
 
     it('refuses to overwrite without --force', async () => {
         const { fs } = makeFs({ '/in.yaml': VALID_YAML, 'out.json': 'previous' });
-        await expect(runConvert(['/in.yaml', '-o', 'out.json'], fs)).rejects.toThrow(
+        await expect(convertFile(['/in.yaml', '-o', 'out.json'], fs)).rejects.toThrow(
             /refusing to overwrite/,
         );
     });
 
     it('overwrites with --force', async () => {
         const { fs, files } = makeFs({ '/in.yaml': VALID_YAML, 'out.json': 'old' });
-        await runConvert(['/in.yaml', '-o', 'out.json', '--force'], fs);
+        await convertFile(['/in.yaml', '-o', 'out.json', '--force'], fs);
         expect(files.get('out.json')).toContain('"app": "com.example.app"');
     });
 
     it('rejects .json input as already canonical', async () => {
         const { fs } = makeFs({ '/in.json': '{}' });
-        await expect(runConvert(['/in.json', '-o', 'out.json'], fs)).rejects.toThrow(
+        await expect(convertFile(['/in.json', '-o', 'out.json'], fs)).rejects.toThrow(
             /already in canonical/,
         );
     });
 
     it('rejects .jsonc input as unsupported (JSONC is no longer a format)', async () => {
         const { fs } = makeFs({ '/in.jsonc': '{}' });
-        await expect(runConvert(['/in.jsonc', '-o', 'out.json'], fs)).rejects.toThrow(
+        await expect(convertFile(['/in.jsonc', '-o', 'out.json'], fs)).rejects.toThrow(
             /unsupported input format/,
         );
     });
 
     it('rejects unknown extension', async () => {
         const { fs } = makeFs({ '/in.txt': 'whatever' });
-        await expect(runConvert(['/in.txt', '-o', 'out.json'], fs)).rejects.toThrow(
+        await expect(convertFile(['/in.txt', '-o', 'out.json'], fs)).rejects.toThrow(
             /unsupported input format/,
         );
     });
 
     it('rejects when underlying YAML is invalid', async () => {
         const { fs } = makeFs({ '/in.yaml': 'schema_version: 99' });
-        await expect(runConvert(['/in.yaml', '-o', 'out.json'], fs)).rejects.toThrow(RosettaError);
+        await expect(convertFile(['/in.yaml', '-o', 'out.json'], fs)).rejects.toThrow(RosettaError);
+    });
+
+    it('wraps a missing-input read error in the uniform `cannot read` message', async () => {
+        // No /in.yaml seeded → readFile rejects with ENOENT; convertFile
+        // wraps it so the message matches patch/extract/inspect/validate.
+        const { fs } = makeFs();
+        await expect(convertFile(['/in.yaml', '-o', 'out.json'], fs)).rejects.toThrow(
+            /cannot read \/in\.yaml/,
+        );
+    });
+});
+
+describe('runConvert (command wrapper)', () => {
+    it('converts and returns the success message', async () => {
+        const fakeFs = makeFakeFs({ '/in.yaml': VALID_YAML });
+        const captured = makeCaptured();
+        // run* returns the success message; the router owns the prefix +
+        // stdout, so command-level tests assert on the return value.
+        const msg = await runConvert(['/in.yaml', '-o', 'out.json'], makeIo(fakeFs, captured));
+        expect(fakeFs.files.has('out.json')).toBe(true);
+        expect(msg).toBe('wrote out.json');
+    });
+
+    it('propagates a RosettaError (router formats it) instead of catching', async () => {
+        const fakeFs = makeFakeFs({ '/in.json': '{}' });
+        const captured = makeCaptured();
+        await expect(
+            runConvert(['/in.json', '-o', 'out.json'], makeIo(fakeFs, captured)),
+        ).rejects.toThrow(/already in canonical/);
     });
 });

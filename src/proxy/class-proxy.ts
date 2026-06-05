@@ -27,34 +27,51 @@
  * two different proxies (cheap), but member-access caching ensures
  * `Stub.requestTicket === Stub.requestTicket` within one proxy.
  */
-import type { ClassEntry } from '../types/map.js';
-import type { ClassProxy, FieldAccessor, MethodHandle } from '../types/proxy.js';
+import { defaultJavaBridge, javaBridgeFromUse, type JavaBridge } from '../java-bridge.js';
+import type { ClassEntry, MethodEntry } from '../types/map.js';
+import {
+    ROSETTA_META,
+    type ClassProxy,
+    type FieldAccessor,
+    type MethodHandle,
+    type ProxyMeta,
+} from '../types/proxy.js';
 import type { Resolver } from '../types/resolver.js';
 import { makeFieldAccessor } from './field-accessor.js';
 import { makeInstanceProxy } from './instance-proxy.js';
 import { makeMethodHandle } from './method-handle.js';
+import { resolveClassOrSentinel } from '../resolver/resolver.js';
+import { isSentinel } from '../resolver/sentinel.js';
 
 /** Options accepted by `makeClassProxy`. */
 export interface ClassProxyOptions {
     /**
      * Override the global `Java.use(...)` resolver. Tests pass a stub;
      * production code lets this default to the live Frida `Java.use`.
+     *
+     * Sugar over {@link ClassProxyOptions.javaBridge}: when set, it is
+     * adapted to a {@link JavaBridge} internally. Prefer `javaBridge` for
+     * new code; `javaUse` is retained for the `rosetta.use(name, { javaUse })`
+     * ergonomic.
      */
     javaUse?: (obfName: string) => unknown;
+    /**
+     * The seam onto Frida's global `Java`. Defaults to the global-reading
+     * {@link defaultJavaBridge}. Tests inject a fake bridge instead of
+     * mutating `globalThis`.
+     */
+    javaBridge?: JavaBridge;
 }
 
-/** Resolve a `Java.use` callable, defaulting to the global Frida API. */
-function defaultJavaUse(obfName: string): unknown {
-    // `Java` is provided by the Frida runtime. The cast keeps the type
-    // boundary explicit — Frida's typings are pulled in at build time
-    // but we don't want to hard-fail on absence in non-Frida contexts.
-    const J = (globalThis as { Java?: { use: (n: string) => unknown } }).Java;
-    if (!J) {
-        throw new Error(
-            "rosetta-frida: global 'Java' is not available. Are you running inside a Frida script?",
-        );
-    }
-    return J.use(obfName);
+/**
+ * Resolve the effective {@link JavaBridge} for a proxy: an explicit
+ * `javaBridge` wins; otherwise a `javaUse` callable is adapted; otherwise
+ * the global-reading default is used.
+ */
+function resolveBridge(options: ClassProxyOptions): JavaBridge {
+    if (options.javaBridge !== undefined) return options.javaBridge;
+    if (options.javaUse !== undefined) return javaBridgeFromUse(options.javaUse);
+    return defaultJavaBridge;
 }
 
 /**
@@ -65,35 +82,123 @@ export function makeClassProxy(
     realName: string,
     options: ClassProxyOptions = {},
 ): ClassProxy {
-    const resolved = resolver.resolveClass(realName);
-    const entry: ClassEntry = resolved.entry;
-    const obfName = resolved.obfName;
+    const bridge = resolveBridge(options);
 
-    const javaUse = options.javaUse ?? defaultJavaUse;
-    const native = javaUse(obfName);
+    // Honour the session failure policy at the class boundary: under
+    // 'warn', an unknown class yields a sentinel (the resolver emits the
+    // miss event) and the WHOLE proxy becomes that sentinel — any member
+    // access or call throws UnresolvedAccessError clearly, rather than the
+    // script blowing up at `rosetta.use(...)` time. Under 'strict' this
+    // rethrows the ResolveError, matching the eager-resolve contract.
+    const initial = resolveClassOrSentinel(resolver, realName);
+    if (isSentinel(initial)) {
+        return initial as unknown as ClassProxy;
+    }
 
-    // Memoized per-member handles. Same real name → same handle object.
+    // Mutable proxy state, re-derived whenever the resolver's cache epoch
+    // moves (a tier-3 override invalidates caches and bumps the epoch).
+    // Without this revalidation a live proxy built before an override would
+    // keep handing back the pre-override class entry / native wrapper /
+    // memoized member handles. See Resolver.cacheEpoch.
+    //
+    // Primed directly from the `initial` resolve above — which already emitted
+    // the resolution diagnostic — so we do NOT re-resolve at construction (a
+    // second lookup that emitted a spurious `cache` event). `revalidate()`
+    // then only does work when the epoch advances.
+    let entry: ClassEntry = initial.entry;
+    let obfName: string = initial.obfName;
+    let native: unknown = bridge.use(obfName);
+    let epoch = resolver.cacheEpoch();
+
+    // Memoized per-member handles. Same real name → same handle object,
+    // until an override forces a rebuild.
     const memberCache = new Map<string, MethodHandle | FieldAccessor<unknown>>();
 
     const metadata: Record<string, unknown> = {
         $realName: realName,
-        $obfName: obfName,
-        $native: native,
+        get $obfName(): string {
+            revalidate();
+            return obfName;
+        },
+        get $native(): unknown {
+            revalidate();
+            return native;
+        },
         $resolver: resolver,
         $new(...args: unknown[]): unknown {
+            revalidate();
             const nativeWrapper = native as { $new: (...a: unknown[]) => unknown };
             const instance = nativeWrapper.$new(...args);
             return makeInstanceProxy(resolver, realName, instance);
         },
     };
 
+    /**
+     * Re-resolve the class (and rebuild the native wrapper + drop the
+     * member cache) if the resolver's epoch has advanced since we last
+     * looked. The first call (epoch === -1) performs the initial resolve.
+     *
+     * The epoch is resolver-GLOBAL: any `override(...)` bumps it, so an
+     * override of an UNRELATED class would otherwise force this proxy to
+     * redo `Java.use(obfName)` (a real device round-trip) and drop its
+     * member cache as pure collateral. To avoid that, we re-resolve (cheap,
+     * a cache hit for an unrelated override) but only rebuild the native
+     * wrapper + clear the member cache when THIS class's resolved entry
+     * actually changed. Comparing the entry reference catches both an
+     * obfName change and a same-class method/field remap, since `override`
+     * always installs a fresh entry object for the class it targets.
+     */
+    function revalidate(): void {
+        const current = resolver.cacheEpoch();
+        if (current === epoch) return;
+        const resolved = resolver.resolveClass(realName);
+        epoch = current;
+        if (resolved.entry === entry) {
+            // Unrelated override (or a no-op): nothing about this class moved.
+            return;
+        }
+        entry = resolved.entry;
+        obfName = resolved.obfName;
+        native = bridge.use(obfName);
+        memberCache.clear();
+    }
+
+    // No eager `revalidate()` here: the `initial` resolve above already ran
+    // at construction (so a bad real name / denied target threw via
+    // `resolveClassOrSentinel`), and the proxy state is primed from it. The
+    // first `revalidate()` only does work once the epoch actually advances.
+
+    /** True if the loaded class defines a real member named `prop`. */
+    function mapDefines(prop: string): boolean {
+        return entry.methods?.[prop] !== undefined || entry.fields?.[prop] !== undefined;
+    }
+
     return new Proxy(metadata, {
         get(_t, prop): unknown {
+            // Collision-proof metadata accessor: a Symbol can never clash
+            // with a (string) map key, so tier-3 code can always reach the
+            // proxy's own metadata here.
+            if (prop === ROSETTA_META) {
+                revalidate();
+                // A fresh ProxyMeta SNAPSHOT of the current resolved state,
+                // built on every access. It is not live: a caller holding an
+                // old reference keeps the obfName/native it captured even after
+                // a later override moves the proxy. Re-read ROSETTA_META to
+                // observe post-override state.
+                const meta: ProxyMeta = { realName, obfName, native, resolver };
+                return meta;
+            }
             if (typeof prop !== 'string') {
                 return undefined;
             }
-            // Metadata + $new shortcut.
-            if (prop in metadata) {
+            revalidate();
+            // `$`-metadata accessors are ergonomic but must NOT shadow a
+            // real map member of the same name — a community map that
+            // happens to define `$native` / `$new` should still be
+            // reachable. So a map-defined member wins; otherwise the
+            // string metadata answers. (Use ROSETTA_META for the
+            // guaranteed-metadata path.)
+            if (prop in metadata && !mapDefines(prop)) {
                 return metadata[prop];
             }
             // `.class` passes through to the underlying Java Class<?>
@@ -107,8 +212,8 @@ export function makeClassProxy(
                 return cached;
             }
             // Dispatch: methods first (more common access path), then fields.
-            const methodEntry = entry.methods?.[prop];
-            if (methodEntry !== undefined) {
+            const overloads = entry.methods?.[prop];
+            if (overloads !== undefined) {
                 // Pick the first overload's obfuscated name — multiple
                 // overloads of a single real method name all share the
                 // same underlying Frida method object (which then
@@ -118,11 +223,12 @@ export function makeClassProxy(
                 // methods, and *accessing* the method on the class
                 // wrapper must always succeed — the ambiguity check
                 // belongs on `.implementation`, not on the access.
-                const first = Array.isArray(methodEntry) ? methodEntry[0] : methodEntry;
-                // The schema validator (src/validate/schema.ts) rejects
-                // empty overload arrays via `.min(1)`, so `first` is
-                // always defined; the assertion is for the type system.
-                const obfMethod = (first as { obfuscated: string }).obfuscated;
+                //
+                // `overloads` is always a non-empty array post-validation
+                // (the schema's `.min(1)` + single→array normalisation), so
+                // `[0]` is defined; the assertion is for the type system.
+                const first = overloads[0] as MethodEntry;
+                const obfMethod = first.obfuscated;
                 const handle = makeMethodHandle(resolver, realName, prop, native, obfMethod);
                 memberCache.set(prop, handle);
                 return handle;

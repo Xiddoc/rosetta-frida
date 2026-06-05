@@ -13,6 +13,9 @@ vi.mock('node:fs/promises', () => ({
 import { readFile } from 'node:fs/promises';
 const readFileMock = vi.mocked(readFile);
 
+// In the NORMALISED (in-memory) shape: methods are always arrays. loadMap
+// validates + normalises, and the array form round-trips unchanged, so
+// `resolves.toEqual(validMap)` holds.
 const validMap: RosettaMap = {
     schema_version: 2,
     version_code: 1,
@@ -22,7 +25,7 @@ const validMap: RosettaMap = {
         IFoo: {
             obfuscated: 'aaaa',
             methods: {
-                bar: { obfuscated: 'c', signature: '()V' },
+                bar: [{ obfuscated: 'c', signature: '()V' }],
             },
         },
     },

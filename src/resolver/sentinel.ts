@@ -22,6 +22,12 @@ const SENTINEL_MARKER = Symbol.for('rosetta-frida.sentinel');
 /** Public accessor to read the real name a sentinel was created for. */
 export const SENTINEL_REAL_NAME = Symbol.for('rosetta-frida.sentinel.realName');
 
+/** The runtime shape of a sentinel proxy returned by {@link makeSentinel}. */
+export interface Sentinel {
+    [SENTINEL_REAL_NAME]: string;
+    [key: string]: unknown;
+}
+
 /**
  * Build a sentinel proxy that throws UnresolvedAccessError on use.
  *
@@ -34,10 +40,7 @@ export const SENTINEL_REAL_NAME = Symbol.for('rosetta-frida.sentinel.realName');
 export function makeSentinel(
     realName: string,
     kind: 'class' | 'method' | 'field' | 'type',
-): {
-    [SENTINEL_REAL_NAME]: string;
-    [key: string]: unknown;
-} {
+): Sentinel {
     const message = `rosetta-frida: ${kind} '${realName}' is unresolved (failurePolicy='warn'). Accessing or invoking the sentinel returned for it is an error.`;
 
     const refuse = (): never => {
@@ -47,10 +50,7 @@ export function makeSentinel(
     // Function target so the Proxy `apply` trap fires on call. The
     // target itself throws too — defensive, in case anything ever
     // unwraps the proxy via Reflect / Function.prototype.bind.
-    const target = refuse as unknown as {
-        [SENTINEL_REAL_NAME]: string;
-        [key: string]: unknown;
-    };
+    const target = refuse as unknown as Sentinel;
 
     const handler: ProxyHandler<typeof target> = {
         get(_t, prop) {
@@ -71,7 +71,7 @@ export function makeSentinel(
 }
 
 /** True if the given value is a sentinel (any kind). */
-export function isSentinel(value: unknown): boolean {
+export function isSentinel(value: unknown): value is Sentinel {
     if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
         return false;
     }

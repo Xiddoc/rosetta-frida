@@ -54,6 +54,15 @@ jobs:
             - name: Schema-version literals in sync (docs/sample vs CURRENT_SCHEMA_VERSION)
               run: npm run schema-version:check
 
+            # Cross-repo parity guard: the conformance fixtures are vendored
+            # byte-identical into both rosetta-frida and rosetta-xposed. This
+            # fails if this repo's copy drifts from the shared SHA-256 manifest
+            # (the same manifest both repos carry), so a one-sided fixture edit
+            # can't silently fork the parity oracle. rosetta-xposed is the
+            # authoritative copy (see tests/conformance/fixtures/README.md).
+            - name: Conformance fixtures match the shared manifest
+              run: npm run conformance:fixtures:check
+
             # SDK-free structural guard: AIDL forbids method overloading,
             # so a duplicate method name on an interface silently breaks
             # the test-app APK build (and thus the whole Pipeline CI) on

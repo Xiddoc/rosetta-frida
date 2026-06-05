@@ -38,6 +38,7 @@
  */
 
 import { MalformedSignerError } from '../errors.js';
+import { defaultJavaBridge, type JavaBridge } from '../java-bridge.js';
 
 /**
  * `PackageManager.GET_SIGNING_CERTIFICATES` (API 28+). Returns the v2/v3
@@ -231,23 +232,29 @@ function readSignatures(
  * is SHA-256'd via `java.security.MessageDigest` and hex-encoded
  * (normalized: lowercase, no separators).
  *
- * @param javaApi Frida's `Java` namespace. Defaults to the global `Java`.
- *   Tests pass a fake that returns canned classes.
+ * @param javaApi Frida's `Java` namespace. Defaults to deriving one from
+ *   `bridge`. Tests pass a fake that returns canned classes.
+ * @param bridge The {@link JavaBridge} used when `javaApi` is omitted.
+ *   Defaults to {@link defaultJavaBridge}. Lets tests drive the
+ *   global-fallback path without mutating `globalThis`.
  * @throws Error if the Java runtime is unavailable.
  * @throws NoSignerReadableError if no signing certificate could be read (an
  *   authenticity check that can't read the signer must fail closed — the
  *   session guard surfaces this as the public `MissingSignerError`).
  */
-export function detectSigners(javaApi?: SignerJavaApi): DetectedSigners {
-    const api: SignerJavaApi | undefined =
-        javaApi ?? (globalThis as unknown as { Java?: SignerJavaApi }).Java;
-    if (!api) {
+export function detectSigners(
+    javaApi?: SignerJavaApi,
+    bridge: JavaBridge = defaultJavaBridge,
+): DetectedSigners {
+    if (javaApi === undefined && !bridge.available) {
         throw new Error(
             'rosetta-frida: cannot read the app signer — global Java is unavailable. ' +
                 'Attach via Frida, or disable signer enforcement (enforceSigner: false) ' +
                 'if you cannot supply a Java runtime.',
         );
     }
+    const api: SignerJavaApi =
+        javaApi ?? ({ use: (className) => bridge.use(className) } as SignerJavaApi);
 
     const ActivityThread = api.use('android.app.ActivityThread');
     const application = ActivityThread.currentApplication();

@@ -21,9 +21,11 @@
 import { parseJson } from '../../src/parse/json.js';
 import { patchMarkerBlock } from '../../src/marker/patch.js';
 import { assertNoNul } from '../../src/parse/index.js';
+import { RosettaError } from '../../src/errors.js';
 import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import type { CommandIo } from './io.js';
 import { errorMessage } from './io.js';
+import { parseArgs, type ArgSpec } from './args.js';
 
 /** Parsed argument shape for the patch command. */
 export interface PatchArgs {
@@ -35,150 +37,141 @@ export interface PatchArgs {
     output: string;
 }
 
+/** Option grammar for `patch`: `--map <path>` and `-o/--output <path>`. */
+const PATCH_SPEC: ArgSpec = {
+    options: [
+        { name: 'map', aliases: ['--map'], takesValue: true },
+        { name: 'output', aliases: ['-o', '--output'], takesValue: true },
+    ],
+};
+
 /**
  * Parse `patch` argv. Required: <bundle> --map <path>. Optional:
  * -o <path> (default = in-place).
  */
 export function parsePatchArgs(argv: readonly string[]): PatchArgs {
-    let bundle: string | undefined;
-    let mapPath: string | undefined;
-    let output: string | undefined;
-    for (let i = 0; i < argv.length; i++) {
-        // `argv[i]` is non-undefined inside the loop bounds; assert
-        // once to satisfy `noUncheckedIndexedAccess`.
-        const a = argv[i] as string;
-        if (a === '--map') {
-            const next = argv[i + 1];
-            if (next === undefined) {
-                throw new Error(`--map requires a path argument`);
-            }
-            mapPath = next;
-            i++;
-        } else if (a === '-o' || a === '--output') {
-            const next = argv[i + 1];
-            if (next === undefined) {
-                throw new Error(`${a} requires a path argument`);
-            }
-            output = next;
-            i++;
-        } else if (!a.startsWith('-')) {
-            if (bundle !== undefined) {
-                throw new Error(`unexpected positional argument: ${a}`);
-            }
-            bundle = a;
-        } else {
-            throw new Error(`unknown option: ${a}`);
-        }
+    const { positionals, values } = parseArgs(argv, PATCH_SPEC);
+    if (positionals.length > 1) {
+        throw new RosettaError(`unexpected positional argument: ${positionals[1]}`);
     }
+    const bundle = positionals[0];
     if (bundle === undefined) {
-        throw new Error('missing required argument: <bundle.js>');
+        throw new RosettaError('missing required argument: <bundle.js>');
     }
+    const mapPath = values.map;
     if (mapPath === undefined) {
-        throw new Error('missing required argument: --map <map.json>');
+        throw new RosettaError('missing required argument: --map <map.json>');
     }
-    return { bundle, map: mapPath, output: output ?? bundle };
+    return { bundle, map: mapPath, output: values.output ?? bundle };
 }
 
 /**
- * Parse a map file as strict JSON and assert the top-level shape is
- * either a `RosettaMap` (single) or a registry (record-of-strings whose
- * values are maps).
+ * Single-vs-registry discriminator, identical in spirit to the private
+ * `isSingleMap` in `src/marker/patch.ts`: a single map has a numeric
+ * `schema_version` at the root; a registry's *values* do, but its root
+ * does not. (The src helper isn't exported; promoting it to the marker
+ * public surface so both sides share one copy is a deferred cross-scope
+ * item — this repo's task owns only `cli/`.)
+ */
+function isSingleMap(value: Record<string, unknown>): boolean {
+    return typeof value.schema_version === 'number';
+}
+
+/**
+ * Minimal pre-emit validation: confirm `classes` is an object on a map.
  *
- * The full schema validator from `src/validate/` is intentionally NOT
- * called here — `rosetta patch` just rewrites a map slot in a bundle,
- * so a strict schema check is the user's responsibility upstream (e.g.
- * via `rosetta validate <map>` before patching). This loader only
- * enforces enough structure to pick the correct downstream emitter
- * (single-map vs registry).
+ * `patchMarkerBlock` → `emit*` calls `Object.keys(map.classes)`, which
+ * throws a bare `TypeError` (escaping to exit 2) if `classes` is missing
+ * on a parseable-but-malformed payload. We fail closed with a clean
+ * handled error instead. This is deliberately *minimal* — a full schema
+ * check stays the user's job (`rosetta validate` upstream), matching the
+ * long-standing patch design note; we only guard the field emit touches.
+ */
+function assertEmittable(map: Record<string, unknown>, where: string): void {
+    const classes = map.classes;
+    if (typeof classes !== 'object' || classes === null) {
+        throw new RosettaError(`${where} is missing a \`classes\` object`);
+    }
+}
+
+/**
+ * Parse a map file as strict JSON, pick the single-vs-registry shape via
+ * {@link isSingleMap}, and run a minimal pre-emit validation
+ * ({@link assertEmittable}) so a malformed-but-parseable payload fails
+ * closed before the bundle is rewritten.
  */
 function loadMapForPatch(jsonText: string): RosettaMap | RosettaMapRegistry {
     let value: unknown;
     try {
         value = parseJson(jsonText);
     } catch (err) {
-        throw new Error(`map is malformed: ${errorMessage(err)}`);
+        throw new RosettaError(`map is malformed: ${errorMessage(err)}`);
     }
     if (typeof value !== 'object' || value === null) {
-        throw new Error('map must be an object at top level');
+        throw new RosettaError('map must be an object at top level');
     }
     const obj = value as Record<string, unknown>;
-    // Single-map heuristic: presence of a numeric `schema_version` at
-    // the root. Otherwise, treat as registry — and at least confirm the
-    // values *look* like RosettaMap objects (have `schema_version`).
-    if (typeof obj.schema_version === 'number') {
+    if (isSingleMap(obj)) {
+        assertEmittable(obj, 'map');
         return obj as unknown as RosettaMap;
     }
-    for (const v of Object.values(obj)) {
+    // Registry: every value must look like a RosettaMap (numeric
+    // schema_version) and carry an emittable `classes` object.
+    for (const [version, v] of Object.entries(obj)) {
         if (
             typeof v !== 'object' ||
             v === null ||
             typeof (v as { schema_version?: unknown }).schema_version !== 'number'
         ) {
-            throw new Error(
+            throw new RosettaError(
                 'map is neither a RosettaMap (missing schema_version) ' +
                     'nor a registry (some value lacks schema_version)',
             );
         }
+        assertEmittable(v as Record<string, unknown>, `registry entry ${version}`);
     }
     return obj as unknown as RosettaMapRegistry;
 }
 
 /**
- * Execute the patch command. Returns process exit code (0/1).
+ * Execute the patch command under the shared contract: rewrite the
+ * embedded map and return the success message (the router prints it under
+ * the uniform `rosetta patch:` prefix). Handled failures throw a
+ * `RosettaError` the router formats under the same prefix.
  */
-export async function runPatch(argv: readonly string[], io: CommandIo): Promise<number> {
-    let args: PatchArgs;
-    try {
-        args = parsePatchArgs(argv);
-        // Reject NUL in the output path. Containment to the project tree is
-        // NOT applied: operator-supplied -o (and the in-place default) may
-        // legitimately point outside CWD.
-        assertNoNul(args.output);
-    } catch (err) {
-        io.stderr(`patch: ${errorMessage(err)}`);
-        return 1;
-    }
+export async function runPatch(argv: readonly string[], io: CommandIo): Promise<string> {
+    const args = parsePatchArgs(argv);
+    // Reject NUL in the output path. Containment to the project tree is
+    // NOT applied: operator-supplied -o (and the in-place default) may
+    // legitimately point outside CWD.
+    assertNoNul(args.output);
 
     let bundleText: string;
     try {
         bundleText = await io.fs.readFile(args.bundle, 'utf8');
     } catch (err) {
-        io.stderr(`patch: cannot read bundle ${args.bundle}: ${errorMessage(err)}`);
-        return 1;
+        throw new RosettaError(`cannot read bundle ${args.bundle}: ${errorMessage(err)}`);
     }
 
     let mapText: string;
     try {
         mapText = await io.fs.readFile(args.map, 'utf8');
     } catch (err) {
-        io.stderr(`patch: cannot read map ${args.map}: ${errorMessage(err)}`);
-        return 1;
+        throw new RosettaError(`cannot read map ${args.map}: ${errorMessage(err)}`);
     }
 
-    let payload: RosettaMap | RosettaMapRegistry;
-    try {
-        payload = loadMapForPatch(mapText);
-    } catch (err) {
-        io.stderr(`patch: ${errorMessage(err)}`);
-        return 1;
-    }
-
-    let patched: string;
-    try {
-        patched = patchMarkerBlock(bundleText, payload);
-    } catch (err) {
-        io.stderr(`patch: ${errorMessage(err)}`);
-        return 1;
-    }
+    // loadMapForPatch and patchMarkerBlock both throw on bad input
+    // (malformed/wrong-shape map; missing marker block) — propagate to
+    // the router for uniform formatting.
+    const payload: RosettaMap | RosettaMapRegistry = loadMapForPatch(mapText);
+    const patched: string = patchMarkerBlock(bundleText, payload);
 
     try {
         await io.fs.writeFile(args.output, patched, 'utf8');
     } catch (err) {
-        io.stderr(`patch: cannot write output ${args.output}: ${errorMessage(err)}`);
-        return 1;
+        throw new RosettaError(`cannot write output ${args.output}: ${errorMessage(err)}`);
     }
 
     const inPlace = args.output === args.bundle;
-    io.stdout(`patch: wrote ${args.output}${inPlace ? ' (in place)' : ''}`);
-    return 0;
+    return `wrote ${args.output}${inPlace ? ' (in place)' : ''}`;
 }

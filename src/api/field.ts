@@ -21,9 +21,15 @@
  * Fallback chain when `$className` is absent:
  *   1. `instance.class.getName()` — the Java-side runtime API.
  *   2. Throw `RosettaError` with a clear message.
+ *
+ * Reverse-lookup of the obfuscated class name to its real FQN goes through
+ * `Resolver.reverseLookup`, which is part of the locked Resolver contract
+ * — no `typeof === 'function'` probe.
  */
 
 import { ResolveError, RosettaError } from '../errors.js';
+import { resolveFieldOrSentinel } from '../resolver/resolver.js';
+import { isSentinel } from '../resolver/sentinel.js';
 import type { Resolver } from '../types/resolver.js';
 
 /** Options for the field helpers — resolver injection (Wave 2G ambient later). */
@@ -42,7 +48,14 @@ export interface FieldOptions {
  */
 export function field(instance: unknown, realFieldName: string, options: FieldOptions): unknown {
     const realClass = classNameFor(instance, options.resolver);
-    const resolved = options.resolver.resolveField(realClass, realFieldName);
+    // Honour the session failure policy: under 'warn' a missing field
+    // yields a sentinel (miss event already emitted) that throws on use,
+    // so the returned value loudly signals the problem at the point of
+    // misuse rather than crashing the read site.
+    const resolved = resolveFieldOrSentinel(options.resolver, realClass, realFieldName);
+    if (isSentinel(resolved)) {
+        return resolved;
+    }
     return readFromInstance(instance, resolved.obfName).value;
 }
 
@@ -60,7 +73,12 @@ export function setField(
     options: FieldOptions,
 ): void {
     const realClass = classNameFor(instance, options.resolver);
-    const resolved = options.resolver.resolveField(realClass, realFieldName);
+    // A write is an immediate action: under 'warn' a missing field is a
+    // no-op (the resolver emitted the miss event), mirroring `hook`.
+    const resolved = resolveFieldOrSentinel(options.resolver, realClass, realFieldName);
+    if (isSentinel(resolved)) {
+        return;
+    }
     readFromInstance(instance, resolved.obfName).value = value;
 }
 
@@ -74,9 +92,8 @@ export function setField(
  *   3. Throw if neither works or the discovered obfuscated name isn't
  *      in the loaded map.
  *
- * The resolver implementation exposes a `reverseLookup` helper that
- * isn't on the public Resolver interface; we feature-detect it so
- * future swappable resolvers stay compatible.
+ * `reverseLookup` is part of the locked Resolver contract, so any
+ * conforming resolver supplies it — no runtime feature-detection.
  */
 function classNameFor(instance: unknown, resolver: Resolver): string {
     if (instance === null || typeof instance !== 'object') {
@@ -103,9 +120,7 @@ function classNameFor(instance: unknown, resolver: Resolver): string {
         );
     }
 
-    const reverse = (resolver as { reverseLookup?: (n: string) => string | undefined })
-        .reverseLookup;
-    const real = typeof reverse === 'function' ? reverse.call(resolver, obfName) : undefined;
+    const real = resolver.reverseLookup(obfName);
     if (real === undefined) {
         throw new ResolveError(
             `rosetta-frida: cannot reverse-lookup class '${obfName}' — the running instance's class is not in the loaded map.`,

@@ -12,9 +12,10 @@ import { describe, expect, it } from 'vitest';
 import { MockFrida, useFridaMock } from '../../tests/mocks/index.js';
 import { createResolver } from '../resolver/index.js';
 import type { RosettaMap } from '../types/map.js';
+import { validateMap } from '../validate/schema.js';
 import { use } from './use.js';
 
-const map: RosettaMap = {
+const map: RosettaMap = validateMap({
     schema_version: 2,
     version_code: 1,
     app: 'com.example.app',
@@ -33,7 +34,7 @@ const map: RosettaMap = {
             },
         },
     },
-};
+});
 
 function registerStub(): void {
     MockFrida.registerClass('aaaa', {

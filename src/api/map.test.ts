@@ -10,10 +10,11 @@ import { ResolveError } from '../errors.js';
 import type { RosettaMap } from '../types/map.js';
 import { createSession } from '../session/session.js';
 import type { HealthCheckJavaApi } from '../session/health-check.js';
+import { validateMap } from '../validate/schema.js';
 import { createMapApi } from './map.js';
 
 function buildMap(): RosettaMap {
-    return {
+    return validateMap({
         schema_version: 2,
         version_code: 1,
         app: 'com.example.app',
@@ -29,7 +30,7 @@ function buildMap(): RosettaMap {
                 },
             },
         },
-    };
+    });
 }
 
 function makeHealthJavaApi(): HealthCheckJavaApi {
@@ -53,6 +54,16 @@ function makeSession() {
     });
 }
 
+function makeWarnSession() {
+    return createSession({
+        map: buildMap(),
+        app: 'com.example.app',
+        version: '1.2.3',
+        failurePolicy: 'warn',
+        healthCheckJavaApi: makeHealthJavaApi(),
+    });
+}
+
 describe('createMapApi', () => {
     it('resolveClass delegates to the session resolver', () => {
         const session = makeSession();
@@ -64,6 +75,15 @@ describe('createMapApi', () => {
 
     it('resolveClass throws on miss (under strict policy)', () => {
         const session = makeSession();
+        const api = createMapApi(session);
+        expect(() => api.resolveClass('com.example.app.Missing')).toThrow(ResolveError);
+    });
+
+    it('resolveClass throws on miss even under warn policy (tier-3 is always strict)', () => {
+        // Tier-3 `map.resolve*` are explicit resolution REQUESTS: they throw
+        // on a miss regardless of the session failurePolicy, unlike the
+        // deferred-sentinel behaviour of tier-1/2 reads under `warn`.
+        const session = makeWarnSession();
         const api = createMapApi(session);
         expect(() => api.resolveClass('com.example.app.Missing')).toThrow(ResolveError);
     });

@@ -25,6 +25,7 @@
  * touching global state.
  */
 
+import { defaultJavaBridge, type JavaBridge } from '../java-bridge.js';
 import { isTargetAllowed } from '../resolver/index.js';
 import type { RosettaMap } from '../types/map.js';
 import type { TargetPolicy } from '../types/session.js';
@@ -46,8 +47,14 @@ export interface RunHealthCheckOptions {
      * Defaults to 0.8.
      */
     threshold?: number;
-    /** Injectable Java runtime. Defaults to the global `Java`. */
+    /** Injectable Java runtime. Defaults to deriving one from {@link bridge}. */
     javaApi?: HealthCheckJavaApi;
+    /**
+     * The seam onto Frida's global `Java`, used when `javaApi` is omitted.
+     * Defaults to {@link defaultJavaBridge}. Lets tests drive the
+     * global-fallback path without mutating `globalThis`.
+     */
+    bridge?: JavaBridge;
     /**
      * Target-namespace guard policy (RFC 0001 C1). The same policy the
      * Session threads into the resolver. Each class's raw `obfuscated`
@@ -92,7 +99,12 @@ export const DEFAULT_HEALTH_CHECK_THRESHOLD = 0.8;
 export function runHealthCheck(options: RunHealthCheckOptions): HealthCheckResult {
     const { map } = options;
     const threshold = options.threshold ?? DEFAULT_HEALTH_CHECK_THRESHOLD;
-    const javaApi = options.javaApi ?? (globalThis as { Java?: HealthCheckJavaApi }).Java ?? null;
+    const bridge = options.bridge ?? defaultJavaBridge;
+    const javaApi: HealthCheckJavaApi | null =
+        options.javaApi ??
+        (bridge.available
+            ? { use: (obfName) => bridge.use(obfName) as ReturnType<HealthCheckJavaApi['use']> }
+            : null);
     const targetPolicy = options.targetPolicy ?? {};
     const appPrefix = options.appPrefix ?? '';
 

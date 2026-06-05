@@ -18,8 +18,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AmbiguousOverloadError, ResolveError } from '../errors.js';
 import { createResolver } from '../resolver/index.js';
+import { validateMap } from '../validate/schema.js';
 import type { RosettaMap } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
+import { javaBridgeFromUse, JAVA_UNAVAILABLE_MESSAGE } from '../java-bridge.js';
 import { proceed, _resetProceedStack } from './proceed.js';
 import { hook, type HookHandle } from './hook.js';
 import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/index.js';
@@ -70,7 +72,7 @@ interface Harness {
 
 /** Set up a fresh resolver + mock registry + Java.use cache for one test. */
 function makeHarness(): Harness {
-    const map = buildMap();
+    const map = validateMap(buildMap());
     const resolver = createResolver(map);
 
     MockFrida.registerClass('aaaa', {
@@ -432,21 +434,63 @@ describe('hook + proceed', () => {
     });
 });
 
-describe('hook — environment errors', () => {
-    it('throws if globalThis.Java is missing', () => {
+describe('hook — failurePolicy', () => {
+    it('throws ResolveError for a missing method under strict (default)', () => {
         const h = makeHarness();
-        const g = globalThis as { Java?: unknown };
-        const saved = g.Java;
-        g.Java = undefined;
-        try {
-            expect(() =>
-                hook('com.example.app.IRemoteService$Stub.onConnect', () => undefined, {
-                    resolver: h.resolver,
-                }),
-            ).toThrow(/globalThis\.Java\.use is missing/);
-        } finally {
-            g.Java = saved;
-        }
+        expect(() =>
+            hook('com.example.app.IRemoteService$Stub.noSuchMethod', () => undefined, {
+                resolver: h.resolver,
+            }),
+        ).toThrow(ResolveError);
+    });
+
+    it('is a no-op (already-detached handle) for a missing method under warn', () => {
+        // Build a warn-policy resolver + mock registry inline.
+        const resolver = createResolver(validateMap(buildMap()), { failurePolicy: 'warn' });
+        MockFrida.registerClass('aaaa', {
+            methods: { a: [{ argumentTypes: [], returnType: { className: 'void' } }] },
+        });
+        MockFrida.registerClass('bbbb', {});
+        const handle = hook('com.example.app.IRemoteService$Stub.noSuchMethod', () => undefined, {
+            resolver,
+        });
+        expect(handle.detached).toBe(true);
+        // detach() on the no-op handle is safe.
+        expect(() => handle.detach()).not.toThrow();
+    });
+});
+
+describe('hook — environment errors', () => {
+    it('throws the canonical error when the Java bridge is unavailable', () => {
+        const h = makeHarness();
+        // Inject an unavailable bridge instead of mutating globalThis — the
+        // bridge is the seam, so the test drives it directly.
+        const unavailableBridge = javaBridgeFromUse(undefined);
+        expect(() =>
+            hook('com.example.app.IRemoteService$Stub.onConnect', () => undefined, {
+                resolver: h.resolver,
+                javaBridge: unavailableBridge,
+            }),
+        ).toThrow(JAVA_UNAVAILABLE_MESSAGE);
+    });
+
+    it('routes hook installation through an injected Java bridge', () => {
+        const h = makeHarness();
+        // A bridge that delegates to the mock proves hook() uses the seam,
+        // not a hard-coded globalThis read.
+        const calls: string[] = [];
+        const bridge = {
+            available: true,
+            use: (name: string) => {
+                calls.push(name);
+                return Java.use(name);
+            },
+        };
+        hook('com.example.app.IRemoteService$Stub.onConnect', () => undefined, {
+            resolver: h.resolver,
+            javaBridge: bridge,
+        });
+        expect(calls).toContain('aaaa');
     });
 
     it('throws if the native wrapper is missing the obf method', () => {
@@ -514,7 +558,7 @@ describe('hook — descriptor parser edge cases', () => {
                 },
             },
         };
-        const resolver = createResolver(map);
+        const resolver = createResolver(validateMap(map));
         MockFrida.registerClass('k', {
             methods: {
                 m: [{ argumentTypes: args, returnType: { className: 'void' } }],
@@ -555,28 +599,30 @@ describe('hook — descriptor parser edge cases', () => {
         expect(() => setup.installHook()).not.toThrow();
     });
 
+    // The hook layer now delegates to the shared descriptor parser
+    // (resolver/signature.ts), so these assert that parser's messages.
     it('throws on missing opening paren', () => {
         const setup = setupForSig('I)V', [{ className: 'int' }]);
-        expect(() => setup.installHook()).toThrow(/malformed signature/);
+        expect(() => setup.installHook()).toThrow(/signature must start with/);
     });
 
     it('throws on missing closing paren', () => {
         const setup = setupForSig('(I', [{ className: 'int' }]);
-        expect(() => setup.installHook()).toThrow(/malformed signature/);
+        expect(() => setup.installHook()).toThrow(/signature missing/);
     });
 
     it('throws on unterminated L-class ref', () => {
         const setup = setupForSig('(Ljava/lang/String)V', [{ className: 'java.lang.String' }]);
-        expect(() => setup.installHook()).toThrow(/unterminated class ref/);
+        expect(() => setup.installHook()).toThrow(/unterminated 'L' descriptor/);
     });
 
     it('throws on unknown primitive code', () => {
         const setup = setupForSig('(Q)V', [{ className: 'int' }]);
-        expect(() => setup.installHook()).toThrow(/unknown primitive/);
+        expect(() => setup.installHook()).toThrow(/unknown descriptor char/);
     });
 
     it('throws on trailing `[` with no element type', () => {
         const setup = setupForSig('([)V', [{ className: '[' }]);
-        expect(() => setup.installHook()).toThrow(/malformed descriptor/);
+        expect(() => setup.installHook()).toThrow(/array prefix without element/);
     });
 });

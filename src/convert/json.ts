@@ -16,7 +16,7 @@
  */
 
 import { RosettaError } from '../errors.js';
-import type { RosettaMap } from '../types/map.js';
+import type { RosettaMap, RosettaMapInput } from '../types/map.js';
 import { yamlToMap } from './yaml.js';
 import { isModuleExtension, refuseModuleInput } from './ts-module.js';
 
@@ -57,8 +57,14 @@ export function convertToJson(input: string, format: ConvertFormat = 'auto'): Pr
  * Uses `JSON.stringify` with a 4-space indent to match the project's
  * Prettier config, and ends with a trailing newline (POSIX convention;
  * Prettier enforces it). No comment header — the artifact is plain JSON.
+ *
+ * Accepts EITHER the normalised {@link RosettaMap} (always-array methods,
+ * produced by the validator) or the terser {@link RosettaMapInput}
+ * authoring shape (scalar-or-array methods, e.g. the `rosetta init`
+ * skeleton). Both are valid on-disk artifacts and serialise identically;
+ * the function only stringifies, so it is shape-agnostic.
  */
-export function renderJson(map: RosettaMap): string {
+export function renderJson(map: RosettaMap | RosettaMapInput): string {
     const body = JSON.stringify(map, null, 4);
     return `${body}\n`;
 }
