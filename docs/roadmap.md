@@ -95,11 +95,28 @@ move between them as priorities shift.
   (`dl.google.com` / `maven.google.com` return 403 while PyPI/GitHub are
   reachable). Do this in a session/environment where those hosts are
   allowlisted (or against CI).
+- **Pipeline-trigger hardening — done.** `pipeline.yml`'s
+  `pull_request` trigger no longer gates on `branches: [master]`: it now
+  fires on PRs targeting **any** branch (path filter unchanged —
+  `tests/fixtures/test-app/**` already covers the Java/AIDL sources,
+  signatures, and goldens), so a fixture/adapter change that breaks the
+  real APK build surfaces on the **feature-branch PR** that introduces
+  it rather than only on `master` or the Monday canary. The APK build
+  stays its **own** `pipeline` job, so the fast SDK-free `verify` job in
+  `ci.yml` (which includes the `aidl:lint` guard) remains the
+  **required** gate. Because the build needs the Android SDK and pulls
+  from network-restricted Google Maven hosts (`dl.google.com` /
+  `maven.google.com`), the `pipeline` job is **advisory /
+  `continue-on-error`**: a flaky SDK/Maven outage reports on the PR but
+  does not block unrelated merges. Promote it to a required check only
+  once it is reliably green in a network environment where those hosts
+  are allowlisted. The remaining golden-regeneration step below still
+  needs that environment.
 - **Status.** AIDL root cause **fixed** + an SDK-free duplicate-AIDL-
-  method guard now runs in `verify`/`ci.yml`. The end-to-end golden-diff
-  (full APK build + sigmatcher) remains blocked on a real Android-SDK
-  environment; hardening `pipeline.yml`'s trigger to cover all branches
-  is the follow-up that closes the remaining build-visibility gap.
+  method guard now runs in `verify`/`ci.yml`; the `pipeline.yml`
+  trigger is now broadened to all-branch PRs (advisory). The end-to-end
+  golden-diff (full APK build + sigmatcher, byte-verified goldens)
+  remains blocked on a real Android-SDK environment.
 
 ---
 

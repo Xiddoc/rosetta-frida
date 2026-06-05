@@ -6,6 +6,14 @@ on:
     pull_request:
         branches: [master]
 
+# Least-privilege default token: this workflow only reads the repo
+# (checkout) and uploads an artifact via the actions API (which does not
+# need `contents: write`). Declaring it explicitly drops the broad
+# inherited default. Jobs may widen with their own `permissions:` block
+# if ever needed.
+permissions:
+    contents: read
+
 # Cancel superseded runs on the same branch to save CI minutes.
 concurrency:
     group: ci-${{ github.workflow }}-${{ github.ref }}
