@@ -29,12 +29,14 @@ export type {
 
 export type { ResolvedClass, ResolvedMethod, ResolvedField, Resolver } from './resolver.js';
 
+export { ROSETTA_META } from './proxy.js';
 export type {
     MethodHandle,
     OverloadHandle,
     FieldAccessor,
     ClassProxy,
     InstanceProxy,
+    ProxyMeta,
 } from './proxy.js';
 
 export type {

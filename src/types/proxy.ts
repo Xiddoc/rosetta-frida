@@ -11,6 +11,32 @@
 import type { Resolver } from './resolver.js';
 
 /**
+ * Symbol key for the collision-proof metadata accessor on every proxy.
+ *
+ * The `$realName` / `$obfName` / `$native` / `$resolver` / `$new` string
+ * accessors are ergonomic but can be SHADOWED by a (hostile or merely
+ * unlucky) community map that names a real method/field `$native` or
+ * `$new`: a map member always wins over the string metadata so the user
+ * can still reach their member. Reading metadata through this Symbol can
+ * never collide with a map key (map keys are strings), so tier-3 code that
+ * must be certain it's getting the proxy's own metadata uses
+ * `proxy[ROSETTA_META]`.
+ */
+export const ROSETTA_META: unique symbol = Symbol.for('rosetta-frida.proxy.meta');
+
+/** The collision-proof metadata bag exposed under {@link ROSETTA_META}. */
+export interface ProxyMeta {
+    /** Real fully-qualified name. */
+    readonly realName: string;
+    /** Obfuscated short name. */
+    readonly obfName: string;
+    /** Underlying Java.use(...) / instance result. */
+    readonly native: unknown;
+    /** The resolver this proxy was built against. */
+    readonly resolver: Resolver;
+}
+
+/**
  * Method-handle proxy. Returned from accessing a method on a ClassProxy.
  *
  * Mirrors Frida's method-on-wrapper shape, but with translation:

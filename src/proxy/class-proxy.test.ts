@@ -20,6 +20,7 @@ import { javaBridgeFromUse } from '../java-bridge.js';
 import { createResolver } from '../resolver/index.js';
 import { isSentinel } from '../resolver/sentinel.js';
 import type { RosettaMap } from '../types/map.js';
+import { ROSETTA_META, type ProxyMeta } from '../types/proxy.js';
 import { makeClassProxy } from './class-proxy.js';
 
 const map: RosettaMap = {
@@ -288,6 +289,69 @@ function registerStubViaCustomRegistry(): void {
         class: { getName: () => 'aaaa' },
     });
 }
+
+describe('makeClassProxy — $-metadata collision', () => {
+    useFridaMock();
+
+    const collidingMap: RosettaMap = {
+        schema_version: 2,
+        version_code: 1,
+        app: 'com.example.app',
+        version: '1.0.0',
+        classes: {
+            'com.example.app.Weird': {
+                obfuscated: 'wwww',
+                // A hostile/unlucky map naming members like the metadata keys.
+                methods: { $new: { obfuscated: 'n', signature: '()V' } },
+                fields: { $native: { obfuscated: 'v', type: 'I', static: true } },
+            },
+        },
+    };
+
+    function registerWeird(): void {
+        MockFrida.registerClass('wwww', {
+            methods: { n: [{ argumentTypes: [], returnType: { className: 'void' } }] },
+            fields: { v: { type: 'I', static: true, initial: 7 } },
+        });
+    }
+
+    it('does not let a map member named $native shadow the real field member', () => {
+        registerWeird();
+        const resolver = createResolver(collidingMap);
+        const Weird = makeClassProxy(resolver, 'com.example.app.Weird');
+        // $native here is the MAP's field, not the native wrapper.
+        const field = Weird.$native as { value: number };
+        expect(field.value).toBe(7);
+    });
+
+    it('does not let a map member named $new shadow the real method member', () => {
+        registerWeird();
+        const resolver = createResolver(collidingMap);
+        const Weird = makeClassProxy(resolver, 'com.example.app.Weird');
+        // $new resolves to the map method handle, not the constructor helper.
+        const handle = (Weird as unknown as Record<string, { overloads: unknown[] }>).$new;
+        expect(Array.isArray(handle.overloads)).toBe(true);
+    });
+
+    it('always exposes metadata through the ROSETTA_META symbol', () => {
+        registerWeird();
+        const resolver = createResolver(collidingMap);
+        const Weird = makeClassProxy(resolver, 'com.example.app.Weird');
+        const meta = (Weird as unknown as Record<symbol, ProxyMeta>)[ROSETTA_META];
+        expect(meta.realName).toBe('com.example.app.Weird');
+        expect(meta.obfName).toBe('wwww');
+        expect(meta.resolver).toBe(resolver);
+        expect((meta.native as { $className: string }).$className).toBe('wwww');
+    });
+
+    it('keeps $-metadata working when the map does NOT collide', () => {
+        registerStub();
+        const resolver = createResolver(map);
+        const Stub = makeClassProxy(resolver, 'com.example.app.Stub');
+        expect(Stub.$obfName).toBe('aaaa');
+        expect((Stub.$native as { $className: string }).$className).toBe('aaaa');
+    });
+});
 
 describe('makeClassProxy — override invalidation (live proxy revalidation)', () => {
     useFridaMock();

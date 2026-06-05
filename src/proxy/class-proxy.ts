@@ -29,7 +29,13 @@
  */
 import { defaultJavaBridge, javaBridgeFromUse, type JavaBridge } from '../java-bridge.js';
 import type { ClassEntry } from '../types/map.js';
-import type { ClassProxy, FieldAccessor, MethodHandle } from '../types/proxy.js';
+import {
+    ROSETTA_META,
+    type ClassProxy,
+    type FieldAccessor,
+    type MethodHandle,
+    type ProxyMeta,
+} from '../types/proxy.js';
 import type { Resolver } from '../types/resolver.js';
 import { makeFieldAccessor } from './field-accessor.js';
 import { makeInstanceProxy } from './instance-proxy.js';
@@ -142,16 +148,34 @@ export function makeClassProxy(
     // construction, matching the pre-revalidation contract.
     revalidate();
 
+    /** True if the loaded class defines a real member named `prop`. */
+    function mapDefines(prop: string): boolean {
+        return entry.methods?.[prop] !== undefined || entry.fields?.[prop] !== undefined;
+    }
+
     return new Proxy(metadata, {
         get(_t, prop): unknown {
+            // Collision-proof metadata accessor: a Symbol can never clash
+            // with a (string) map key, so tier-3 code can always reach the
+            // proxy's own metadata here.
+            if (prop === ROSETTA_META) {
+                revalidate();
+                const meta: ProxyMeta = { realName, obfName, native, resolver };
+                return meta;
+            }
             if (typeof prop !== 'string') {
                 return undefined;
             }
-            // Metadata + $new shortcut (the getters self-revalidate).
-            if (prop in metadata) {
+            revalidate();
+            // `$`-metadata accessors are ergonomic but must NOT shadow a
+            // real map member of the same name — a community map that
+            // happens to define `$native` / `$new` should still be
+            // reachable. So a map-defined member wins; otherwise the
+            // string metadata answers. (Use ROSETTA_META for the
+            // guaranteed-metadata path.)
+            if (prop in metadata && !mapDefines(prop)) {
                 return metadata[prop];
             }
-            revalidate();
             // `.class` passes through to the underlying Java Class<?>
             // reflection object. This is the only non-metadata property
             // we intentionally surface without resolver translation.

@@ -14,6 +14,7 @@ import { MockFrida, useFridaMock, type JavaWrapper } from '../../tests/mocks/ind
 import { ResolveError } from '../errors.js';
 import { createResolver } from '../resolver/index.js';
 import type { RosettaMap } from '../types/map.js';
+import { ROSETTA_META, type ProxyMeta } from '../types/proxy.js';
 import { makeInstanceProxy } from './instance-proxy.js';
 
 const map: RosettaMap = {
@@ -111,5 +112,30 @@ describe('makeInstanceProxy', () => {
         expect(inst.$obfName).toBe('aaaa');
         resolver.override('com.example.app.Klass', { obfuscated: 'cccc' });
         expect(inst.$obfName).toBe('cccc');
+    });
+
+    it('does not let a map field named $native shadow metadata; ROSETTA_META is collision-proof', () => {
+        const collidingMap: RosettaMap = {
+            schema_version: 2,
+            version_code: 1,
+            app: 'com.example.app',
+            version: '1.0.0',
+            classes: {
+                'com.example.app.Klass': {
+                    obfuscated: 'aaaa',
+                    fields: { $native: { obfuscated: 'b', type: 'I' } },
+                },
+            },
+        };
+        MockFrida.registerClass('aaaa', { fields: { b: { type: 'I', initial: 5 } } });
+        const resolver = createResolver(collidingMap);
+        const instance = (Java.use('aaaa') as JavaWrapper).$new();
+        const inst = makeInstanceProxy(resolver, 'com.example.app.Klass', instance);
+        // $native is the MAP field, not the native instance.
+        expect((inst.$native as { value: number }).value).toBe(5);
+        // The Symbol path always returns the real native instance.
+        const meta = (inst as unknown as Record<symbol, ProxyMeta>)[ROSETTA_META];
+        expect(meta.native).toBe(instance);
+        expect(meta.obfName).toBe('aaaa');
     });
 });

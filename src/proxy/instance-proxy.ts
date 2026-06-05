@@ -20,7 +20,12 @@
  * Java field.
  */
 import { makeFieldAccessor } from './field-accessor.js';
-import type { FieldAccessor, InstanceProxy } from '../types/proxy.js';
+import {
+    ROSETTA_META,
+    type FieldAccessor,
+    type InstanceProxy,
+    type ProxyMeta,
+} from '../types/proxy.js';
 import type { Resolver } from '../types/resolver.js';
 
 /**
@@ -67,10 +72,23 @@ export function makeInstanceProxy(
 
     return new Proxy(target, {
         get(_t, prop): unknown {
+            // Collision-proof metadata accessor (see class-proxy).
+            if (prop === ROSETTA_META) {
+                const meta: ProxyMeta = {
+                    realName,
+                    obfName: resolver.resolveClass(realName).obfName,
+                    native: instance,
+                    resolver,
+                };
+                return meta;
+            }
             if (typeof prop !== 'string') {
                 return undefined;
             }
-            if (prop in metadata) {
+            // A real map field of the same name as a `$`-metadata accessor
+            // must not be shadowed; the field wins, metadata is the
+            // fallback. ROSETTA_META is the guaranteed-metadata path.
+            if (prop in metadata && resolver.lookupField(realName, prop) === undefined) {
                 return metadata[prop];
             }
             revalidate();
