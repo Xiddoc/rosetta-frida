@@ -10,6 +10,7 @@ import {
     AmbiguousOverloadError,
     ResolveError,
     TargetPolicyError,
+    UnknownArgTypeError,
     UnresolvedAccessError,
 } from '../errors.js';
 import { EventBus } from '../diagnostics/event-bus.js';
@@ -240,6 +241,45 @@ describe('ResolverImpl.resolveMethod', () => {
             expect.fail('expected throw');
         } catch (e) {
             expect(e).toBeInstanceOf(ResolveError);
+        }
+    });
+
+    it('throws UnknownArgTypeError when an overload arg type is an unmapped class', () => {
+        try {
+            // Right arity (2 args) but the 2nd arg type is a dotted class name
+            // the map does not know AND no overload declares its descriptor —
+            // the precise unknown-arg-type case, mirroring the Kotlin twin.
+            h.resolver.resolveMethod('com.example.app.IRemoteService$Stub', 'requestTicket', [
+                'android.os.Bundle',
+                'com.example.app.NotInMap',
+            ]);
+            expect.fail('expected throw');
+        } catch (e) {
+            // It IS a ResolveError subtype, so generic handlers still catch it,
+            // but it carries the distinct identity + offending arg type.
+            expect(e).toBeInstanceOf(ResolveError);
+            expect(e).toBeInstanceOf(UnknownArgTypeError);
+            const err = e as UnknownArgTypeError;
+            expect(err.kind).toBe('method');
+            expect(err.classScope).toBe('com.example.app.IRemoteService$Stub');
+            expect(err.argType).toBe('com.example.app.NotInMap');
+            expect(err.message).toMatch(/not a known class/);
+        }
+        expect(h.events.some((e) => e.miss)).toBe(true);
+    });
+
+    it('throws the generic ResolveError (not UnknownArgType) when arg types are all known but no overload matches', () => {
+        // Both arg types ARE known map classes / declared descriptors, so this
+        // is a legitimate no-overload-matches miss, not an unmapped arg type.
+        try {
+            h.resolver.resolveMethod('com.example.app.IRemoteService$Stub', 'requestTicket', [
+                'IServiceCallback',
+            ]);
+            expect.fail('expected throw');
+        } catch (e) {
+            expect(e).toBeInstanceOf(ResolveError);
+            expect(e).not.toBeInstanceOf(UnknownArgTypeError);
+            expect((e as ResolveError).message).toMatch(/no overload/);
         }
     });
 

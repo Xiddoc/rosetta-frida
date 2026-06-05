@@ -64,6 +64,32 @@ export class TargetPolicyError extends RosettaError {
     }
 }
 
+/**
+ * Thrown when a real-name argument type passed to overload disambiguation is
+ * not a known class in the map (and no overload uses its literal descriptor
+ * either), so the resolver cannot translate it.
+ *
+ * This is raised IN PLACE OF the generic no-overload-matches {@link
+ * ResolveError} so the failure points at the real cause (an unmapped arg
+ * type) instead of misattributing it to the overload set. It IS a {@link
+ * ResolveError} subtype (`kind: 'method'`) so existing `ResolveError`
+ * handling still catches it. Mirrors the Kotlin `UnknownArgTypeException`
+ * (same trigger; comparable error identity).
+ */
+export class UnknownArgTypeError extends ResolveError {
+    constructor(
+        message: string,
+        realName: string,
+        app: string,
+        version: string,
+        classScope: string,
+        /** The offending argument type name that is not a known map class. */
+        public readonly argType: string,
+    ) {
+        super(message, realName, app, version, 'method', classScope);
+    }
+}
+
 /** Thrown when a method real-name has multiple overloads and the user didn't disambiguate. */
 export class AmbiguousOverloadError extends RosettaError {
     constructor(

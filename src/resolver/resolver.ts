@@ -13,7 +13,7 @@
  * the reverse index is cheap and ready for tier-3 introspection).
  */
 
-import { AmbiguousOverloadError, ResolveError } from '../errors.js';
+import { AmbiguousOverloadError, ResolveError, UnknownArgTypeError } from '../errors.js';
 import type { EventBus } from '../diagnostics/event-bus.js';
 import type { ClassEntry, FieldEntry, MethodEntry, RosettaMap } from '../types/map.js';
 import type { ResolvedClass, ResolvedField, ResolvedMethod, Resolver } from '../types/resolver.js';
@@ -78,6 +78,73 @@ function methodCacheKey(
 /** Cache key for fields. */
 function fieldCacheKey(className: string, fieldName: string): string {
     return `${className}.${fieldName}`;
+}
+
+/** Well-known Java primitive type NAMES (the `int`/`boolean`/… vocabulary). */
+const PRIMITIVE_TYPE_NAMES: ReadonlySet<string> = new Set([
+    'void',
+    'boolean',
+    'byte',
+    'char',
+    'short',
+    'int',
+    'long',
+    'float',
+    'double',
+]);
+
+/**
+ * Decide whether an overload-disambiguation arg type that failed to match is
+ * an UNMAPPED CLASS NAME (→ {@link UnknownArgTypeError}) versus a legitimate
+ * no-overload-matches miss (→ generic {@link ResolveError}).
+ *
+ * This is the Frida twin of the Kotlin `unknownArgTypeOrNull` heuristic
+ * (rosetta-xposed `Resolver.kt`); it MUST make the same distinction so the
+ * two clients raise comparable errors for the same inputs (shared
+ * conformance fixtures pin this).
+ *
+ * Returns the first offending arg type, or `null` when every arg is either a
+ * known class, a primitive/array/raw descriptor, or a descriptor some
+ * overload actually declares.
+ *
+ * HEURISTIC — `isClassNameForm` decides "this arg type is a dotted class name
+ * the caller expected the map to know," as opposed to a raw descriptor /
+ * primitive / array passed verbatim. It does so by EXCLUSION (a class name
+ * has no positive marker — `com.example.Foo`, `IFoo`, and a bare `Foo` are
+ * all valid), matching the Kotlin exclusions one-for-one:
+ *   - `L…` raw object descriptor / `[…` raw array descriptor;
+ *   - `…[]` source-style array;
+ *   - a named primitive (`int`, `boolean`, …);
+ *   - a single character (a lone descriptor letter `I`/`Z`/`L`/…) — safe
+ *     because no real Java type name is one character long.
+ */
+function unknownArgTypeOrNull(
+    argTypes: readonly string[],
+    wanted: readonly string[],
+    overloads: readonly MethodEntry[],
+    knownClass: (name: string) => boolean,
+): string | null {
+    const knownDescriptors = new Set<string>();
+    for (const overload of overloads) {
+        for (const arg of parseSignatureArgs(overload.signature)) {
+            knownDescriptors.add(arg);
+        }
+    }
+    for (let i = 0; i < argTypes.length; i += 1) {
+        const argType = argTypes[i] as string;
+        const isClassNameForm =
+            !argType.startsWith('L') &&
+            !argType.startsWith('[') &&
+            !argType.endsWith('[]') &&
+            !PRIMITIVE_TYPE_NAMES.has(argType) &&
+            // Exclude a lone descriptor letter (I/Z/L/…); no real type name
+            // is one character, so this never drops a legitimate class name.
+            argType.length !== 1;
+        if (isClassNameForm && !knownClass(argType) && !knownDescriptors.has(wanted[i] as string)) {
+            return argType;
+        }
+    }
+    return null;
 }
 
 export class ResolverImpl implements Resolver {
@@ -255,6 +322,23 @@ export class ResolverImpl implements Resolver {
                     miss: true,
                     classScope: className,
                 });
+                // Prefer the precise unknown-arg-type error when an arg type is
+                // an unmapped class the overloads don't even declare; otherwise
+                // the generic no-overload-matches error. Mirrors the Kotlin
+                // `overloadMissException` split so both clients agree.
+                const unknownArg = unknownArgTypeOrNull(argTypes, wanted, overloads, (n) =>
+                    this.hasClass(n),
+                );
+                if (unknownArg !== null) {
+                    throw new UnknownArgTypeError(
+                        `rosetta-frida: arg type '${unknownArg}' (for '${className}.${methodName}') is not a known class in the map for ${this.#map.app}@${this.#map.version}; no overload declares it either. Map the class or pass a type the map knows.`,
+                        methodName,
+                        this.#map.app,
+                        this.#map.version,
+                        className,
+                        unknownArg,
+                    );
+                }
                 throw new ResolveError(
                     `rosetta-frida: no overload of '${className}.${methodName}' matches arg types [${argTypes.join(', ')}] in map for ${this.#map.app}@${this.#map.version}.`,
                     methodName,
