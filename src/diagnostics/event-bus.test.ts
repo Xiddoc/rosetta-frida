@@ -45,3 +45,115 @@ describe('createSilentBus', () => {
         expect(seen).toBe(1);
     });
 });
+
+describe('EventBus.emit — listener isolation', () => {
+    it('does not let a throwing listener abort emit or other listeners', () => {
+        const bus = new EventBus();
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        let secondRan = false;
+        bus.on(() => {
+            throw new Error('listener boom');
+        });
+        bus.on(() => {
+            secondRan = true;
+        });
+        // emit must not throw, and the second listener still runs.
+        expect(() => bus.emit({ type: 'resolve', name: 'X', source: 'map' })).not.toThrow();
+        expect(secondRan).toBe(true);
+        expect(spy).toHaveBeenCalled();
+        spy.mockRestore();
+    });
+
+    it('isolates a throwing trace formatter from listeners', () => {
+        const bus = new EventBus();
+        bus.setTrace(true);
+        // Force console.error (used by traceWrite) to throw the first time.
+        const spy = vi.spyOn(console, 'error').mockImplementationOnce(() => {
+            throw new Error('trace boom');
+        });
+        let delivered = false;
+        bus.on(() => {
+            delivered = true;
+        });
+        expect(() =>
+            bus.emit({ type: 'detect', app: 'a', version: '1', source: 'auto' }),
+        ).not.toThrow();
+        expect(delivered).toBe(true);
+        spy.mockRestore();
+    });
+});
+
+describe('EventBus subscription management', () => {
+    it('onType only fires for the matching event type and unsubscribes', () => {
+        const bus = new EventBus();
+        const seen: string[] = [];
+        const off = bus.onType('detect', (e) => seen.push(e.app));
+        bus.emit({ type: 'resolve', name: 'X', source: 'map' });
+        bus.emit({ type: 'detect', app: 'com.example.app', version: '1', source: 'auto' });
+        expect(seen).toEqual(['com.example.app']);
+        off();
+        bus.emit({ type: 'detect', app: 'again', version: '2', source: 'auto' });
+        expect(seen).toEqual(['com.example.app']);
+    });
+
+    it('on returns an unsubscribe and clear removes all', () => {
+        const bus = new EventBus();
+        let count = 0;
+        const off = bus.on(() => (count += 1));
+        bus.emit({ type: 'resolve', name: 'X', source: 'map' });
+        off();
+        bus.on(() => (count += 1));
+        bus.clear();
+        bus.emit({ type: 'resolve', name: 'Y', source: 'map' });
+        expect(count).toBe(1);
+    });
+});
+
+describe('formatEvent — all variants', () => {
+    it('formats a resolve miss and a resolve hit with overload', () => {
+        expect(formatEvent({ type: 'resolve', name: 'M', miss: true, source: 'map' })).toContain(
+            'MISS',
+        );
+        expect(
+            formatEvent({
+                type: 'resolve',
+                name: 'M',
+                classScope: 'C',
+                obfName: 'a',
+                source: 'cache',
+                overloadSignature: '()V',
+            }),
+        ).toContain('C.M');
+    });
+
+    it('formats health-check, map-load, signer-check', () => {
+        expect(
+            formatEvent({
+                type: 'health-check',
+                passed: false,
+                rate: 0.5,
+                threshold: 0.8,
+                failedEntries: ['x'],
+            }),
+        ).toContain('FAIL');
+        expect(
+            formatEvent({
+                type: 'map-load',
+                app: 'a',
+                version: '1',
+                classCount: 3,
+                schemaVersion: 2,
+            }),
+        ).toContain('map-load');
+        expect(
+            formatEvent({
+                type: 'signer-check',
+                passed: true,
+                app: 'a',
+                expected: 'x',
+                actual: ['x'],
+                source: 'signingInfo',
+            }),
+        ).toContain('signer-check PASS');
+    });
+});
