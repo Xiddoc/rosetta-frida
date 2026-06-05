@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { MockFrida, useFridaMock } from '../../tests/mocks/index.js';
+import { EventBus } from '../diagnostics/event-bus.js';
 import { ResolveError, UnresolvedAccessError } from '../errors.js';
 import { javaBridgeFromUse } from '../java-bridge.js';
 import { createResolver } from '../resolver/index.js';
@@ -476,5 +477,58 @@ describe('makeClassProxy — override invalidation (live proxy revalidation)', (
         expect(afterPicked.argumentTypes.map((a) => a.className)).toEqual(['android.os.Bundle']);
         // And the stale 2-arg overload no longer exists on the new handle.
         expect(() => after.overload('android.os.Bundle', 'com.example.app.Callback')).toThrow();
+    });
+
+    it('does NOT rebuild a live proxy when an UNRELATED class is overridden (N1)', () => {
+        registerStub();
+        registerOverrideTarget();
+        // Count Java.use(...) calls per obfuscated name so we can prove an
+        // unrelated override does not trigger a fresh native round-trip.
+        const useCounts = new Map<string, number>();
+        const realJava = (globalThis as { Java: { use(n: string): unknown } }).Java;
+        const countingBridge = {
+            available: true,
+            use(obf: string): unknown {
+                useCounts.set(obf, (useCounts.get(obf) ?? 0) + 1);
+                return realJava.use(obf);
+            },
+        };
+        const resolver = createResolver(map);
+        const Stub = makeClassProxy(resolver, 'com.example.app.Stub', {
+            javaBridge: countingBridge,
+        });
+        // Cache a method handle on the live proxy.
+        const handle = Stub.requestTicket;
+        expect(useCounts.get('aaaa')).toBe(1); // one native build at construction
+        expect(handle).toBeDefined();
+
+        // Override a DIFFERENT class. The global epoch advances, but Stub's
+        // resolved entry is unchanged, so the proxy must not re-`use('aaaa')`
+        // nor drop its member cache.
+        resolver.override('com.example.app.Callback', { obfuscated: 'zzzz' });
+
+        // Same handle (member cache survived) and no extra native build.
+        expect(Stub.requestTicket).toBe(handle);
+        expect(Stub.$obfName).toBe('aaaa');
+        expect(useCounts.get('aaaa')).toBe(1);
+    });
+});
+
+describe('makeClassProxy — construction (no duplicate resolve, N2)', () => {
+    useFridaMock();
+
+    it('emits exactly one resolve event on construction (no spurious cache event)', () => {
+        registerStub();
+        const events = new EventBus();
+        const seen: { source?: string }[] = [];
+        events.on((e) => {
+            if (e.type === 'resolve') seen.push({ source: e.source });
+        });
+        const resolver = createResolver(map, { events });
+        makeClassProxy(resolver, 'com.example.app.Stub');
+        // Previously the proxy resolved twice at construction (once for the
+        // sentinel check, once in an eager revalidate) emitting a 'map' then a
+        // spurious 'cache' event. It must now emit a single 'map' resolve.
+        expect(seen).toEqual([{ source: 'map' }]);
     });
 });

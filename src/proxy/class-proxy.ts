@@ -100,10 +100,15 @@ export function makeClassProxy(
     // Without this revalidation a live proxy built before an override would
     // keep handing back the pre-override class entry / native wrapper /
     // memoized member handles. See Resolver.cacheEpoch.
-    let entry: ClassEntry;
-    let obfName: string;
-    let native: unknown;
-    let epoch = -1;
+    //
+    // Primed directly from the `initial` resolve above — which already emitted
+    // the resolution diagnostic — so we do NOT re-resolve at construction (a
+    // second lookup that emitted a spurious `cache` event). `revalidate()`
+    // then only does work when the epoch advances.
+    let entry: ClassEntry = initial.entry;
+    let obfName: string = initial.obfName;
+    let native: unknown = bridge.use(obfName);
+    let epoch = resolver.cacheEpoch();
 
     // Memoized per-member handles. Same real name → same handle object,
     // until an override forces a rebuild.
@@ -132,21 +137,36 @@ export function makeClassProxy(
      * Re-resolve the class (and rebuild the native wrapper + drop the
      * member cache) if the resolver's epoch has advanced since we last
      * looked. The first call (epoch === -1) performs the initial resolve.
+     *
+     * The epoch is resolver-GLOBAL: any `override(...)` bumps it, so an
+     * override of an UNRELATED class would otherwise force this proxy to
+     * redo `Java.use(obfName)` (a real device round-trip) and drop its
+     * member cache as pure collateral. To avoid that, we re-resolve (cheap,
+     * a cache hit for an unrelated override) but only rebuild the native
+     * wrapper + clear the member cache when THIS class's resolved entry
+     * actually changed. Comparing the entry reference catches both an
+     * obfName change and a same-class method/field remap, since `override`
+     * always installs a fresh entry object for the class it targets.
      */
     function revalidate(): void {
         const current = resolver.cacheEpoch();
         if (current === epoch) return;
         const resolved = resolver.resolveClass(realName);
+        epoch = current;
+        if (resolved.entry === entry) {
+            // Unrelated override (or a no-op): nothing about this class moved.
+            return;
+        }
         entry = resolved.entry;
         obfName = resolved.obfName;
         native = bridge.use(obfName);
         memberCache.clear();
-        epoch = current;
     }
 
-    // Resolve eagerly so a bad real name (or a denied target) throws at
-    // construction, matching the pre-revalidation contract.
-    revalidate();
+    // No eager `revalidate()` here: the `initial` resolve above already ran
+    // at construction (so a bad real name / denied target threw via
+    // `resolveClassOrSentinel`), and the proxy state is primed from it. The
+    // first `revalidate()` only does work once the epoch actually advances.
 
     /** True if the loaded class defines a real member named `prop`. */
     function mapDefines(prop: string): boolean {
@@ -160,6 +180,11 @@ export function makeClassProxy(
             // proxy's own metadata here.
             if (prop === ROSETTA_META) {
                 revalidate();
+                // A fresh ProxyMeta SNAPSHOT of the current resolved state,
+                // built on every access. It is not live: a caller holding an
+                // old reference keeps the obfName/native it captured even after
+                // a later override moves the proxy. Re-read ROSETTA_META to
+                // observe post-override state.
                 const meta: ProxyMeta = { realName, obfName, native, resolver };
                 return meta;
             }
