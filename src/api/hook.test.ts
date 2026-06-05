@@ -20,6 +20,7 @@ import { AmbiguousOverloadError, ResolveError } from '../errors.js';
 import { createResolver } from '../resolver/index.js';
 import type { RosettaMap } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
+import { javaBridgeFromUse, JAVA_UNAVAILABLE_MESSAGE } from '../java-bridge.js';
 import { proceed, _resetProceedStack } from './proceed.js';
 import { hook, type HookHandle } from './hook.js';
 import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/index.js';
@@ -433,20 +434,36 @@ describe('hook + proceed', () => {
 });
 
 describe('hook — environment errors', () => {
-    it('throws if globalThis.Java is missing', () => {
+    it('throws the canonical error when the Java bridge is unavailable', () => {
         const h = makeHarness();
-        const g = globalThis as { Java?: unknown };
-        const saved = g.Java;
-        g.Java = undefined;
-        try {
-            expect(() =>
-                hook('com.example.app.IRemoteService$Stub.onConnect', () => undefined, {
-                    resolver: h.resolver,
-                }),
-            ).toThrow(/globalThis\.Java\.use is missing/);
-        } finally {
-            g.Java = saved;
-        }
+        // Inject an unavailable bridge instead of mutating globalThis — the
+        // bridge is the seam, so the test drives it directly.
+        const unavailableBridge = javaBridgeFromUse(undefined);
+        expect(() =>
+            hook('com.example.app.IRemoteService$Stub.onConnect', () => undefined, {
+                resolver: h.resolver,
+                javaBridge: unavailableBridge,
+            }),
+        ).toThrow(JAVA_UNAVAILABLE_MESSAGE);
+    });
+
+    it('routes hook installation through an injected Java bridge', () => {
+        const h = makeHarness();
+        // A bridge that delegates to the mock proves hook() uses the seam,
+        // not a hard-coded globalThis read.
+        const calls: string[] = [];
+        const bridge = {
+            available: true,
+            use: (name: string) => {
+                calls.push(name);
+                return Java.use(name);
+            },
+        };
+        hook('com.example.app.IRemoteService$Stub.onConnect', () => undefined, {
+            resolver: h.resolver,
+            javaBridge: bridge,
+        });
+        expect(calls).toContain('aaaa');
     });
 
     it('throws if the native wrapper is missing the obf method', () => {

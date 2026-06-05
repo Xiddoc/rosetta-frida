@@ -18,6 +18,8 @@
  * needed to validate the chain itself.
  */
 
+import { defaultJavaBridge, type JavaBridge } from '../java-bridge.js';
+
 /**
  * Minimal Frida-shaped Java API surface we depend on. Wider Frida types
  * exist via `@types/frida-gum`; we keep ours narrow so the chain's
@@ -77,21 +79,29 @@ export interface DetectedAppVersion {
 /**
  * Run the in-process Java chain and return the detected `(app, version)`.
  *
- * @param javaApi Frida's `Java` namespace. Defaults to the global `Java`.
- *   Tests pass a fake that returns canned classes.
+ * @param javaApi Frida's `Java` namespace. Defaults to the shared
+ *   {@link JavaBridge} (which reads the global `Java`). Tests pass a fake
+ *   that returns canned classes.
+ * @param bridge The {@link JavaBridge} used when `javaApi` is omitted.
+ *   Defaults to {@link defaultJavaBridge}. Lets tests drive the
+ *   global-fallback path without mutating `globalThis`.
  * @throws Error if the underlying chain fails (class not loaded, the
  *   process isn't an Android app, etc.). The caller decides how to
  *   classify the failure.
  */
-export function detectAppAndVersion(javaApi?: AutoDetectJavaApi): DetectedAppVersion {
-    const api: AutoDetectJavaApi | undefined =
-        javaApi ?? (globalThis as unknown as { Java?: AutoDetectJavaApi }).Java;
-    if (!api) {
+export function detectAppAndVersion(
+    javaApi?: AutoDetectJavaApi,
+    bridge: JavaBridge = defaultJavaBridge,
+): DetectedAppVersion {
+    if (javaApi === undefined && !bridge.available) {
         throw new Error(
             'rosetta-frida: cannot auto-detect — global Java is unavailable. ' +
                 'Pass an explicit `app` and `version` to rosetta.session(...) or attach via Frida.',
         );
     }
+    const api: AutoDetectJavaApi = javaApi ?? {
+        use: (className) => bridge.use(className) as AutoDetectActivityThreadClass,
+    };
     const ActivityThread = api.use('android.app.ActivityThread');
     const application = ActivityThread.currentApplication();
     const context = application.getApplicationContext();

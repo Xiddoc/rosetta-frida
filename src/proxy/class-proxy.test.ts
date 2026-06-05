@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 
 import { MockFrida, useFridaMock } from '../../tests/mocks/index.js';
 import { ResolveError } from '../errors.js';
+import { javaBridgeFromUse } from '../java-bridge.js';
 import { createResolver } from '../resolver/index.js';
 import type { RosettaMap } from '../types/map.js';
 import { makeClassProxy } from './class-proxy.js';
@@ -243,6 +244,35 @@ describe('makeClassProxy — defaultJavaUse fallback', () => {
         } finally {
             g.Java = saved;
         }
+    });
+
+    it('honours an explicit javaBridge (no global Java needed)', () => {
+        const g = globalThis as { Java?: unknown };
+        const saved = g.Java;
+        try {
+            delete (g as Record<string, unknown>).Java;
+            registerStubViaCustomRegistry();
+            const resolver = createResolver(map);
+            const bridge = javaBridgeFromUse((obf: string) => customRegistry.get(obf));
+            const Stub = makeClassProxy(resolver, 'com.example.app.Stub', { javaBridge: bridge });
+            expect(Stub.$obfName).toBe('aaaa');
+            expect((Stub.$native as { tag: string }).tag).toBe('custom-aaaa');
+        } finally {
+            g.Java = saved;
+        }
+    });
+
+    it('prefers javaBridge over javaUse when both are given', () => {
+        registerStubViaCustomRegistry();
+        const resolver = createResolver(map);
+        const bridge = javaBridgeFromUse((obf: string) => customRegistry.get(obf));
+        const Stub = makeClassProxy(resolver, 'com.example.app.Stub', {
+            javaBridge: bridge,
+            javaUse: () => {
+                throw new Error('javaUse should not be consulted when javaBridge is set');
+            },
+        });
+        expect((Stub.$native as { tag: string }).tag).toBe('custom-aaaa');
     });
 });
 

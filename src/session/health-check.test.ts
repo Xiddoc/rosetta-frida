@@ -6,6 +6,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/frida.js';
+import { javaBridgeFromUse } from '../java-bridge.js';
 import type { RosettaMap } from '../types/map.js';
 import {
     runHealthCheck,
@@ -138,6 +139,30 @@ describe('runHealthCheck', () => {
         expect(result.rate).toBe(0);
         expect(result.failedEntries).toEqual(['com.example.app.Foo', 'com.example.app.Bar']);
         expect(result.total).toBe(2);
+    });
+
+    it('resolves classes through an injected JavaBridge', () => {
+        // No global Java; drive verification entirely off the bridge seam.
+        const seen: string[] = [];
+        const bridge = javaBridgeFromUse((obfName: string) => {
+            seen.push(obfName);
+            return {};
+        });
+        const result = runHealthCheck({
+            map: buildMap({ 'com.example.app.Foo': { obfuscated: 'aaaa' } }),
+            bridge,
+        });
+        expect(result.passed).toBe(true);
+        expect(seen).toEqual(['aaaa']);
+    });
+
+    it('treats an unavailable injected bridge as no runtime (all fail)', () => {
+        const result = runHealthCheck({
+            map: buildMap({ 'com.example.app.Foo': { obfuscated: 'aaaa' } }),
+            bridge: javaBridgeFromUse(undefined),
+        });
+        expect(result.passed).toBe(false);
+        expect(result.failedEntries).toEqual(['com.example.app.Foo']);
     });
 
     it('still returns passed for an empty map without a Java runtime', () => {

@@ -36,6 +36,7 @@
  */
 
 import { RosettaError } from '../errors.js';
+import { defaultJavaBridge, type JavaBridge } from '../java-bridge.js';
 import type { Resolver, ResolvedMethod } from '../types/resolver.js';
 import { pushProceedFrame, type ProceedFrame } from './proceed.js';
 
@@ -66,6 +67,12 @@ export interface HookHandle {
 export interface HookOptions {
     /** Resolver for real→obf translation. Required until session ambient lands. */
     readonly resolver: Resolver;
+    /**
+     * The seam onto Frida's global `Java`. Defaults to the global-reading
+     * {@link defaultJavaBridge}. Tests inject a fake bridge instead of
+     * mutating `globalThis`.
+     */
+    readonly javaBridge?: JavaBridge;
 }
 
 /** Shape of the user-supplied implementation. Untyped args by design. */
@@ -85,6 +92,7 @@ export function hook(
     options: HookOptions,
 ): HookHandle {
     const { resolver } = options;
+    const bridge = options.javaBridge ?? defaultJavaBridge;
     const { className, methodName, argTypes } = parseTarget(target);
 
     // Resolve the method; resolver applies overload selection when
@@ -94,14 +102,8 @@ export function hook(
     // for callers to pattern-match on.
     const resolved: ResolvedMethod = resolver.resolveMethod(className, methodName, argTypes);
 
-    // Java.use(obfClass) — get the native class wrapper.
-    const javaUse = (globalThis as { Java?: { use?: (n: string) => unknown } }).Java?.use;
-    if (typeof javaUse !== 'function') {
-        throw new RosettaError(
-            'rosetta.hook called without Frida Java bridge available (globalThis.Java.use is missing).',
-        );
-    }
-    const wrapper = javaUse(resolved.className) as Record<string, unknown>;
+    // Java.use(obfClass) — get the native class wrapper, via the bridge.
+    const wrapper = bridge.use(resolved.className) as Record<string, unknown>;
 
     // Look up the method bundle on the wrapper. For mock + real Frida
     // alike, this returns an object with `.overload(...)` and a

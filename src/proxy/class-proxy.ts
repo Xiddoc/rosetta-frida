@@ -27,6 +27,7 @@
  * two different proxies (cheap), but member-access caching ensures
  * `Stub.requestTicket === Stub.requestTicket` within one proxy.
  */
+import { defaultJavaBridge, javaBridgeFromUse, type JavaBridge } from '../java-bridge.js';
 import type { ClassEntry } from '../types/map.js';
 import type { ClassProxy, FieldAccessor, MethodHandle } from '../types/proxy.js';
 import type { Resolver } from '../types/resolver.js';
@@ -39,22 +40,30 @@ export interface ClassProxyOptions {
     /**
      * Override the global `Java.use(...)` resolver. Tests pass a stub;
      * production code lets this default to the live Frida `Java.use`.
+     *
+     * Sugar over {@link ClassProxyOptions.javaBridge}: when set, it is
+     * adapted to a {@link JavaBridge} internally. Prefer `javaBridge` for
+     * new code; `javaUse` is retained for the `rosetta.use(name, { javaUse })`
+     * ergonomic.
      */
     javaUse?: (obfName: string) => unknown;
+    /**
+     * The seam onto Frida's global `Java`. Defaults to the global-reading
+     * {@link defaultJavaBridge}. Tests inject a fake bridge instead of
+     * mutating `globalThis`.
+     */
+    javaBridge?: JavaBridge;
 }
 
-/** Resolve a `Java.use` callable, defaulting to the global Frida API. */
-function defaultJavaUse(obfName: string): unknown {
-    // `Java` is provided by the Frida runtime. The cast keeps the type
-    // boundary explicit — Frida's typings are pulled in at build time
-    // but we don't want to hard-fail on absence in non-Frida contexts.
-    const J = (globalThis as { Java?: { use: (n: string) => unknown } }).Java;
-    if (!J) {
-        throw new Error(
-            "rosetta-frida: global 'Java' is not available. Are you running inside a Frida script?",
-        );
-    }
-    return J.use(obfName);
+/**
+ * Resolve the effective {@link JavaBridge} for a proxy: an explicit
+ * `javaBridge` wins; otherwise a `javaUse` callable is adapted; otherwise
+ * the global-reading default is used.
+ */
+function resolveBridge(options: ClassProxyOptions): JavaBridge {
+    if (options.javaBridge !== undefined) return options.javaBridge;
+    if (options.javaUse !== undefined) return javaBridgeFromUse(options.javaUse);
+    return defaultJavaBridge;
 }
 
 /**
@@ -69,8 +78,8 @@ export function makeClassProxy(
     const entry: ClassEntry = resolved.entry;
     const obfName = resolved.obfName;
 
-    const javaUse = options.javaUse ?? defaultJavaUse;
-    const native = javaUse(obfName);
+    const bridge = resolveBridge(options);
+    const native = bridge.use(obfName);
 
     // Memoized per-member handles. Same real name → same handle object.
     const memberCache = new Map<string, MethodHandle | FieldAccessor<unknown>>();
