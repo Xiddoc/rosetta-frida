@@ -15,8 +15,11 @@ export type {
     MethodMapInput,
     FieldMap,
     ClassEntry,
+    ClassEntryInput,
     ClassMap,
+    ClassMapInput,
     RosettaMap,
+    RosettaMapInput,
     RosettaMapRegistry,
 } from './map.js';
 

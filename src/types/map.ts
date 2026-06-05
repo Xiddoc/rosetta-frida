@@ -123,6 +123,21 @@ export interface ClassEntry {
 export type ClassMap = Record<string, ClassEntry>;
 
 /**
+ * AUTHORING / on-disk class entry. Identical to {@link ClassEntry} except
+ * `methods` is the terser {@link MethodMapInput} (scalar-or-array) shape the
+ * validator accepts and normalises. Emitters of the on-disk artifact (the
+ * sigmatcher adapter) produce this; the validator's `.transform(...)`
+ * narrows it to {@link ClassEntry} on load.
+ */
+export interface ClassEntryInput extends Omit<ClassEntry, 'methods'> {
+    /** Methods keyed by real name, in the scalar-or-array authoring shape. */
+    methods?: MethodMapInput;
+}
+
+/** AUTHORING / on-disk class-map shape (values are {@link ClassEntryInput}). */
+export type ClassMapInput = Record<string, ClassEntryInput>;
+
+/**
  * The current map schema version — the single source of truth.
  *
  * Bump this ONE constant to change the schema version. It drives:
@@ -191,6 +206,19 @@ export interface RosettaMap {
     sources?: MapSource[];
     /** The classes themselves. */
     classes: ClassMap;
+}
+
+/**
+ * AUTHORING / on-disk map shape — the input the Zod validator ACCEPTS.
+ * Identical to {@link RosettaMap} except `classes` uses the terser
+ * {@link ClassMapInput} (scalar-or-array method) shape. This is what
+ * emitters of the on-disk artifact (the sigmatcher adapter) produce and
+ * what `z.input<typeof rosettaMapSchema>` is; the validator normalises it
+ * to {@link RosettaMap} (`z.output<...>`) on load.
+ */
+export interface RosettaMapInput extends Omit<RosettaMap, 'classes'> {
+    /** The classes themselves, in the scalar-or-array authoring shape. */
+    classes: ClassMapInput;
 }
 
 /**
