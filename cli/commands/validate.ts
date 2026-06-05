@@ -17,7 +17,21 @@ import { parseJson } from '../../src/parse/json.js';
 import { assertNoNul } from '../../src/parse/index.js';
 import type { RosettaMap } from '../../src/types/map.js';
 import type { CommandIo, FsLike } from './io.js';
+import { errorMessage } from './io.js';
 import { parseArgs, type ArgSpec } from './args.js';
+
+/**
+ * Read a map file, wrapping a read failure (e.g. ENOENT) into the uniform
+ * `cannot read <file>: …` message used by the other file-reading commands
+ * (patch/extract/inspect), so a missing file reads the same across verbs.
+ */
+async function readMapFile(inputPath: string, fs: FsLike): Promise<string> {
+    try {
+        return await fs.readFile(inputPath, 'utf8');
+    } catch (err) {
+        throw new RosettaError(`cannot read ${inputPath}: ${errorMessage(err)}`);
+    }
+}
 
 export interface ValidateOptions {
     inputPath: string;
@@ -45,7 +59,7 @@ export async function loadMap(inputPath: string, fs: FsLike): Promise<RosettaMap
     assertNoNul(inputPath);
     const ext = path.extname(inputPath).toLowerCase();
     if (ext === '.json') {
-        const raw = await fs.readFile(inputPath, 'utf8');
+        const raw = await readMapFile(inputPath, fs);
         let parsed: unknown;
         try {
             parsed = parseJson(raw);
@@ -55,7 +69,7 @@ export async function loadMap(inputPath: string, fs: FsLike): Promise<RosettaMap
         return validateStructure(parsed);
     }
     if (ext === '.yaml' || ext === '.yml') {
-        const raw = await fs.readFile(inputPath, 'utf8');
+        const raw = await readMapFile(inputPath, fs);
         return yamlToMap(raw);
     }
     if (ext === '.ts' || ext === '.js' || ext === '.mjs' || ext === '.cjs') {
@@ -67,20 +81,19 @@ export async function loadMap(inputPath: string, fs: FsLike): Promise<RosettaMap
 
 /**
  * Run `rosetta validate` under the shared command contract: load +
- * validate the map, print a one-line `OK` summary to stdout, and return
- * exit code 0.
+ * validate the map and return a one-line `OK` summary (the router prints
+ * it under the uniform `rosetta validate:` prefix).
  *
  * A load/validation failure is *thrown* (not returned): the router's
  * `formatErrorLines` renders it under the uniform `rosetta validate: …`
  * prefix and folds a `MapValidationError`'s issue list into indented
  * follow-on lines — the old bespoke `FAIL: … — …` report, unified.
  */
-export async function runValidate(argv: readonly string[], io: CommandIo): Promise<number> {
+export async function runValidate(argv: readonly string[], io: CommandIo): Promise<string> {
     const opts = parseValidateArgs(argv);
     const map = await loadMap(opts.inputPath, io.fs);
-    io.stdout(
+    return (
         `OK: ${opts.inputPath} — ${map.app}@${map.version}, ` +
-            `${Object.keys(map.classes).length} class(es), schema_version=${map.schema_version}`,
+        `${Object.keys(map.classes).length} class(es), schema_version=${map.schema_version}`
     );
-    return 0;
 }

@@ -111,14 +111,15 @@ describe('runValidate', () => {
     // Success prints a one-line OK summary via io.stdout and returns 0.
     // Failures THROW (the router formats them under the unified prefix and
     // folds a MapValidationError's issue list); see router.test.ts.
-    it('prints OK for a valid map and returns 0', async () => {
+    it('returns an OK summary message for a valid map', async () => {
         const fake = makeFakeFs({ '/m.json': VALID_JSON });
         const captured = makeCaptured();
-        const code = await runValidate(['/m.json'], makeIo(fake, captured));
-        expect(code).toBe(0);
-        expect(captured.stdout[0]).toMatch(/^OK/);
-        expect(captured.stdout[0]).toContain('com.example.app@1.0.0');
-        expect(captured.stdout[0]).toContain('1 class');
+        // run* returns the success message; the router owns the prefix +
+        // stdout, so command-level tests assert on the return value.
+        const msg = await runValidate(['/m.json'], makeIo(fake, captured));
+        expect(msg).toMatch(/^OK/);
+        expect(msg).toContain('com.example.app@1.0.0');
+        expect(msg).toContain('1 class');
     });
 
     it('throws a MapValidationError (with issues) for a malformed map', async () => {
@@ -148,11 +149,22 @@ describe('runValidate', () => {
         );
     });
 
-    it('propagates a non-Rosetta read error', async () => {
-        // Missing file → the fake's readFile rejects with a plain ENOENT.
+    it('wraps a missing-file read error in the uniform `cannot read` message', async () => {
+        // Missing file → the fake's readFile rejects with a plain ENOENT;
+        // loadMap wraps it so it reads the same as patch/extract/inspect.
         const fake = makeFakeFs({});
         const captured = makeCaptured();
-        await expect(runValidate(['/missing.json'], makeIo(fake, captured))).rejects.toThrow();
+        await expect(runValidate(['/missing.json'], makeIo(fake, captured))).rejects.toThrow(
+            /cannot read \/missing\.json/,
+        );
+    });
+
+    it('wraps a missing-file read error for YAML inputs too', async () => {
+        const fake = makeFakeFs({});
+        const captured = makeCaptured();
+        await expect(runValidate(['/missing.yaml'], makeIo(fake, captured))).rejects.toThrow(
+            /cannot read \/missing\.yaml/,
+        );
     });
 
     it('validates the canonical sample map on disk', async () => {
@@ -171,9 +183,8 @@ describe('runValidate', () => {
             stdout: (l) => captured.stdout.push(l),
             stderr: (l) => captured.stderr.push(l),
         };
-        const code = await runValidate([sample], io);
-        expect(code).toBe(0);
-        expect(captured.stdout[0]).toMatch(/^OK/);
+        const msg = await runValidate([sample], io);
+        expect(msg).toMatch(/^OK/);
     });
 });
 
