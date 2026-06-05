@@ -37,6 +37,8 @@
  * party", which a single-signer match already establishes.
  */
 
+import { MalformedSignerError } from '../errors.js';
+
 /**
  * `PackageManager.GET_SIGNING_CERTIFICATES` (API 28+). Returns the v2/v3
  * signing block info via `PackageInfo.signingInfo`.
@@ -125,6 +127,25 @@ export interface SignerJavaApi {
     use(className: string): SignerActivityThreadClass | SignerMessageDigestClass;
 }
 
+/**
+ * Internal marker thrown by {@link detectSigners} when the live app exposes
+ * no readable signing certificate at all. Not part of the public error
+ * taxonomy: the session guard catches it and rethrows the public
+ * `MissingSignerError` (which carries the map's expected hash, context this
+ * reader doesn't have). Kept distinct from a generic `Error` so the session
+ * can tell "no signer present" apart from "Java runtime unavailable".
+ */
+export class NoSignerReadableError extends Error {
+    constructor(
+        message: string,
+        /** The package whose signer could not be read. */
+        public readonly app: string,
+    ) {
+        super(message);
+        this.name = 'NoSignerReadableError';
+    }
+}
+
 /** Result of a successful signer read. */
 export interface DetectedSigners {
     /**
@@ -137,14 +158,27 @@ export interface DetectedSigners {
 }
 
 /**
- * Normalize a SHA-256 hex string for comparison: strip whitespace and the
- * colon separators some tools emit (e.g. `AB:CD:...`), then lowercase.
+ * The well-formed shape of a normalized signer hash: exactly 64 lowercase
+ * hex characters. Mirrors the canonical maps schema's `signer_sha256`
+ * pattern and the Kotlin `SignerGuard.HEX_64` regex.
+ */
+export const HEX_64 = /^[0-9a-f]{64}$/;
+
+/**
+ * Normalize a SHA-256 hex string for comparison: trim *surrounding*
+ * whitespace, strip the colon separators some tools emit (e.g.
+ * `AB:CD:...`), then lowercase.
+ *
+ * Interior whitespace is deliberately NOT stripped, so it survives into
+ * the {@link HEX_64} well-formedness check and is rejected as malformed —
+ * matching the Kotlin `SignerGuard.normalize` contract so garbage is
+ * rejected identically on both clients.
  *
  * Exported so the session compares the map's `signer_sha256` through the
  * exact same normalization it applies to the live hashes.
  */
 export function normalizeSignerHash(hash: string): string {
-    return hash.replace(/[\s:]/g, '').toLowerCase();
+    return hash.trim().replace(/:/g, '').toLowerCase();
 }
 
 /**
@@ -199,9 +233,10 @@ function readSignatures(
  *
  * @param javaApi Frida's `Java` namespace. Defaults to the global `Java`.
  *   Tests pass a fake that returns canned classes.
- * @throws Error if the Java runtime is unavailable, or if no signing
- *   certificate could be read (an authenticity check that can't read the
- *   signer must fail closed — the caller surfaces it as a typed error).
+ * @throws Error if the Java runtime is unavailable.
+ * @throws NoSignerReadableError if no signing certificate could be read (an
+ *   authenticity check that can't read the signer must fail closed — the
+ *   session guard surfaces this as the public `MissingSignerError`).
  */
 export function detectSigners(javaApi?: SignerJavaApi): DetectedSigners {
     const api: SignerJavaApi | undefined =
@@ -228,9 +263,10 @@ export function detectSigners(javaApi?: SignerJavaApi): DetectedSigners {
         found = readSignatures(packageManager.getPackageInfo(pkg, GET_SIGNATURES));
     }
     if (!found) {
-        throw new Error(
+        throw new NoSignerReadableError(
             `rosetta-frida: could not read any signing certificate for ${pkg}. ` +
                 'The signer authenticity check cannot proceed.',
+            pkg,
         );
     }
 
@@ -249,7 +285,11 @@ export interface SignerCheckResult {
     passed: boolean;
     /** The map's expected signer hash, normalized for the comparison. */
     expected: string;
-    /** Every live signer hash observed (already normalized). */
+    /**
+     * Every live signer hash observed, normalized and sorted. Sorted so a
+     * mismatch report is deterministic and matches the Kotlin client's
+     * sorted-set rendering.
+     */
     actual: readonly string[];
     /** Which PackageManager flag yielded the signers. */
     source: 'signingInfo' | 'signatures';
@@ -259,19 +299,37 @@ export interface SignerCheckResult {
  * Read the live signers and compare them to the map's expected
  * `signer_sha256`. Pure orchestration over {@link detectSigners}; never
  * throws on a *mismatch* (it returns `passed: false`) — the session owns
- * the fail-closed decision. It does propagate the underlying read error if
- * the signing certificate is unreadable (an authenticity check that cannot
- * read the signer must fail closed, not silently pass).
+ * the fail-closed decision.
  *
- * The expected hash is run through {@link normalizeSignerHash} so a map
- * authored with `AB:CD:...` / uppercase compares equal to the live bytes.
+ * The expected hash is normalized via {@link normalizeSignerHash} (so a map
+ * authored with `AB:CD:...` / uppercase compares equal to the live bytes)
+ * and then checked for well-formedness: it must be exactly 64 lowercase hex
+ * characters ({@link HEX_64}). A map hash that fails this is an author error
+ * in the artifact, not a spoof, so it throws {@link MalformedSignerError}
+ * rather than reporting a (misleading) mismatch — mirroring the Kotlin
+ * `SignerGuard.verify` contract. The well-formedness check runs *before*
+ * reading the live signers, so a bad map hash is reported even when the app
+ * exposes no readable signer.
+ *
+ * If the live app exposes no readable signing certificate, the underlying
+ * read error propagates (an authenticity check that cannot read the signer
+ * must fail closed); the session surfaces it as {@link MissingSignerError}.
  */
 export function checkSigner(
     expectedSignerSha256: string,
     javaApi?: SignerJavaApi,
 ): SignerCheckResult {
-    const detected = detectSigners(javaApi);
     const expected = normalizeSignerHash(expectedSignerSha256);
-    const passed = detected.hashes.includes(expected);
-    return { passed, expected, actual: detected.hashes, source: detected.source };
+    if (!HEX_64.test(expected)) {
+        throw new MalformedSignerError(
+            expectedSignerSha256,
+            `map signer_sha256 must be 64 hex chars after normalization, got ${expected.length}`,
+        );
+    }
+    const detected = detectSigners(javaApi);
+    // Sort the observed hashes so reports are deterministic and align with
+    // the Kotlin client's sorted-set rendering.
+    const actual = [...detected.hashes].sort();
+    const passed = actual.includes(expected);
+    return { passed, expected, actual, source: detected.source };
 }

@@ -9,10 +9,12 @@
 
 import { createHash } from 'node:crypto';
 import { describe, it, expect, afterEach } from 'vitest';
+import { MalformedSignerError } from '../errors.js';
 import {
     detectSigners,
     checkSigner,
     normalizeSignerHash,
+    NoSignerReadableError,
     GET_SIGNING_CERTIFICATES,
     GET_SIGNATURES,
     type SignerJavaApi,
@@ -128,9 +130,16 @@ function buildSignerApi(shape: ApiShape): SignerJavaApi {
 }
 
 describe('normalizeSignerHash', () => {
-    it('strips colons, whitespace, and lowercases', () => {
+    it('strips colons, trims surrounding whitespace, and lowercases', () => {
         expect(normalizeSignerHash('AB:CD:EF')).toBe('abcdef');
-        expect(normalizeSignerHash('  Ab Cd\nEf ')).toBe('abcdef');
+        expect(normalizeSignerHash('  ABCDEF\n')).toBe('abcdef');
+        expect(normalizeSignerHash('\tAb:Cd:Ef ')).toBe('abcdef');
+    });
+
+    it('preserves INTERIOR whitespace (so malformed garbage stays malformed)', () => {
+        // Interior whitespace is NOT stripped — it survives to fail the
+        // 64-hex well-formedness check, matching the Kotlin contract.
+        expect(normalizeSignerHash('Ab Cd Ef')).toBe('ab cd ef');
     });
 });
 
@@ -183,16 +192,24 @@ describe('detectSigners', () => {
         expect(result.hashes).toEqual([sha256Hex(certs[0])]);
     });
 
-    it('throws (fail closed) when no signer can be read at all', () => {
+    it('throws NoSignerReadableError (fail closed) when no signer can be read at all', () => {
         expect(() =>
             detectSigners(buildSignerApi({ noSigningInfo: true, signaturesCerts: [] })),
-        ).toThrow(/could not read any signing certificate/);
+        ).toThrow(NoSignerReadableError);
+        try {
+            detectSigners(
+                buildSignerApi({ noSigningInfo: true, signaturesCerts: [], app: 'com.x' }),
+            );
+        } catch (e) {
+            expect(e).toBeInstanceOf(NoSignerReadableError);
+            expect((e as NoSignerReadableError).app).toBe('com.x');
+        }
     });
 
     it('treats a null signatures field as no signer', () => {
         // signaturesCerts omitted → value is null on the fallback path.
         expect(() => detectSigners(buildSignerApi({ noSigningInfo: true }))).toThrow(
-            /could not read any signing certificate/,
+            NoSignerReadableError,
         );
     });
 
@@ -245,5 +262,53 @@ describe('checkSigner', () => {
         const result = checkSigner('f'.repeat(64), buildSignerApi({ signingInfoCerts: certs }));
         expect(result.passed).toBe(false);
         expect(result.actual).toEqual([sha256Hex(certs[0])]);
+    });
+
+    it('throws MalformedSignerError on an ill-formed map hash (wrong length)', () => {
+        const certs = [[1, 2, 3]];
+        expect(() => checkSigner('abc', buildSignerApi({ signingInfoCerts: certs }))).toThrow(
+            MalformedSignerError,
+        );
+    });
+
+    it('throws MalformedSignerError on a non-hex map hash', () => {
+        const certs = [[1, 2, 3]];
+        // 64 chars but with a non-hex letter.
+        const bad = 'g'.repeat(64);
+        let caught: MalformedSignerError | undefined;
+        try {
+            checkSigner(bad, buildSignerApi({ signingInfoCerts: certs }));
+        } catch (e) {
+            caught = e as MalformedSignerError;
+        }
+        expect(caught).toBeInstanceOf(MalformedSignerError);
+        expect(caught?.value).toBe(bad);
+        expect(caught?.reason).toMatch(/64 hex chars/);
+    });
+
+    it('rejects a map hash with INTERIOR whitespace as malformed (not a mismatch)', () => {
+        const certs = [[1, 2, 3]];
+        // 64 hex chars total but with a space in the middle: survives
+        // normalization and fails the 64-hex check.
+        const interior = `${'a'.repeat(31)} ${'a'.repeat(32)}`;
+        expect(() => checkSigner(interior, buildSignerApi({ signingInfoCerts: certs }))).toThrow(
+            MalformedSignerError,
+        );
+    });
+
+    it('validates the map hash BEFORE reading live signers (malformed wins over unreadable)', () => {
+        // Even when the app exposes no readable signer, an ill-formed map
+        // hash is reported as malformed, not missing.
+        expect(() =>
+            checkSigner('abc', buildSignerApi({ noSigningInfo: true, signaturesCerts: [] })),
+        ).toThrow(MalformedSignerError);
+    });
+
+    it('returns the live signer hashes sorted for deterministic reporting', () => {
+        // Pick certs whose hashes sort into a non-input order.
+        const certs = [[1], [2], [3]];
+        const hashes = certs.map((c) => sha256Hex(c));
+        const result = checkSigner('f'.repeat(64), buildSignerApi({ signingInfoCerts: certs }));
+        expect(result.actual).toEqual([...hashes].sort());
     });
 });

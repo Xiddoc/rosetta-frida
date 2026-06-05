@@ -85,6 +85,11 @@ export class MapVersionMismatchError extends RosettaError {
  * cannot be silently applied to a repackaged or spoofed build that merely
  * shares the same `version_code`. Carries the expected hash and every
  * live signer hash that was observed so reports are actionable.
+ *
+ * One of three signer error types mirroring the Kotlin taxonomy
+ * (`SignerMismatchException`); see {@link MalformedSignerError} (the map's
+ * own hash is ill-formed) and {@link MissingSignerError} (the live app
+ * exposes no readable signer).
  */
 export class SignerMismatchError extends RosettaError {
     constructor(
@@ -92,6 +97,46 @@ export class SignerMismatchError extends RosettaError {
         public readonly app: string,
         public readonly expected: string,
         public readonly actual: readonly string[],
+    ) {
+        super(message);
+    }
+}
+
+/**
+ * Thrown when the loaded map's `signer_sha256` is not well-formed: after
+ * normalization (trim surrounding whitespace, strip `:`, lowercase) it is
+ * not exactly 64 lowercase hex characters (`^[0-9a-f]{64}$`).
+ *
+ * This is an **author error** in the map artifact, not a spoof — treating
+ * it as a mismatch would mask a bad map as an attacker. Mirrors the Kotlin
+ * `MalformedSignerException`; the canonical maps schema also pins
+ * `signer_sha256` to `^[0-9a-f]{64}$`, so a conformant map can never trip
+ * this at runtime.
+ */
+export class MalformedSignerError extends RosettaError {
+    constructor(
+        /** The offending hash value, as supplied (before/around normalization). */
+        public readonly value: string,
+        /** Why it was rejected (e.g. "expected 64 hex chars, got 8"). */
+        public readonly reason: string,
+    ) {
+        super(`rosetta-frida: malformed signer_sha256 "${value}": ${reason}`);
+    }
+}
+
+/**
+ * Thrown when the loaded map carries a valid `signer_sha256` but the live
+ * app exposes no readable signing certificate, so the authenticity guard
+ * cannot be satisfied.
+ *
+ * Fail-closed: a map that *demands* a signer must not silently pass against
+ * an app that presents none. Mirrors the Kotlin `MissingSignerException`.
+ */
+export class MissingSignerError extends RosettaError {
+    constructor(
+        message: string,
+        /** The normalized signer hash the map demands but could not verify. */
+        public readonly expected: string,
     ) {
         super(message);
     }

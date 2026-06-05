@@ -30,6 +30,8 @@ export {
     detectSigners,
     checkSigner,
     normalizeSignerHash,
+    NoSignerReadableError,
+    HEX_64,
     GET_SIGNING_CERTIFICATES,
     GET_SIGNATURES,
     type SignerJavaApi,
