@@ -131,4 +131,50 @@ describe('runInspect', () => {
         expect(code).toBe(1);
         expect(captured.stderr[0]).toMatch(/no rosetta-frida marker block/);
     });
+
+    it('exits 1 (not 2) on a malformed-but-parseable single-map payload', async () => {
+        // Hand-built single-map block whose payload is valid JSON but is
+        // NOT a valid RosettaMap (no `classes`, no `schema_version`).
+        // Previously `Object.keys(map.classes)` threw a TypeError outside
+        // the try/catch → exit 2; now `validateMap` makes it a clean exit 1.
+        const bundle =
+            '/*! -----BEGIN ROSETTA MAP----- */\n' +
+            'const __rosetta_map = {"app": "com.example.app"};\n' +
+            '/*! -----END ROSETTA MAP----- */';
+        const fs = makeFakeFs({ 'b.js': bundle });
+        const captured = makeCaptured();
+        const code = await runInspect(['b.js'], makeIo(fs, captured));
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/inspect:.*schema validation/i);
+    });
+
+    it('exits 1 when a registry payload is not an object (e.g. JSON null)', async () => {
+        const bundle =
+            '/*! -----BEGIN ROSETTA MAP REGISTRY----- */\n' +
+            'const __rosetta_maps = null;\n' +
+            '/*! -----END ROSETTA MAP REGISTRY----- */';
+        const fs = makeFakeFs({ 'b.js': bundle });
+        const captured = makeCaptured();
+        const code = await runInspect(['b.js'], makeIo(fs, captured));
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/inspect:.*registry payload is not an object/);
+    });
+
+    it('tolerates a registry entry that is an object but lacks `classes`', async () => {
+        // Object-but-malformed entry: counted as zero classes, no app added,
+        // rather than throwing a TypeError from Object.keys(undefined).
+        const validMap = map('1.0.0');
+        const payload = JSON.stringify({ '1.0.0': validMap, partial: { version: '9' } }, null, 4);
+        const bundle =
+            '/*! -----BEGIN ROSETTA MAP REGISTRY----- */\n' +
+            `const __rosetta_maps = ${payload};\n` +
+            '/*! -----END ROSETTA MAP REGISTRY----- */';
+        const fs = makeFakeFs({ 'b.js': bundle });
+        const captured = makeCaptured();
+        const code = await runInspect(['b.js'], makeIo(fs, captured));
+        expect(code).toBe(0);
+        expect(captured.stdout[0]).toBe(
+            'registry: com.example.app, versions=[1.0.0, partial], 1 classes total',
+        );
+    });
 });

@@ -13,6 +13,8 @@
  */
 
 import { parseMarkerBlock } from '../../src/marker/parse.js';
+import { validateMap } from '../../src/validate/schema.js';
+import { RosettaError } from '../../src/errors.js';
 import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import type { CommandIo } from './io.js';
 import { errorMessage } from './io.js';
@@ -43,22 +45,50 @@ export function parseInspectArgs(argv: readonly string[]): InspectArgs {
     return { bundle };
 }
 
-/** Format the one-line summary of a single-map payload. */
-function summarizeSingle(map: RosettaMap): string {
-    const classes = Object.keys(map.classes).length;
-    return `${map.app}@${map.version}, schema_version ${map.schema_version}, ${classes} classes`;
+/**
+ * Count `classes` on a parsed-but-unvalidated map entry without
+ * trusting its shape. A marker payload is `JSON.parse`d and cast — a
+ * malformed-but-parseable map (e.g. missing `classes`) would otherwise
+ * throw `TypeError` from `Object.keys(undefined)`. We treat a missing or
+ * non-object `classes` as zero classes rather than crashing.
+ */
+function classCount(classes: unknown): number {
+    return typeof classes === 'object' && classes !== null ? Object.keys(classes).length : 0;
 }
 
-/** Format the one-line summary of a registry payload. */
+/**
+ * Format the one-line summary of a single-map payload.
+ *
+ * The payload arrives from `parseMarkerBlock` cast (not validated) to
+ * `RosettaMap`. We run the canonical `validateMap` so a malformed
+ * payload becomes a clean handled `MapValidationError` (exit 1) instead
+ * of an unhandled `TypeError` escaping to the top-level handler (exit 2).
+ */
+function summarizeSingle(map: RosettaMap): string {
+    const valid = validateMap(map);
+    const classes = Object.keys(valid.classes).length;
+    return `${valid.app}@${valid.version}, schema_version ${valid.schema_version}, ${classes} classes`;
+}
+
+/**
+ * Format the one-line summary of a registry payload.
+ *
+ * Registry entries are intentionally tolerated when partly malformed
+ * (e.g. a `null` slot, or one missing `classes`): a registry bundle is a
+ * loose collection and `inspect` is a best-effort summary tool, so we
+ * count what we can rather than rejecting the whole bundle. The root,
+ * however, must be a non-null object — otherwise `Object.keys` would
+ * throw — so the caller validates that before reaching here.
+ */
 function summarizeRegistry(maps: RosettaMapRegistry): string {
     const versions = Object.keys(maps);
     const apps = new Set<string>();
     let totalClasses = 0;
     for (const v of versions) {
-        const m = maps[v];
-        if (!m) continue;
-        apps.add(m.app);
-        totalClasses += Object.keys(m.classes).length;
+        const m = maps[v] as { app?: unknown; classes?: unknown } | undefined;
+        if (!m || typeof m !== 'object') continue;
+        if (typeof m.app === 'string') apps.add(m.app);
+        totalClasses += classCount(m.classes);
     }
     const appLabel = apps.size === 1 ? [...apps][0] : 'mixed';
     return `registry: ${appLabel}, versions=[${versions.join(', ')}], ${totalClasses} classes total`;
@@ -92,8 +122,24 @@ export async function runInspect(argv: readonly string[], io: CommandIo): Promis
         return 1;
     }
 
-    const line =
-        parsed.kind === 'single' ? summarizeSingle(parsed.map) : summarizeRegistry(parsed.maps);
+    // Summarizing touches the untrusted payload shape: a single map is
+    // validated, and a registry root must be a non-null object. Both
+    // failure modes are caught here so a malformed-but-parseable payload
+    // is a clean exit-1, not an unhandled TypeError → exit 2.
+    let line: string;
+    try {
+        if (parsed.kind === 'single') {
+            line = summarizeSingle(parsed.map);
+        } else {
+            if (typeof parsed.maps !== 'object' || parsed.maps === null) {
+                throw new RosettaError('registry payload is not an object');
+            }
+            line = summarizeRegistry(parsed.maps);
+        }
+    } catch (err) {
+        io.stderr(`inspect: ${errorMessage(err)}`);
+        return 1;
+    }
     io.stdout(line);
     return 0;
 }
