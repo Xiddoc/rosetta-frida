@@ -21,6 +21,10 @@
  * Fallback chain when `$className` is absent:
  *   1. `instance.class.getName()` — the Java-side runtime API.
  *   2. Throw `RosettaError` with a clear message.
+ *
+ * Reverse-lookup of the obfuscated class name to its real FQN goes through
+ * `Resolver.reverseLookup`, which is part of the locked Resolver contract
+ * — no `typeof === 'function'` probe.
  */
 
 import { ResolveError, RosettaError } from '../errors.js';
@@ -74,9 +78,8 @@ export function setField(
  *   3. Throw if neither works or the discovered obfuscated name isn't
  *      in the loaded map.
  *
- * The resolver implementation exposes a `reverseLookup` helper that
- * isn't on the public Resolver interface; we feature-detect it so
- * future swappable resolvers stay compatible.
+ * `reverseLookup` is part of the locked Resolver contract, so any
+ * conforming resolver supplies it — no runtime feature-detection.
  */
 function classNameFor(instance: unknown, resolver: Resolver): string {
     if (instance === null || typeof instance !== 'object') {
@@ -103,9 +106,7 @@ function classNameFor(instance: unknown, resolver: Resolver): string {
         );
     }
 
-    const reverse = (resolver as { reverseLookup?: (n: string) => string | undefined })
-        .reverseLookup;
-    const real = typeof reverse === 'function' ? reverse.call(resolver, obfName) : undefined;
+    const real = resolver.reverseLookup(obfName);
     if (real === undefined) {
         throw new ResolveError(
             `rosetta-frida: cannot reverse-lookup class '${obfName}' — the running instance's class is not in the loaded map.`,

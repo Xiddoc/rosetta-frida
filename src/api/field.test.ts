@@ -130,14 +130,13 @@ describe('field', () => {
         );
     });
 
-    it('tolerates a resolver without reverseLookup (defensive branch)', () => {
+    it('throws ResolveError when the obfuscated class is not in the map', () => {
         const h = makeHarness();
-        // Wrap the resolver to hide reverseLookup, ensuring the field
-        // helper degrades into a clear error rather than crashing.
-        const wrapped = {
-            resolveField: h.resolver.resolveField.bind(h.resolver),
-        } as unknown as Resolver;
-        expect(() => field(h.instance, 'sessionId', { resolver: wrapped })).toThrow(ResolveError);
+        // An instance whose obfuscated class name has no reverse mapping —
+        // reverseLookup (a Resolver-contract method) returns undefined and
+        // the helper surfaces a clear ResolveError.
+        const foreign = { $className: 'not-in-map' };
+        expect(() => field(foreign, 'sessionId', { resolver: h.resolver })).toThrow(ResolveError);
     });
 });
 
