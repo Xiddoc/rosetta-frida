@@ -16,6 +16,8 @@ import {
     JsonParseError,
     MapVersionMismatchError,
     SignerMismatchError,
+    MalformedSignerError,
+    MissingSignerError,
     HealthCheckFailedError,
     MarkerBlockError,
     UnresolvedAccessError,
@@ -225,7 +227,7 @@ class SignerMismatchError extends RosettaError {
 |---|---|
 | `app` | The session's detected/supplied app package name. |
 | `expected` | The map's `signer_sha256`, normalized (lowercase, no colons). |
-| `actual` | Every live signing-certificate SHA-256 observed (normalized). May contain more than one when the app has multiple signers. |
+| `actual` | Every live signing-certificate SHA-256 observed (normalized, **sorted** for deterministic reporting). May contain more than one when the app has multiple signers. |
 
 **Example message:** `rosetta-frida: signer mismatch for
 com.example.app — the loaded map (com.example.app@3.4.5) expects
@@ -235,13 +237,68 @@ enforceSigner: false to override).`
 
 **When fired:**
 
-- `rosetta.session({ map })` when the map has a `signer_sha256`, the
-  flag is on, and the live signer(s) don't match.
+- `rosetta.session({ map })` when the map has a valid `signer_sha256`,
+  the flag is on, the live app presents signer(s), and none match.
 
 The check is **skipped** (and no error is possible) when the map has no
 `signer_sha256` or when `enforceSigner: false`. A match on **any** one
 of several live signers passes. See
 [API · Session · Signer enforcement](../api/session.md#signer-enforcement).
+
+`SignerMismatchError` is one of three signer error types mirroring the
+Kotlin `rosetta-xposed` `SignerGuard` taxonomy:
+`MalformedSignerError` (the map's own hash is ill-formed),
+`MissingSignerError` (the live app exposes no readable signer), and this
+`SignerMismatchError` (signers present, none match).
+
+## `MalformedSignerError`
+
+The loaded map's `signer_sha256` is not well-formed. After normalization
+(trim surrounding whitespace, strip `:`, lowercase) it is **not** exactly
+64 lowercase hex characters (`^[0-9a-f]{64}$`).
+
+This is treated as an **author error in the map artifact**, distinct from
+a mismatch — reporting it as a mismatch would mask a bad map as a spoof.
+The canonical maps schema also pins `signer_sha256` to `^[0-9a-f]{64}$`,
+so a conformant map can never trip this at runtime. Mirrors the Kotlin
+`MalformedSignerException`.
+
+```typescript
+class MalformedSignerError extends RosettaError {
+    readonly value: string;
+    readonly reason: string;
+}
+```
+
+| Field | Description |
+|---|---|
+| `value` | The offending hash value as supplied (before/around normalization). |
+| `reason` | Why it was rejected (e.g. "must be 64 hex chars after normalization, got 8"). |
+
+**When fired:** during signer enforcement, *before* the live signers are
+read, so a bad map hash is reported even when the app exposes no signer.
+
+## `MissingSignerError`
+
+The loaded map carries a **valid** `signer_sha256` but the live app
+exposes **no readable** signing certificate, so the authenticity guard
+cannot be satisfied. Fail-closed (not gated by `failurePolicy`): a map
+that demands a signer must not silently pass against an app that presents
+none. Mirrors the Kotlin `MissingSignerException`.
+
+```typescript
+class MissingSignerError extends RosettaError {
+    readonly expected: string;
+}
+```
+
+| Field | Description |
+|---|---|
+| `expected` | The normalized signer hash the map demands but could not verify. |
+
+**When fired:** `rosetta.session({ map })` when the map has a valid
+`signer_sha256`, the flag is on, and the running app exposes no readable
+signing certificate. Override with `enforceSigner: false`.
 
 ## `HealthCheckFailedError`
 

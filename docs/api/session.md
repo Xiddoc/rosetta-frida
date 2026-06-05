@@ -159,6 +159,17 @@ Set to `false` to opt out — e.g. when attaching to a locally re-signed
 debug build of an app whose map was captured from the production-signed
 APK.
 
+**Cross-client contract.** `enforceSigner: false` is the Frida-idiomatic
+equivalent of the Kotlin `rosetta-xposed` client's
+`RosettaXposed.fromMapUnverified` construction path: both select the
+**unverified** path that skips the signer guard entirely. Frida has no
+constructor-overload idiom, so the opt-out is expressed as a typed
+`SessionOptions` flag instead; opted-out (`enforceSigner: false`) ==
+the unverified path. With the flag on (the default) and a valid
+`signer_sha256` present, enforcement is unconditional and fail-closed on
+both clients, with a matching error taxonomy (`MalformedSignerError` /
+`MissingSignerError` / `SignerMismatchError`).
+
 ## Return value — `Session`
 
 ```typescript
@@ -234,7 +245,9 @@ events as your hooks exercise the resolver. Subscribe via
 | Error | When |
 |---|---|
 | [`MapVersionMismatchError`](../reference/errors.md#mapversionmismatcherror) | The picked map's `(app, version)` does not match the detected `(app, version)`. Includes a hint about `versionMatch: 'fuzzy'` if applicable. |
-| [`SignerMismatchError`](../reference/errors.md#signermismatcherror) | The map carries a `signer_sha256`, enforcement is on, and no live signing certificate matched. Carries `expected` + `actual` hashes. Override with `enforceSigner: false`. |
+| [`SignerMismatchError`](../reference/errors.md#signermismatcherror) | The map carries a valid `signer_sha256`, enforcement is on, the app presents signer(s), and none matched. Carries `expected` + sorted `actual` hashes. Override with `enforceSigner: false`. |
+| [`MalformedSignerError`](../reference/errors.md#malformedsignererror) | The map's `signer_sha256` is not 64 hex chars after normalization (author error). Raised before the live signers are read. |
+| [`MissingSignerError`](../reference/errors.md#missingsignererror) | The map carries a valid `signer_sha256`, enforcement is on, but the live app exposes no readable signing certificate. Override with `enforceSigner: false`. |
 | [`HealthCheckFailedError`](../reference/errors.md#healthcheckfailederror) | Health check failed and `failurePolicy === 'strict'`. |
 | `Error` ("no map for version …") | Registry has no exact-version entry and `versionMatch !== 'fuzzy'`. |
 | `Error` ("registry is empty") | Registry has no entries at all. |
@@ -333,9 +346,19 @@ Behaviour:
   the health check, this is *not* gated by `failurePolicy` — an
   authenticity failure always halts, because the whole point is to
   refuse a map that does not belong to the running app.
+- **Map hash malformed** — the map's `signer_sha256` is not 64 lowercase
+  hex characters after normalization. This is an **author error**, not a
+  spoof, so it fails closed with
+  [`MalformedSignerError`](../reference/errors.md#malformedsignererror)
+  *before* the live signers are even read (rather than a misleading
+  mismatch).
+- **App signer unreadable** — the map has a valid `signer_sha256` but the
+  running app exposes no readable signing certificate. Fails closed with
+  [`MissingSignerError`](../reference/errors.md#missingsignererror).
 - **Field absent** — the map has no `signer_sha256`. The check is
   skipped and no `signer-check` event is emitted.
-- **Opted out** — `enforceSigner: false`. Same as field-absent: skipped
+- **Opted out** — `enforceSigner: false` (the equivalent of the Kotlin
+  client's unverified construction path). Same as field-absent: skipped
   and silent.
 
 **Multiple signers.** An APK may be signed by more than one certificate
@@ -347,8 +370,14 @@ party."
 
 **Normalization.** Both the map's `signer_sha256` and the live hashes
 are normalized before comparison — lowercased, with colon separators
-and whitespace stripped — so a map authored as `AB:CD:...` compares
-equal to the runtime bytes.
+stripped and *surrounding* whitespace trimmed — so a map authored as
+`AB:CD:...` compares equal to the runtime bytes. Interior whitespace is
+deliberately **not** stripped, so a garbled hash survives to fail the
+64-hex well-formedness check (rejected as `MalformedSignerError`); this
+matches the Kotlin client so malformed input is rejected identically on
+both. The reported `actual` live-signer hashes are **sorted**, so
+mismatch reports are deterministic and align with the Kotlin client's
+sorted-set rendering.
 
 ```typescript
 rosetta.events.onType('signer-check', (e) => {
