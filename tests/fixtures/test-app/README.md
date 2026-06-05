@@ -77,22 +77,22 @@ The fixture feeds the pipeline-CI integration test that validates the
 The Java source is _designed_ to exercise every feature of the
 `RosettaMap` schema at `src/types/map.ts`:
 
-| Schema feature             | Java construct                                                                                                |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `kind: aidl_stub`          | `RemoteService` (extends `IRemoteService.Stub`)                                                               |
-| `kind: aidl_callback`      | `IServiceCallback`                                                                                            |
-| `kind: class`              | `BlobCache`, `Config`, `Ticket`, `RemoteServiceClient`, `RemoteService`                                       |
-| `kind: interface`          | `PromiseCallback`                                                                                             |
-| `kind: enum`               | `ErrorCode`                                                                                                   |
-| `kind: synthetic`          | `Ticket$Companion` plus javac-emitted `access$NNN` accessors from `Ticket$Reader`                             |
-| `kind: anonymous`          | `RemoteService$1`, `AbstractServiceClient$1`                                                                  |
-| Multi-overload methods     | `IRemoteService.requestTicket` (AIDL — 2 overloads), `BlobCache.put` (2 overloads), `Ticket.<init>` (2 ctors) |
-| Static fields              | `Config.MAX_RETRIES` (final), `Config.currentDebugLevel` (mutable), `BlobCache.MAX_SIZE`                      |
-| Instance fields            | `BlobCache.buffer` (private), `BlobCache.lastEvictedKey` (public), `RemoteServiceClient.sessionId` / `.flags` |
-| `aidl_descriptor`          | `IRemoteService.Stub.DESCRIPTOR` (AIDL-generated)                                                             |
-| `anchors` (stable strings) | `ROSETTA_ANCHOR` constants on `Config`, `BlobCache`, `RemoteService`                                          |
-| `extends` chain            | `RemoteServiceClient extends AbstractServiceClient extends Object`                                            |
-| Cross-class signature refs | `IRemoteService.requestTicket(Bundle, IServiceCallback)`, `Ticket$Companion.create(...) → Ticket`             |
+| Schema feature             | Java construct                                                                                                                                                                   |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind: aidl_stub`          | `RemoteService` (extends `IRemoteService.Stub`)                                                                                                                                  |
+| `kind: aidl_callback`      | `IServiceCallback`                                                                                                                                                               |
+| `kind: class`              | `BlobCache`, `Config`, `Ticket`, `RemoteServiceClient`, `RemoteService`                                                                                                          |
+| `kind: interface`          | `PromiseCallback`                                                                                                                                                                |
+| `kind: enum`               | `ErrorCode`                                                                                                                                                                      |
+| `kind: synthetic`          | `Ticket$Companion` plus javac-emitted `access$NNN` accessors from `Ticket$Reader`                                                                                                |
+| `kind: anonymous`          | `RemoteService$1`, `AbstractServiceClient$1`                                                                                                                                     |
+| Multi-overload methods     | `BlobCache.put` (2 overloads), `Ticket.<init>` (2 ctors) — AIDL interfaces forbid overloading, so the overload-array form is exercised by plain classes, not by `IRemoteService` |
+| Static fields              | `Config.MAX_RETRIES` (final), `Config.currentDebugLevel` (mutable), `BlobCache.MAX_SIZE`                                                                                         |
+| Instance fields            | `BlobCache.buffer` (private), `BlobCache.lastEvictedKey` (public), `RemoteServiceClient.sessionId` / `.flags`                                                                    |
+| `aidl_descriptor`          | `IRemoteService.Stub.DESCRIPTOR` (AIDL-generated)                                                                                                                                |
+| `anchors` (stable strings) | `ROSETTA_ANCHOR` constants on `Config`, `BlobCache`, `RemoteService`                                                                                                             |
+| `extends` chain            | `RemoteServiceClient extends AbstractServiceClient extends Object`                                                                                                               |
+| Cross-class signature refs | `IRemoteService.requestTicket(Bundle, IServiceCallback)`, `Ticket$Companion.create(...) → Ticket`                                                                                |
 
 ## Building
 
