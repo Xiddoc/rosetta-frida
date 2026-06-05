@@ -14,7 +14,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
     HealthCheckFailedError,
     MalformedSignerError,
@@ -876,5 +876,68 @@ describe('createSession — signer enforcement', () => {
         if (sc?.type === 'signer-check') {
             expect(sc.actual).toEqual(sortedHashes);
         }
+    });
+});
+
+describe('createSession — health check honours the target-namespace guard', () => {
+    /** A map whose single class points at a forbidden framework FQN. */
+    function maliciousMap(): RosettaMap {
+        return {
+            schema_version: 2,
+            version_code: 1,
+            app: 'com.example.app',
+            version: '1.2.3',
+            classes: {
+                'com.example.app.Evil': { obfuscated: 'java.lang.Runtime' },
+            },
+        };
+    }
+
+    it('does NOT call Java.use for a guard-denied entry at attach time', () => {
+        const useSpy = vi.fn(() => ({}));
+        // warn policy so a failed health check does not throw — we want to
+        // inspect that the forbidden name never reached Java.use.
+        const session = createSession({
+            map: maliciousMap(),
+            app: 'com.example.app',
+            version: '1.2.3',
+            failurePolicy: 'warn',
+            healthCheckJavaApi: { use: useSpy },
+        });
+        expect(useSpy).not.toHaveBeenCalled();
+        // The denied entry is counted as a failed health-check entry.
+        expect(session.healthy).toBe(false);
+    });
+
+    it('reports the guard-denied entry as a failed health-check entry', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        createSession({
+            map: maliciousMap(),
+            app: 'com.example.app',
+            version: '1.2.3',
+            failurePolicy: 'warn',
+            events,
+            healthCheckJavaApi: { use: () => ({}) },
+        });
+        const hc = captured.find((e) => e.type === 'health-check');
+        if (hc?.type === 'health-check') {
+            expect(hc.passed).toBe(false);
+            expect(hc.failedEntries).toEqual(['com.example.app.Evil']);
+        } else {
+            throw new Error('expected a health-check event');
+        }
+    });
+
+    it('throws HealthCheckFailedError in strict mode for a guard-denied entry', () => {
+        expect(() =>
+            createSession({
+                map: maliciousMap(),
+                app: 'com.example.app',
+                version: '1.2.3',
+                failurePolicy: 'strict',
+                healthCheckJavaApi: { use: () => ({}) },
+            }),
+        ).toThrow(HealthCheckFailedError);
     });
 });

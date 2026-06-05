@@ -11,6 +11,7 @@ All error classes are exported from the package root:
 import {
     RosettaError,
     ResolveError,
+    TargetPolicyError,
     AmbiguousOverloadError,
     MapValidationError,
     JsonParseError,
@@ -85,6 +86,55 @@ class ResolveError extends RosettaError {
   is not in the map.
 - `rosetta.field(instance, 'someField')` when `someField` is not
   mapped on the instance's class.
+
+## `TargetPolicyError`
+
+A resolution **target** (the FQN that would be passed to `Java.use`) is
+forbidden by the target-namespace guard (RFC 0001 C1). This is a
+**critical security guard**: a community map maps a real name to an
+arbitrary obfuscated string, and a malicious or buggy map could redirect
+a hook at a sensitive framework class (`java.lang.Runtime`,
+`android.app.*`, a `dagger.internal.Provider`). The guard confines
+targets to package-local / app-owned namespaces (plus an explicit
+escape-hatch allowlist) and throws this **before any `Java.use` call**.
+
+Distinct from [`ResolveError`](#resolveerror): a `TargetPolicyError`
+means the resolved target is *forbidden*, not merely *absent*. Mirrors
+the Kotlin `rosetta-xposed` `TargetPolicyException`. **Strict only —
+there is no warn-and-proceed mode.**
+
+```typescript
+class TargetPolicyError extends RosettaError {
+    readonly realName: string;
+    readonly target: string;
+    readonly reason: 'reserved-namespace' | 'foreign-namespace';
+    readonly classScope?: string;
+}
+```
+
+| Field | Description |
+|---|---|
+| `realName` | The real name being resolved when the forbidden target was produced. |
+| `target` | The rejected target FQN (what would have been passed to `Java.use`). |
+| `reason` | `'reserved-namespace'` (matched the built-in/extended denylist) or `'foreign-namespace'` (neither package-local nor app-owned). |
+| `classScope` | For method/field/arg-type targets, the owning class real-name. Undefined for class-level lookups. |
+
+**Example message:** `rosetta-frida: target 'java.lang.Runtime' for real
+name 'com.example.app.Evil' is forbidden by the namespace guard:
+namespace 'java.lang.Runtime' is on the reserved denylist (prefix
+'java.').`
+
+**When fired:**
+
+- `rosetta.use(...)` / `rosetta.hook(...)` / `rosetta.map.resolveClass(...)`
+  / `resolveMethod` / `resolveField` when the resolved obfuscated class
+  lands on a reserved or foreign namespace.
+- arg-type translation (the `.overload(...)` secondary vector) when a
+  mapped arg-type's obfuscated form is forbidden.
+- a runtime `override(...)` pointing at a forbidden FQN.
+
+Permit a legitimate framework hook with the exact-FQN escape hatch:
+`rosetta.session({ map, targetPolicy: { allow: ['java.lang.Runtime'] } })`.
 
 ## `AmbiguousOverloadError`
 

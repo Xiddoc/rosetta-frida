@@ -29,6 +29,57 @@ export type FailurePolicy = 'strict' | 'warn';
  */
 export type VersionMatch = 'exact' | 'fuzzy';
 
+/**
+ * Policy for the target-namespace guard (RFC 0001 C1, critical security
+ * fix).
+ *
+ * A community map maps a real name to an ARBITRARY obfuscated string, and
+ * the runtime feeds that string verbatim into `Java.use(...)`. A malicious
+ * or simply wrong map could therefore redirect a hook at a sensitive
+ * framework class — `java.lang.Runtime`, `android.app.*`, a
+ * `dagger.internal.Provider`, etc. This policy confines a resolution
+ * *target* (the FQN passed to `Java.use`) to the app's own / package-local
+ * namespace, with an explicit escape-hatch allowlist for legitimate
+ * framework hooks. Anything else is rejected fail-closed — the resolver
+ * THROWS `TargetPolicyError` before the `Java.use` call ever happens.
+ *
+ * There is no warn-and-proceed mode: the guard is STRICT only.
+ *
+ * This is the Frida twin of the Kotlin `TargetPolicy` in rosetta-xposed;
+ * both clients share the same decision order and the same
+ * {@link DEFAULT_DENY_PREFIXES} so they accept/reject the same maps.
+ */
+export interface TargetPolicy {
+    /**
+     * Caller-supplied reserved top-level prefixes a target may NOT resolve
+     * into. When {@link mergeDenylist} is true (the default) these are
+     * ADDED to the built-in `DEFAULT_DENY_PREFIXES`; when false they
+     * REPLACE the defaults entirely (use with care — that opens framework
+     * namespaces). Matched on a dot boundary.
+     */
+    denyPrefixes?: readonly string[];
+
+    /**
+     * Whether {@link denyPrefixes} augment (true, default) or replace
+     * (false) the built-in `DEFAULT_DENY_PREFIXES`.
+     */
+    mergeDenylist?: boolean;
+
+    /**
+     * Exact-FQN escape hatch. A target whose normalized element FQN matches
+     * an entry here is ALLOWED even if it lands on a reserved prefix — for
+     * the rare legitimate framework hook. Exact, case-sensitive match.
+     */
+    allow?: readonly string[];
+
+    /**
+     * How many leading dot-separated labels of the app package form the
+     * app's own namespace prefix (default 2, e.g. `com.example` from
+     * `com.example.app`).
+     */
+    appNamespaceLabels?: number;
+}
+
 /** User-facing options for `rosetta.session(...)`. */
 export interface SessionOptions {
     /**
@@ -94,6 +145,18 @@ export interface SessionOptions {
      * the production-signed APK). Default: `true` (secure default).
      */
     enforceSigner?: boolean;
+
+    /**
+     * Target-namespace guard policy (RFC 0001 C1). Confines the FQNs a map
+     * can redirect hooks at to package-local / app-owned namespaces, with
+     * an explicit escape-hatch allowlist.
+     *
+     * Omitted (the default) means: built-in `DEFAULT_DENY_PREFIXES`, empty
+     * allowlist, 2 app-namespace labels — i.e. FAIL-CLOSED (a map pointing
+     * a hook at `java.lang.Runtime` is rejected with no configuration
+     * needed).
+     */
+    targetPolicy?: TargetPolicy;
 }
 
 /** The handle returned from `rosetta.session(...)`. */

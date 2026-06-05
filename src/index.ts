@@ -18,6 +18,13 @@ export { validateMap, rosettaMapSchema } from './validate/index.js';
 // Resolver
 export { createResolver, ResolverImpl, makeSentinel, isSentinel } from './resolver/index.js';
 export type { CreateResolverOptions } from './resolver/index.js';
+export {
+    DEFAULT_DENY_PREFIXES,
+    DEFAULT_APP_NAMESPACE_LABELS,
+    appPrefixOf,
+    isTargetAllowed,
+    assertTargetAllowed,
+} from './resolver/index.js';
 
 // Marker block
 export {

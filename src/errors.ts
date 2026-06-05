@@ -31,6 +31,39 @@ export class ResolveError extends RosettaError {
     }
 }
 
+/**
+ * Thrown when a resolution TARGET (the FQN that would be passed to
+ * `Java.use`) is rejected by the namespace guard (RFC 0001 C1, critical
+ * security fix).
+ *
+ * Fail-closed: a community map maps a real name to an arbitrary obfuscated
+ * string, and that string is fed verbatim into `Java.use(...)`. A malicious
+ * or buggy map could redirect a hook at a sensitive framework class (e.g.
+ * `java.lang.Runtime`, `android.app.*`). The guard confines targets to
+ * package-local / app-owned namespaces (plus an explicit escape-hatch
+ * allowlist) and THROWS this — before any `Java.use` call — for anything
+ * else. There is no warn-and-proceed mode (strict only).
+ *
+ * Distinct from {@link ResolveError} (the "real name has no map entry"
+ * case): a `TargetPolicyError` means the resolved target is *forbidden*,
+ * not merely *absent*. Mirrors the Kotlin `TargetPolicyException`.
+ */
+export class TargetPolicyError extends RosettaError {
+    constructor(
+        message: string,
+        /** The real name being resolved when the forbidden target was produced. */
+        public readonly realName: string,
+        /** The rejected target FQN (what would have been passed to `Java.use`). */
+        public readonly target: string,
+        /** Which rule denied the target. */
+        public readonly reason: 'reserved-namespace' | 'foreign-namespace',
+        /** The class scope, when the rejected target was a method/field/arg-type class. */
+        public readonly classScope?: string,
+    ) {
+        super(message);
+    }
+}
+
 /** Thrown when a method real-name has multiple overloads and the user didn't disambiguate. */
 export class AmbiguousOverloadError extends RosettaError {
     constructor(

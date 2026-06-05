@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RosettaError } from '../errors.js';
+import { RosettaError, TargetPolicyError } from '../errors.js';
 import type { RosettaMap } from '../types/map.js';
 import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/index.js';
 import { _resetCurrentSession, getCurrentSession, rosetta } from './rosetta.js';
@@ -248,5 +248,92 @@ describe('rosetta ambient namespace', () => {
         });
         expect(detects).toEqual(['com.example.app']);
         offDetect();
+    });
+});
+
+describe('rosetta — target-namespace guard end-to-end (RFC 0001 C1)', () => {
+    beforeEach(() => {
+        installFridaMock();
+        _resetCurrentSession();
+    });
+    afterEach(() => {
+        _resetCurrentSession();
+        resetFridaMock();
+    });
+
+    function maliciousMap(): RosettaMap {
+        return {
+            schema_version: 2,
+            version_code: 1,
+            app: 'com.example.app',
+            version: '3.4.5',
+            classes: {
+                'com.example.app.Evil': {
+                    obfuscated: 'java.lang.Runtime',
+                    methods: { exec: { obfuscated: 'm', signature: '()V' } },
+                },
+            },
+        };
+    }
+
+    /** The mocked Java.use (a vi.fn) on the global. */
+    function javaUseMock(): ReturnType<typeof vi.fn> {
+        return (globalThis as unknown as { Java: { use: ReturnType<typeof vi.fn> } }).Java.use;
+    }
+
+    it('rosetta.use throws TargetPolicyError BEFORE Java.use is called', () => {
+        rosetta.session({
+            map: maliciousMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        const useSpy = javaUseMock();
+        useSpy.mockClear();
+        expect(() => rosetta.use('com.example.app.Evil')).toThrow(TargetPolicyError);
+        expect(useSpy).not.toHaveBeenCalled();
+    });
+
+    it('rosetta.hook throws TargetPolicyError BEFORE Java.use is called', () => {
+        rosetta.session({
+            map: maliciousMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        const useSpy = javaUseMock();
+        useSpy.mockClear();
+        expect(() => rosetta.hook('com.example.app.Evil.exec', () => null)).toThrow(
+            TargetPolicyError,
+        );
+        expect(useSpy).not.toHaveBeenCalled();
+    });
+
+    it('the default (omitted) policy rejects a framework target with no config', () => {
+        // No targetPolicy supplied — the built-in fail-closed default applies.
+        rosetta.session({
+            map: maliciousMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        expect(() => rosetta.use('com.example.app.Evil')).toThrow(/reserved denylist/);
+    });
+
+    it('an explicit allow escape-hatch lets a legit framework hook through', () => {
+        rosetta.session({
+            map: maliciousMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+            targetPolicy: { allow: ['java.lang.Runtime'] },
+        });
+        // Register the framework class on the mock so the proxy can resolve it.
+        MockFrida.registerClass('java.lang.Runtime', {
+            methods: { m: [{ argumentTypes: [], returnType: { className: 'void' } }] },
+        });
+        const proxy = rosetta.use('com.example.app.Evil');
+        expect(proxy.$obfName).toBe('java.lang.Runtime');
+        expect(javaUseMock()).toHaveBeenCalledWith('java.lang.Runtime');
     });
 });
