@@ -93,9 +93,54 @@ export function stripComments(src) {
 }
 
 /**
+ * Strip nested brace blocks from an interface body so that declarations
+ * inside `parcelable`, `union`, `enum`, or nested `interface` bodies do
+ * not leak into the parent's method list.
+ *
+ * We walk character-by-character; whenever we encounter a `{` that is
+ * preceded by one of the nesting keywords (after optional whitespace /
+ * an identifier), we skip everything up to the matching `}`.  Any other
+ * `{` (which should not appear in a well-formed top-level interface body)
+ * is left in place so the method regex continues to skip it via its
+ * `[^;{}]` guard.
+ *
+ * @param {string} body — the raw interface body (between the outer `{}`).
+ * @returns {string}
+ */
+function stripNestedBlocks(body) {
+    // Keyword that introduces a nested brace block in AIDL.
+    const nestKw = /\b(?:interface|parcelable|union|enum)\s+[A-Za-z_]\w*\s*\{/g;
+    let result = '';
+    let lastIndex = 0;
+    let m;
+    while ((m = nestKw.exec(body)) !== null) {
+        // Append everything up to (but not including) the opening `{`.
+        // We find the `{` by scanning backwards from the end of the match.
+        const bracePos = body.lastIndexOf('{', nestKw.lastIndex - 1);
+        result += body.slice(lastIndex, bracePos);
+        // Skip the brace-balanced nested block.
+        let depth = 1;
+        let j = bracePos + 1;
+        while (j < body.length && depth > 0) {
+            if (body[j] === '{') depth += 1;
+            else if (body[j] === '}') depth -= 1;
+            j += 1;
+        }
+        lastIndex = j;
+        nestKw.lastIndex = j;
+    }
+    result += body.slice(lastIndex);
+    return result;
+}
+
+/**
  * Parse the AIDL `interface <Name> { ... }` blocks out of (comment-free)
  * source and return, per interface, the list of method names in
  * declaration order.
+ *
+ * Nested `parcelable`/`union`/`enum`/`interface` blocks are stripped
+ * from the interface body before method extraction so their contents
+ * cannot produce phantom or duplicate method names on the parent.
  *
  * @param {string} src — AIDL source (comments may still be present;
  *   they are stripped internally).
@@ -118,7 +163,10 @@ export function parseInterfaces(src) {
             else if (clean[j] === '}') depth -= 1;
             j += 1;
         }
-        const body = clean.slice(start, j - 1);
+        const rawBody = clean.slice(start, j - 1);
+        // Strip nested parcelable/union/enum/interface blocks so their
+        // contents don't leak into the parent's method list.
+        const body = stripNestedBlocks(rawBody);
         interfaces.push({ name, methods: parseMethodNames(body) });
         ifaceRe.lastIndex = j;
     }
@@ -126,18 +174,39 @@ export function parseInterfaces(src) {
 }
 
 /**
+ * Strip AIDL annotation tokens (`@Ident` and `@Ident(...)`) from a
+ * string so they cannot be mistaken for method declarations. The
+ * parenthesised argument list, if present, may contain commas, `=`,
+ * and quoted strings (already collapsed to a space by `stripComments`),
+ * but NOT nested parens — that is sufficient for all real AIDL
+ * annotations.
+ *
+ * @param {string} s
+ * @returns {string}
+ */
+function stripAnnotations(s) {
+    // First remove `@Ident(...)` forms (with an argument list), then bare `@Ident`.
+    return s.replace(/@[A-Za-z_]\w*\s*\([^)]*\)/g, '').replace(/@[A-Za-z_]\w*/g, '');
+}
+
+/**
  * Extract method names from one interface body. AIDL methods are
  * `[oneway] <returnType> <name>( ... );` — we match the identifier that
  * immediately precedes a `(`.
+ *
+ * Annotations (e.g. `@Backing(type="int")` or `@JavaPassthrough(x="1")`)
+ * are stripped first so their name cannot be mistaken for a method name,
+ * whether they appear on their own line or inline on the same statement.
  *
  * @param {string} body
  * @returns {string[]}
  */
 export function parseMethodNames(body) {
+    const clean = stripAnnotations(body);
     const names = [];
     const methodRe = /([A-Za-z_]\w*)\s*\([^;{}]*\)\s*;/g;
     let m;
-    while ((m = methodRe.exec(body)) !== null) {
+    while ((m = methodRe.exec(clean)) !== null) {
         names.push(m[1]);
     }
     return names;

@@ -114,4 +114,62 @@ describe('lint-aidl: detection', () => {
             { interface: 'IFoo', method: 'a', count: 2 },
         ]);
     });
+
+    // --- inline-annotation defect guards ---
+
+    it('does not false-positive on a method with an inline parameterized annotation', () => {
+        // @Backing(type="int") is an inline annotation on the same statement.
+        // Before the fix, the regex captured "Backing" as a phantom method name.
+        const src = `
+            interface IFoo {
+                @Backing(type="int") void a(int x);
+                void b(int y);
+            }
+        `;
+        expect(findDuplicateAidlMethods(src)).toEqual([]);
+    });
+
+    it('detects a real duplicate behind inline parameterized annotations (false-negative guard)', () => {
+        // Both `a` declarations are preceded by an inline @JavaPassthrough annotation.
+        // Before the fix the annotation name was captured instead of `a`, masking the
+        // genuine duplicate and returning [] — a false negative.
+        const src = `
+            interface IFoo {
+                @JavaPassthrough(x="1") void a(int x);
+                @JavaPassthrough(x="2") void a(int x, int y);
+            }
+        `;
+        expect(findDuplicateAidlMethods(src)).toEqual([
+            { interface: 'IFoo', method: 'a', count: 2 },
+        ]);
+    });
+
+    // --- nested-declaration flattening defect guards ---
+
+    it('does not false-positive when a nested parcelable block contains a method-shaped token', () => {
+        // Before the fix, `foo()` inside the nested parcelable leaked into
+        // IFoo's method list; if a top-level method is also named `foo` that
+        // produces a spurious duplicate.
+        const src = `
+            interface IFoo {
+                void foo(int x);
+                parcelable Inner {
+                    void foo(String s);
+                }
+            }
+        `;
+        expect(findDuplicateAidlMethods(src)).toEqual([]);
+    });
+
+    it('does not false-positive when a nested union block shares a token name with the parent interface', () => {
+        const src = `
+            interface IFoo {
+                void bar();
+                union Options {
+                    void bar();
+                }
+            }
+        `;
+        expect(findDuplicateAidlMethods(src)).toEqual([]);
+    });
 });

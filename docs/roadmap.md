@@ -65,8 +65,12 @@ move between them as priorities shift.
   (`scripts/lint-aidl.mjs`, wired into `npm run verify` /
   `verify:fast` as `aidl:lint`, and into the `ci.yml` `verify` job)
   fails fast on any duplicate interface-method name, with a regression
-  test at `tests/lint-aidl.test.ts`. This closes the visibility gap on
-  every branch without needing an Android SDK in CI.
+  test at `tests/lint-aidl.test.ts`. This closes the
+  **duplicate-AIDL-method** visibility gap on every branch without needing
+  an Android SDK in CI. (The broader class of build-visibility gaps —
+  end-to-end APK compilation and golden diffs — remains open; closing that
+  requires hardening `pipeline.yml`'s trigger scope, a separate
+  follow-up.)
 - **Why it matters.** This is the only check that exercises the **real
   sigmatcher output ordering** end-to-end; the unit suite can't. Until
   it's green, the goldens and the adapter's class/method emission order
@@ -91,10 +95,11 @@ move between them as priorities shift.
   (`dl.google.com` / `maven.google.com` return 403 while PyPI/GitHub are
   reachable). Do this in a session/environment where those hosts are
   allowlisted (or against CI).
-- **Status.** AIDL root cause **fixed** + an SDK-free duplicate-method
-  guard now runs in `verify`/`ci.yml`. The end-to-end golden-diff
-  remains blocked on a real Android-SDK + sigmatcher build; high
-  priority once that environment is reachable.
+- **Status.** AIDL root cause **fixed** + an SDK-free duplicate-AIDL-
+  method guard now runs in `verify`/`ci.yml`. The end-to-end golden-diff
+  (full APK build + sigmatcher) remains blocked on a real Android-SDK
+  environment; hardening `pipeline.yml`'s trigger to cover all branches
+  is the follow-up that closes the remaining build-visibility gap.
 
 ---
 
