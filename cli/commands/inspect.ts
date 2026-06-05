@@ -7,13 +7,13 @@
  *
  * For a registry bundle:
  *   "registry: com.example.app, versions=[1.2.3, 1.2.4], 94 classes total"
- *   (or "app=mixed" if the registry spans multiple apps)
+ *   (or "mixed" if the registry spans multiple apps, "(unknown)" if no
+ *   entry carries a usable app name)
  *
  * Designed to be greppable in CI output. No JSON, no fluff.
  */
 
 import { parseMarkerBlock } from '../../src/marker/parse.js';
-import { validateMap } from '../../src/validate/schema.js';
 import { RosettaError } from '../../src/errors.js';
 import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import type { CommandIo } from './io.js';
@@ -58,15 +58,25 @@ function classCount(classes: unknown): number {
 /**
  * Format the one-line summary of a single-map payload.
  *
- * The payload arrives from `parseMarkerBlock` cast (not validated) to
- * `RosettaMap`. We run the canonical `validateMap` so a malformed
- * payload becomes a clean handled `MapValidationError` (exit 1) instead
- * of an unhandled `TypeError` escaping to the top-level handler (exit 2).
+ * `inspect` is deliberately best-effort and applies ONE strictness across
+ * both shapes: it reads what it can off the cast-not-validated payload and
+ * never runs the heavy Zod `validateMap` on a read-only summary. That
+ * removes the old single-vs-registry asymmetry (single used to be strict,
+ * registry tolerant) and keeps inspect honestly looser than `patch`'s
+ * emit guard and `validate`'s strict gate. The exit-1-not-exit-2 goal
+ * (don't let `Object.keys(undefined)` throw on a missing `classes`) is met
+ * by {@link classCount} alone; absent metadata renders as `undefined`.
+ *
+ * The root must be a non-null object — the caller guards that before here.
  */
 function summarizeSingle(map: RosettaMap): string {
-    const valid = validateMap(map);
-    const classes = Object.keys(valid.classes).length;
-    return `${valid.app}@${valid.version}, schema_version ${valid.schema_version}, ${classes} classes`;
+    // The payload is cast (not validated) to RosettaMap; the declared
+    // field types (string / number) keep the template-literal lint happy.
+    // At runtime a malformed payload may leave them `undefined`, which
+    // renders as the literal "undefined" — acceptable for a best-effort
+    // summary. Only `classes` gets the defensive count to avoid a throw.
+    const classes = classCount((map as { classes?: unknown }).classes);
+    return `${map.app}@${map.version}, schema_version ${map.schema_version}, ${classes} classes`;
 }
 
 /**
@@ -89,16 +99,21 @@ function summarizeRegistry(maps: RosettaMapRegistry): string {
         if (typeof m.app === 'string') apps.add(m.app);
         totalClasses += classCount(m.classes);
     }
-    const appLabel = apps.size === 1 ? [...apps][0] : 'mixed';
+    // `mixed` only makes sense when *several* apps were seen; an empty set
+    // (every entry null/non-object or missing a string `app`) is "(unknown)",
+    // not "mixed" (which would falsely imply more than one app).
+    const appLabel =
+        apps.size === 0 ? '(unknown)' : apps.size === 1 ? ([...apps][0] as string) : 'mixed';
     return `registry: ${appLabel}, versions=[${versions.join(', ')}], ${totalClasses} classes total`;
 }
 
 /**
- * Execute the inspect command under the shared contract: print the
- * one-line summary to stdout and return 0. Handled failures throw a
- * `RosettaError` the router formats under the `rosetta inspect:` prefix.
+ * Execute the inspect command under the shared contract: return the
+ * one-line summary (the router prints it under the uniform
+ * `rosetta inspect:` prefix). Handled failures throw a `RosettaError` the
+ * router formats under the same prefix.
  */
-export async function runInspect(argv: readonly string[], io: CommandIo): Promise<number> {
+export async function runInspect(argv: readonly string[], io: CommandIo): Promise<string> {
     const args = parseInspectArgs(argv);
 
     let bundleText: string;
@@ -112,19 +127,18 @@ export async function runInspect(argv: readonly string[], io: CommandIo): Promis
     // missing/malformed block — let it propagate to the router.
     const parsed = parseMarkerBlock(bundleText);
 
-    // Summarizing touches the untrusted payload shape: a single map is
-    // validated, and a registry root must be a non-null object. Both
-    // failure modes throw a RosettaError so a malformed-but-parseable
-    // payload is a clean exit-1, not an unhandled TypeError → exit 2.
-    let line: string;
+    // Summarizing touches the untrusted (cast-not-validated) payload, so
+    // the root of either shape must be a non-null object — otherwise the
+    // tolerant field reads / `Object.keys` would throw. A bad root is a
+    // clean exit-1 RosettaError, not an unhandled TypeError → exit 2.
     if (parsed.kind === 'single') {
-        line = summarizeSingle(parsed.map);
-    } else {
-        if (typeof parsed.maps !== 'object' || parsed.maps === null) {
-            throw new RosettaError('registry payload is not an object');
+        if (typeof parsed.map !== 'object' || parsed.map === null) {
+            throw new RosettaError('map payload is not an object');
         }
-        line = summarizeRegistry(parsed.maps);
+        return summarizeSingle(parsed.map);
     }
-    io.stdout(line);
-    return 0;
+    if (typeof parsed.maps !== 'object' || parsed.maps === null) {
+        throw new RosettaError('registry payload is not an object');
+    }
+    return summarizeRegistry(parsed.maps);
 }
