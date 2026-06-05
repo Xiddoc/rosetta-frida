@@ -78,6 +78,22 @@ export interface SessionOptions {
 
     /** If true, skip the attach-time health check entirely. Default: false. */
     skipHealthCheck?: boolean;
+
+    /**
+     * Whether to enforce the map's signing-certificate authenticity guard
+     * (`signer_sha256`) at attach time.
+     *
+     * When `true` (the default) and the loaded map carries a
+     * `signer_sha256`, the session reads the running app's signing
+     * certificate in-process, SHA-256's it, and **fails closed** with
+     * `SignerMismatchError` if no live signer matches. When the map has no
+     * `signer_sha256` the check is skipped regardless of this flag.
+     *
+     * Set to `false` to opt out of the guard (e.g. when running against a
+     * locally re-signed debug build of an app whose map was captured from
+     * the production-signed APK). Default: `true` (secure default).
+     */
+    enforceSigner?: boolean;
 }
 
 /** The handle returned from `rosetta.session(...)`. */

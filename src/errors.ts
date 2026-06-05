@@ -77,6 +77,26 @@ export class MapVersionMismatchError extends RosettaError {
     }
 }
 
+/**
+ * Thrown when the loaded map carries a `signer_sha256` but none of the
+ * running app's signing certificates match it.
+ *
+ * This is a fail-closed authenticity guard (RFC 0001 Decision 3): a map
+ * cannot be silently applied to a repackaged or spoofed build that merely
+ * shares the same `version_code`. Carries the expected hash and every
+ * live signer hash that was observed so reports are actionable.
+ */
+export class SignerMismatchError extends RosettaError {
+    constructor(
+        message: string,
+        public readonly app: string,
+        public readonly expected: string,
+        public readonly actual: readonly string[],
+    ) {
+        super(message);
+    }
+}
+
 /** Thrown when the attach-time health check fails in strict mode. */
 export class HealthCheckFailedError extends RosettaError {
     constructor(

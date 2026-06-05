@@ -26,3 +26,23 @@ export {
     type HealthCheckResult,
     type RunHealthCheckOptions,
 } from './health-check.js';
+export {
+    detectSigners,
+    checkSigner,
+    normalizeSignerHash,
+    GET_SIGNING_CERTIFICATES,
+    GET_SIGNATURES,
+    type SignerJavaApi,
+    type SignerActivityThreadClass,
+    type SignerApplication,
+    type SignerContext,
+    type SignerPackageManager,
+    type SignerPackageInfo,
+    type SignerSignature,
+    type SignerByteArray,
+    type SignerSigningInfo,
+    type SignerMessageDigest,
+    type SignerMessageDigestClass,
+    type DetectedSigners,
+    type SignerCheckResult,
+} from './signer-detect.js';

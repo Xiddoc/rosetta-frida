@@ -23,7 +23,7 @@
  * Document this in the JSDoc on `createSession`.
  */
 
-import { HealthCheckFailedError, MapVersionMismatchError } from '../errors.js';
+import { HealthCheckFailedError, MapVersionMismatchError, SignerMismatchError } from '../errors.js';
 import { EventBus } from '../log.js';
 import { createResolver } from '../resolver/index.js';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
@@ -35,6 +35,7 @@ import {
     DEFAULT_HEALTH_CHECK_THRESHOLD,
     type HealthCheckJavaApi,
 } from './health-check.js';
+import { checkSigner, type SignerJavaApi } from './signer-detect.js';
 import { isRegistry, pickMapForVersion } from './version-match.js';
 
 /**
@@ -47,6 +48,8 @@ export interface InternalSessionOptions extends SessionOptions {
     autoDetectJavaApi?: AutoDetectJavaApi;
     /** Test-only: inject the Java API used by the health check. */
     healthCheckJavaApi?: HealthCheckJavaApi;
+    /** Test-only: inject the Java API used by the signer-certificate check. */
+    signerJavaApi?: SignerJavaApi;
     /**
      * Test-only: provide an explicit EventBus. If omitted, the session
      * creates its own session-local bus.
@@ -147,6 +150,15 @@ export class RosettaSession implements Session {
             schemaVersion: this.map.schema_version,
         });
 
+        // 3.5. Signer-certificate authenticity guard (RFC 0001 Decision 3).
+        //      Runs after version selection but before the functional
+        //      health check: identity/authenticity gates a map before we
+        //      bother probing whether its names resolve. Skipped when the
+        //      map carries no `signer_sha256`, or when explicitly opted out
+        //      via `enforceSigner: false`. When present + enforced it FAILS
+        //      CLOSED — a mismatch throws `SignerMismatchError`.
+        this.enforceSignerGuard(options, events);
+
         // 4. Health check.
         const skip = options.skipHealthCheck === true;
         const threshold = options.healthCheckThreshold ?? DEFAULT_HEALTH_CHECK_THRESHOLD;
@@ -181,6 +193,42 @@ export class RosettaSession implements Session {
             events: this.events,
             failurePolicy: this.failurePolicy,
         });
+    }
+
+    /**
+     * Run the signing-certificate authenticity guard for the active map.
+     *
+     * No-op (and emits nothing) when the map has no `signer_sha256` or when
+     * `enforceSigner: false`. Otherwise reads the live app's signer(s)
+     * in-process, emits a structured `signer-check` event, and FAILS CLOSED
+     * with `SignerMismatchError` if no live signer matches the map's
+     * expected hash. An app may carry multiple signers (key-rotation
+     * lineage / multi-signer builds); a match on ANY one is accepted.
+     */
+    private enforceSignerGuard(options: InternalSessionOptions, events: EventBus): void {
+        const expected = this.map.signer_sha256;
+        if (expected === undefined || expected === null) return;
+        if (options.enforceSigner === false) return;
+
+        const result = checkSigner(expected, options.signerJavaApi);
+        events.emit({
+            type: 'signer-check',
+            passed: result.passed,
+            app: this.app,
+            expected: result.expected,
+            actual: result.actual,
+            source: result.source,
+        });
+        if (!result.passed) {
+            throw new SignerMismatchError(
+                `rosetta-frida: signer mismatch for ${this.app} — the loaded map (${this.map.app}@${this.map.version}) expects signing-certificate SHA-256 ${result.expected}, ` +
+                    `but the running app is signed by [${result.actual.join(', ')}]. ` +
+                    'Refusing to apply a map to an app it was not captured for (pass enforceSigner: false to override).',
+                this.app,
+                result.expected,
+                result.actual,
+            );
+        }
     }
 
     /**
