@@ -47,6 +47,12 @@ describe('parseArgs', () => {
         expect(() => parseArgs(['--bogus'], SPEC)).toThrow(/unknown option: --bogus/);
     });
 
+    it('throws on any flag against an empty spec', () => {
+        // Self-contained coverage of the "no options declared" grammar:
+        // an empty spec still rejects a dash-led token as unknown.
+        expect(() => parseArgs(['--flag'], { options: [] })).toThrow(/unknown option: --flag/);
+    });
+
     it('throws RosettaError when a value option has no value', () => {
         expect(() => parseArgs(['-o'], SPEC)).toThrow(/-o requires a value/);
     });

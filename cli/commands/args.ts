@@ -45,6 +45,11 @@ export interface ParsedArgs {
 /**
  * Parse `argv` against `spec`.
  *
+ * A repeated value-option is **last-wins** by design: `-o a -o b` yields
+ * `b`. The rosetta CLI has no repeatable options, so a duplicate is almost
+ * always a typo, but treating it as an error would buy little for a tool
+ * this small; last-wins keeps the parser tiny and is pinned by a test.
+ *
  * @throws RosettaError on an unknown option or a value-option with no
  *   following value. Positional-count and required-option checks are left
  *   to the caller (they vary per command and produce command-specific
