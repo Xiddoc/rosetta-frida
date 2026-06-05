@@ -61,6 +61,8 @@ export const MAX_APP_LEN = 256;
 export const MAX_VERSION_LEN = 256;
 /** Max length for any other free-form string. */
 export const MAX_FREE_STRING_LEN = 4_096;
+/** Maximum value for `version_code` — the low 32 bits of Android `longVersionCode` (2^31 − 1). */
+export const MAX_VERSION_CODE = 2_147_483_647;
 
 /**
  * Record keys that must never appear in a map's `classes` / `methods` /
@@ -183,7 +185,7 @@ export const fieldMapSchema = boundedRecord(
 
 export const classEntrySchema: z.ZodType<ClassEntry> = z.object({
     obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
-    extends: z.string().max(MAX_SHORT_NAME_LEN).optional(),
+    extends: z.string().max(MAX_FREE_STRING_LEN).optional(),
     kind: classKindSchema.optional(),
     dex: z.string().max(MAX_FREE_STRING_LEN).optional(),
     aidl_descriptor: z.string().max(MAX_FREE_STRING_LEN).optional(),
@@ -225,7 +227,7 @@ export const rosettaMapSchema: z.ZodType<RosettaMap> = z.object({
         message: 'app must be a dotted package name (e.g. com.example.app)',
     }),
     version: z.string().min(1).max(MAX_VERSION_LEN),
-    version_code: z.number().int().nonnegative(),
+    version_code: z.number().int().nonnegative().max(MAX_VERSION_CODE),
     captured_at: z.string().max(MAX_FREE_STRING_LEN).optional(),
     signer_sha256: z
         .string()

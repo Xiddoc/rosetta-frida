@@ -401,7 +401,9 @@ validation up front rather than at attach time.
 | method overloads (array)    | 200 (min 1)                                      |
 | `anchors` per class         | 1 000                                            |
 | `sources`                   | 100                                              |
+| `version_code`              | 2 147 483 647 (low 32 bits of Android `longVersionCode`) |
 | obfuscated / short names    | 512 chars                                        |
+| `extends`                   | 4 096 chars (free-form / possibly-FQN type name) |
 | `signature` / field `type`  | 4 096 chars                                      |
 | `app`                       | 256 chars                                        |
 | `version`                   | 256 chars                                        |

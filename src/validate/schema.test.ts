@@ -11,6 +11,7 @@ import {
     MAX_SHORT_NAME_LEN,
     MAX_SIGNATURE_LEN,
     MAX_SOURCES,
+    MAX_VERSION_CODE,
     MAX_VERSION_LEN,
     RESERVED_RECORD_KEYS,
     SIGNER_SHA256_PATTERN,
@@ -270,6 +271,30 @@ describe('rosettaMapSchema', () => {
         ).toThrow();
     });
 
+    it('rejects version_code above MAX_VERSION_CODE (2147483647)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: MAX_VERSION_CODE + 1,
+                classes: {},
+            }),
+        ).toThrow();
+    });
+
+    it('accepts version_code exactly at MAX_VERSION_CODE (2147483647)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: MAX_VERSION_CODE,
+                classes: {},
+            }),
+        ).not.toThrow();
+    });
+
     it('rejects missing app', () => {
         expect(() =>
             rosettaMapSchema.parse({
@@ -445,6 +470,7 @@ describe('exported cap constants', () => {
         expect(MAX_APP_LEN).toBe(256);
         expect(MAX_VERSION_LEN).toBe(256);
         expect(MAX_FREE_STRING_LEN).toBe(4_096);
+        expect(MAX_VERSION_CODE).toBe(2_147_483_647);
         expect(RESERVED_RECORD_KEYS).toEqual(['__proto__', 'constructor', 'prototype']);
     });
 });
@@ -534,6 +560,24 @@ describe('string length caps', () => {
         expect(() =>
             mapSourceSchema.parse({ tool: 't', notes: 'x'.repeat(MAX_FREE_STRING_LEN + 1) }),
         ).toThrow();
+    });
+
+    it('rejects an over-length extends string (cap is MAX_FREE_STRING_LEN = 4096)', () => {
+        expect(() =>
+            classEntrySchema.parse({
+                obfuscated: 'aaaa',
+                extends: 'a'.repeat(MAX_FREE_STRING_LEN + 1),
+            }),
+        ).toThrow();
+    });
+
+    it('accepts an extends string exactly at MAX_FREE_STRING_LEN (4096)', () => {
+        expect(() =>
+            classEntrySchema.parse({
+                obfuscated: 'aaaa',
+                extends: 'a'.repeat(MAX_FREE_STRING_LEN),
+            }),
+        ).not.toThrow();
     });
 
     it('rejects an over-length anchor string', () => {
