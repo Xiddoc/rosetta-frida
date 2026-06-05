@@ -598,28 +598,30 @@ describe('hook — descriptor parser edge cases', () => {
         expect(() => setup.installHook()).not.toThrow();
     });
 
+    // The hook layer now delegates to the shared descriptor parser
+    // (resolver/signature.ts), so these assert that parser's messages.
     it('throws on missing opening paren', () => {
         const setup = setupForSig('I)V', [{ className: 'int' }]);
-        expect(() => setup.installHook()).toThrow(/malformed signature/);
+        expect(() => setup.installHook()).toThrow(/signature must start with/);
     });
 
     it('throws on missing closing paren', () => {
         const setup = setupForSig('(I', [{ className: 'int' }]);
-        expect(() => setup.installHook()).toThrow(/malformed signature/);
+        expect(() => setup.installHook()).toThrow(/signature missing/);
     });
 
     it('throws on unterminated L-class ref', () => {
         const setup = setupForSig('(Ljava/lang/String)V', [{ className: 'java.lang.String' }]);
-        expect(() => setup.installHook()).toThrow(/unterminated class ref/);
+        expect(() => setup.installHook()).toThrow(/unterminated 'L' descriptor/);
     });
 
     it('throws on unknown primitive code', () => {
         const setup = setupForSig('(Q)V', [{ className: 'int' }]);
-        expect(() => setup.installHook()).toThrow(/unknown primitive/);
+        expect(() => setup.installHook()).toThrow(/unknown descriptor char/);
     });
 
     it('throws on trailing `[` with no element type', () => {
         const setup = setupForSig('([)V', [{ className: '[' }]);
-        expect(() => setup.installHook()).toThrow(/malformed descriptor/);
+        expect(() => setup.installHook()).toThrow(/array prefix without element/);
     });
 });

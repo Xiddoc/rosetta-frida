@@ -38,6 +38,7 @@
 import { RosettaError } from '../errors.js';
 import { defaultJavaBridge, type JavaBridge } from '../java-bridge.js';
 import { resolveMethodOrSentinel } from '../resolver/resolver.js';
+import { extractArgRegion, parseDescriptorArgs } from '../resolver/signature.js';
 import { isSentinel } from '../resolver/sentinel.js';
 import type { Resolver, ResolvedMethod } from '../types/resolver.js';
 import { pushProceedFrame, type ProceedFrame } from './proceed.js';
@@ -126,8 +127,9 @@ export function hook(
         );
     }
 
-    // Select the right overload via translated arg types.
-    const translatedArgs = parseSignatureToTranslatedArgs(resolved.signature);
+    // Select the right overload via Frida-shaped arg types, parsed from the
+    // resolved JVM descriptor signature by the shared descriptor parser.
+    const translatedArgs = parseDescriptorArgs(extractArgRegion(resolved.signature), 'frida');
     const overload = callOverload(methodBundle, translatedArgs);
 
     // Capture the pre-hook implementation so detach can restore it.
@@ -192,87 +194,6 @@ function parseTarget(target: string | HookTarget): {
         argTypes: target.args,
     };
 }
-
-/**
- * Convert the resolved method signature into the args list expected
- * by Frida's `.overload(...)`. The signature in the resolver result
- * is a JVM descriptor like `(Landroid/os/Bundle;Lbbbb;)V` — Frida
- * `.overload` takes class-name-style strings (e.g. `'android.os.Bundle'`,
- * `'bbbb'`). We parse the descriptor and convert each arg.
- *
- * Pulled out as a separate helper so the inversion is testable and
- * the main hook flow stays readable.
- */
-function parseSignatureToTranslatedArgs(signature: string): string[] {
-    // Extract the parenthesised arg list.
-    const close = signature.indexOf(')');
-    if (!signature.startsWith('(') || close < 0) {
-        throw new RosettaError(
-            `rosetta.hook: malformed signature '${signature}' — expected JVM descriptor.`,
-        );
-    }
-    const inner = signature.slice(1, close);
-    return parseDescriptorArgs(inner);
-}
-
-/**
- * Parse a JVM descriptor arg list (the part between `(` and `)`) into
- * an array of Frida-compatible class/primitive names.
- *
- * Examples:
- *   `Landroid/os/Bundle;Lbbbb;`   → ['android.os.Bundle', 'bbbb']
- *   `I`                            → ['int']
- *   `[Ljava/lang/String;`          → ['[Ljava.lang.String;']   (array form)
- */
-function parseDescriptorArgs(desc: string): string[] {
-    const out: string[] = [];
-    let i = 0;
-    while (i < desc.length) {
-        let arrayPrefix = '';
-        while (desc[i] === '[') {
-            arrayPrefix += '[';
-            i += 1;
-        }
-        const ch = desc[i];
-        if (ch === undefined) {
-            throw new RosettaError(`rosetta.hook: malformed descriptor '${desc}'.`);
-        }
-        if (ch === 'L') {
-            const end = desc.indexOf(';', i);
-            if (end < 0) {
-                throw new RosettaError(`rosetta.hook: unterminated class ref in '${desc}'.`);
-            }
-            const fqn = desc.slice(i + 1, end).replace(/\//g, '.');
-            // Frida convention for object arg types in .overload:
-            //   non-array:  'android.os.Bundle'
-            //   array:      '[Landroid.os.Bundle;'
-            out.push(arrayPrefix === '' ? fqn : `${arrayPrefix}L${fqn};`);
-            i = end + 1;
-        } else {
-            const name = PRIMITIVE_NAMES[ch];
-            if (name === undefined) {
-                throw new RosettaError(
-                    `rosetta.hook: unknown primitive descriptor '${ch}' in '${desc}'.`,
-                );
-            }
-            out.push(arrayPrefix === '' ? name : `${arrayPrefix}${ch}`);
-            i += 1;
-        }
-    }
-    return out;
-}
-
-const PRIMITIVE_NAMES: Record<string, string> = {
-    Z: 'boolean',
-    B: 'byte',
-    C: 'char',
-    S: 'short',
-    I: 'int',
-    J: 'long',
-    F: 'float',
-    D: 'double',
-    V: 'void',
-};
 
 /**
  * Invoke `.overload(...args)` on a method bundle. Tiny wrapper that

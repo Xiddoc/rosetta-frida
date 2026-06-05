@@ -20,7 +20,13 @@ export {
 } from './resolver.js';
 export type { ResolverOptions } from './resolver.js';
 export { makeSentinel, isSentinel, SENTINEL_REAL_NAME } from './sentinel.js';
-export { parseSignatureArgs, toJvmDescriptor } from './signature.js';
+export {
+    parseSignatureArgs,
+    parseDescriptorArgs,
+    extractArgRegion,
+    toJvmDescriptor,
+    type DescriptorArgForm,
+} from './signature.js';
 export {
     DEFAULT_DENY_PREFIXES,
     DEFAULT_APP_NAMESPACE_LABELS,
