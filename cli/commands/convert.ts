@@ -22,7 +22,7 @@ import { RosettaError } from '../../src/errors.js';
 import { convertToJson, yamlToMap, refuseModuleInput } from '../../src/convert/index.js';
 import { assertNoNul } from '../../src/parse/index.js';
 import type { CommandIo, FsLike } from './io.js';
-import { ensureDir, writeNew } from './io.js';
+import { errorMessage, writeNew } from './io.js';
 import { parseArgs, type ArgSpec } from './args.js';
 
 export interface ConvertOptions {
@@ -75,7 +75,12 @@ export async function convertFile(argv: readonly string[], fs: FsLike): Promise<
 
     let json: string;
     if (ext === '.yaml' || ext === '.yml') {
-        const raw = await fs.readFile(opts.inputPath, 'utf8');
+        let raw: string;
+        try {
+            raw = await fs.readFile(opts.inputPath, 'utf8');
+        } catch (err) {
+            throw new RosettaError(`cannot read ${opts.inputPath}: ${errorMessage(err)}`);
+        }
         json = await convertToJson(raw, 'yaml');
     } else if (ext === '.ts' || ext === '.js' || ext === '.mjs' || ext === '.cjs') {
         // Maps are pure data — never import a contributor-supplied module.
@@ -86,22 +91,22 @@ export async function convertFile(argv: readonly string[], fs: FsLike): Promise<
         throw new RosettaError(`unsupported input format: ${ext} (path: ${opts.inputPath})`);
     }
 
-    await ensureDir(fs, path.dirname(opts.outputPath));
-    // writeNew is the single overwrite guard: atomic `wx` create unless
-    // --force, closing the stat-then-write TOCTOU window.
+    // writeNew is the single emit seam: it creates the parent directory,
+    // then does an atomic `wx` create (the overwrite guard) unless --force,
+    // closing the stat-then-write TOCTOU window.
     await writeNew(fs, opts.outputPath, json, { force: opts.force });
     return opts.outputPath;
 }
 
 /**
- * Execute `rosetta convert` under the shared command contract: convert,
- * report the written path to stdout, and return exit code 0. Handled
- * failures throw `RosettaError` for the router to format.
+ * Execute `rosetta convert` under the shared command contract: convert
+ * and return the success message (the router prints it under the uniform
+ * `rosetta convert:` prefix). Handled failures throw `RosettaError` for
+ * the router to format.
  */
-export async function runConvert(argv: readonly string[], io: CommandIo): Promise<number> {
+export async function runConvert(argv: readonly string[], io: CommandIo): Promise<string> {
     const out = await convertFile(argv, io.fs);
-    io.stdout(`wrote ${out}`);
-    return 0;
+    return `wrote ${out}`;
 }
 
 // Re-export for tests that want to round-trip through the same entry that the

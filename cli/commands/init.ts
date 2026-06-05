@@ -25,7 +25,7 @@ import {
     assertNoNul,
 } from '../../src/parse/index.js';
 import type { CommandIo, FsLike } from './io.js';
-import { ensureDir, writeNew } from './io.js';
+import { writeNew } from './io.js';
 import { parseArgs, type ArgSpec } from './args.js';
 
 export interface InitOptions {
@@ -140,20 +140,20 @@ export async function writeSkeleton(argv: readonly string[], fs: FsLike): Promis
         // final backstop against any edge-case traversal.
         assertContained(outPath);
     }
-    await ensureDir(fs, path.dirname(outPath));
-    // writeNew is the single overwrite guard: atomic `wx` create unless
-    // --force, closing the stat-then-write TOCTOU window.
+    // writeNew is the single emit seam: it creates the parent directory,
+    // then does an atomic `wx` create (the overwrite guard) unless --force,
+    // closing the stat-then-write TOCTOU window.
     await writeNew(fs, outPath, renderSkeleton(opts.app, opts.version), { force: opts.force });
     return outPath;
 }
 
 /**
  * Execute `rosetta init` under the shared command contract: scaffold the
- * map, report the written path to stdout, and return exit code 0.
- * Handled failures throw `RosettaError` for the router to format.
+ * map and return the success message (the router prints it under the
+ * uniform `rosetta init:` prefix). Handled failures throw `RosettaError`
+ * for the router to format.
  */
-export async function runInit(argv: readonly string[], io: CommandIo): Promise<number> {
+export async function runInit(argv: readonly string[], io: CommandIo): Promise<string> {
     const out = await writeSkeleton(argv, io.fs);
-    io.stdout(`wrote ${out}`);
-    return 0;
+    return `wrote ${out}`;
 }

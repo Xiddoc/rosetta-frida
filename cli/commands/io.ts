@@ -15,6 +15,7 @@
  * the router entirely.
  */
 
+import { dirname } from 'node:path';
 import { MapValidationError, RosettaError } from '../../src/errors.js';
 
 /**
@@ -94,14 +95,30 @@ export function formatErrorLines(command: string, err: unknown): string[] {
     return lines;
 }
 
-/** Create the parent directory of `filePath` (recursive; no-op if present). */
-export async function ensureDir(fs: FsLike, dir: string): Promise<void> {
-    await fs.mkdir(dir, { recursive: true });
+/**
+ * Format a command's success output under the same uniform convention as
+ * {@link formatErrorLines}:
+ *
+ *   rosetta <command>: <message>
+ *
+ * Commands return only the message payload; the router owns the prefix
+ * (and the command name it already knows), so success output stays
+ * greppable per verb just like the error path — `rosetta extract:` finds
+ * both the success and the failure line for that verb.
+ */
+export function successLine(command: string, message: string): string {
+    return `rosetta ${command}: ${message}`;
 }
 
 /**
- * Write `data` to `path`, refusing to clobber an existing file unless
- * `force` is set.
+ * Write `data` to `path`, creating the parent directory first and
+ * refusing to clobber an existing file unless `force` is set.
+ *
+ * The parent directory is always created (`mkdir -p`) before the write,
+ * so callers don't need a separate `ensureDir` step — every emit site was
+ * `ensureDir(dirname); writeNew(path)`, and folding the `mkdir` in here
+ * collapses the two seams into one and removes the chance a caller
+ * forgets it.
  *
  * Without `force` it uses an atomic exclusive create (`wx` flag) so the
  * existence check and the write are a single syscall — closing the
@@ -118,6 +135,7 @@ export async function writeNew(
     data: string,
     opts: { force?: boolean } = {},
 ): Promise<void> {
+    await fs.mkdir(dirname(path), { recursive: true });
     if (opts.force) {
         await fs.writeFile(path, data, 'utf8');
         return;

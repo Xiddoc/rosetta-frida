@@ -76,6 +76,8 @@ describe('renderSkeleton', () => {
         expect(out).toContain('"version": "1.2.3"');
         expect(out).toContain('"schema_version": 2');
         expect(out).toContain('"version_code": 0');
+        // captured_at is an explicit empty-string placeholder for the author.
+        expect(out).toContain('"captured_at": ""');
     });
 
     it('includes a worked example class and parses as strict JSON', () => {
@@ -199,16 +201,17 @@ describe('writeSkeleton', () => {
 });
 
 describe('runInit (command wrapper)', () => {
-    it('writes the skeleton, reports the path to stdout, and returns 0', async () => {
+    it('writes the skeleton and returns the success message', async () => {
         const fakeFs = makeFakeFs();
         const captured = makeCaptured();
-        const code = await runInit(
+        // run* returns the success message; the router owns the prefix +
+        // stdout, so command-level tests assert on the return value.
+        const msg = await runInit(
             ['com.example.app', '1.2.3', '-o', 'm.json'],
             makeIo(fakeFs, captured),
         );
-        expect(code).toBe(0);
         expect(fakeFs.files.has('m.json')).toBe(true);
-        expect(captured.stdout[0]).toBe('wrote m.json');
+        expect(msg).toBe('wrote m.json');
     });
 
     it('propagates a RosettaError (router formats it) instead of catching', async () => {

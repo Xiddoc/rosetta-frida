@@ -155,16 +155,26 @@ describe('convertFile', () => {
         const { fs } = makeFs({ '/in.yaml': 'schema_version: 99' });
         await expect(convertFile(['/in.yaml', '-o', 'out.json'], fs)).rejects.toThrow(RosettaError);
     });
+
+    it('wraps a missing-input read error in the uniform `cannot read` message', async () => {
+        // No /in.yaml seeded → readFile rejects with ENOENT; convertFile
+        // wraps it so the message matches patch/extract/inspect/validate.
+        const { fs } = makeFs();
+        await expect(convertFile(['/in.yaml', '-o', 'out.json'], fs)).rejects.toThrow(
+            /cannot read \/in\.yaml/,
+        );
+    });
 });
 
 describe('runConvert (command wrapper)', () => {
-    it('converts, reports the path to stdout, and returns 0', async () => {
+    it('converts and returns the success message', async () => {
         const fakeFs = makeFakeFs({ '/in.yaml': VALID_YAML });
         const captured = makeCaptured();
-        const code = await runConvert(['/in.yaml', '-o', 'out.json'], makeIo(fakeFs, captured));
-        expect(code).toBe(0);
+        // run* returns the success message; the router owns the prefix +
+        // stdout, so command-level tests assert on the return value.
+        const msg = await runConvert(['/in.yaml', '-o', 'out.json'], makeIo(fakeFs, captured));
         expect(fakeFs.files.has('out.json')).toBe(true);
-        expect(captured.stdout[0]).toBe('wrote out.json');
+        expect(msg).toBe('wrote out.json');
     });
 
     it('propagates a RosettaError (router formats it) instead of catching', async () => {
