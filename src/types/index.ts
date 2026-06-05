@@ -42,6 +42,7 @@ export type {
     HealthCheckEvent,
     DetectEvent,
     MapLoadEvent,
+    SignerCheckEvent,
     DiagnosticEvent,
     EventListener,
 } from './events.js';
