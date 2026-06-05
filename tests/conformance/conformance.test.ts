@@ -245,6 +245,18 @@ function assertError(resolver: ResolverImpl | null, c: ConformanceCase): void {
  * the same `inputMap` through `MapLoader.validate`.
  */
 function runValidateCase(c: ConformanceCase): void {
+    // A malformed fixture that sets neither expectation would otherwise fall
+    // through to `expect(undefined).toBe(true)` (a cryptic "expected undefined
+    // to be true"). Fail with a field-naming diagnostic instead, mirroring the
+    // Kotlin runner's "validate success case must set expectValid: true".
+    /* c8 ignore next 5 -- defensive guard: every vendored validate case is
+       well-formed, so this never fires; it exists to give a field-naming
+       diagnostic if a future fixture is malformed. */
+    if (c.expectError === undefined && c.expectValid !== true) {
+        throw new Error(
+            `validate case '${c.name}' must set either expectError: 'MapValidation' or expectValid: true`,
+        );
+    }
     if (c.expectError !== undefined) {
         expect(c.expectError).toBe('MapValidation');
         expect(() => validateMap(c.inputMap)).toThrow(MapValidationError);
