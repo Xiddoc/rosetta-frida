@@ -46,6 +46,14 @@ jobs:
             - name: Schema-version literals in sync (docs/sample vs CURRENT_SCHEMA_VERSION)
               run: npm run schema-version:check
 
+            # SDK-free structural guard: AIDL forbids method overloading,
+            # so a duplicate method name on an interface silently breaks
+            # the test-app APK build (and thus the whole Pipeline CI) on
+            # branches the path-gated pipeline workflow never runs on.
+            # This catches it everywhere CI runs, without an Android SDK.
+            - name: AIDL fixtures have unique interface method names
+              run: npm run aidl:lint
+
             - name: Tests + coverage (100% gate enforced by vitest.config.ts)
               run: npm run test:coverage
 
