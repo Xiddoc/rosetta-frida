@@ -66,45 +66,69 @@ export function parsePatchArgs(argv: readonly string[]): PatchArgs {
 }
 
 /**
- * Parse a map file as strict JSON and assert the top-level shape is
- * either a `RosettaMap` (single) or a registry (record-of-strings whose
- * values are maps).
+ * Single-vs-registry discriminator, identical in spirit to the private
+ * `isSingleMap` in `src/marker/patch.ts`: a single map has a numeric
+ * `schema_version` at the root; a registry's *values* do, but its root
+ * does not. (The src helper isn't exported; promoting it to the marker
+ * public surface so both sides share one copy is a deferred cross-scope
+ * item — this repo's task owns only `cli/`.)
+ */
+function isSingleMap(value: Record<string, unknown>): boolean {
+    return typeof value.schema_version === 'number';
+}
+
+/**
+ * Minimal pre-emit validation: confirm `classes` is an object on a map.
  *
- * The full schema validator from `src/validate/` is intentionally NOT
- * called here — `rosetta patch` just rewrites a map slot in a bundle,
- * so a strict schema check is the user's responsibility upstream (e.g.
- * via `rosetta validate <map>` before patching). This loader only
- * enforces enough structure to pick the correct downstream emitter
- * (single-map vs registry).
+ * `patchMarkerBlock` → `emit*` calls `Object.keys(map.classes)`, which
+ * throws a bare `TypeError` (escaping to exit 2) if `classes` is missing
+ * on a parseable-but-malformed payload. We fail closed with a clean
+ * handled error instead. This is deliberately *minimal* — a full schema
+ * check stays the user's job (`rosetta validate` upstream), matching the
+ * long-standing patch design note; we only guard the field emit touches.
+ */
+function assertEmittable(map: Record<string, unknown>, where: string): void {
+    const classes = map.classes;
+    if (typeof classes !== 'object' || classes === null) {
+        throw new RosettaError(`${where} is missing a \`classes\` object`);
+    }
+}
+
+/**
+ * Parse a map file as strict JSON, pick the single-vs-registry shape via
+ * {@link isSingleMap}, and run a minimal pre-emit validation
+ * ({@link assertEmittable}) so a malformed-but-parseable payload fails
+ * closed before the bundle is rewritten.
  */
 function loadMapForPatch(jsonText: string): RosettaMap | RosettaMapRegistry {
     let value: unknown;
     try {
         value = parseJson(jsonText);
     } catch (err) {
-        throw new Error(`map is malformed: ${errorMessage(err)}`);
+        throw new RosettaError(`map is malformed: ${errorMessage(err)}`);
     }
     if (typeof value !== 'object' || value === null) {
-        throw new Error('map must be an object at top level');
+        throw new RosettaError('map must be an object at top level');
     }
     const obj = value as Record<string, unknown>;
-    // Single-map heuristic: presence of a numeric `schema_version` at
-    // the root. Otherwise, treat as registry — and at least confirm the
-    // values *look* like RosettaMap objects (have `schema_version`).
-    if (typeof obj.schema_version === 'number') {
+    if (isSingleMap(obj)) {
+        assertEmittable(obj, 'map');
         return obj as unknown as RosettaMap;
     }
-    for (const v of Object.values(obj)) {
+    // Registry: every value must look like a RosettaMap (numeric
+    // schema_version) and carry an emittable `classes` object.
+    for (const [version, v] of Object.entries(obj)) {
         if (
             typeof v !== 'object' ||
             v === null ||
             typeof (v as { schema_version?: unknown }).schema_version !== 'number'
         ) {
-            throw new Error(
+            throw new RosettaError(
                 'map is neither a RosettaMap (missing schema_version) ' +
                     'nor a registry (some value lacks schema_version)',
             );
         }
+        assertEmittable(v as Record<string, unknown>, `registry entry ${version}`);
     }
     return obj as unknown as RosettaMapRegistry;
 }

@@ -235,6 +235,30 @@ describe('runPatch', () => {
         );
     });
 
+    it('throws (minimal pre-emit validation) when a single map lacks `classes`', async () => {
+        // Parseable + single-shape (numeric schema_version) but no `classes`:
+        // would have hit a bare TypeError in emit (exit 2); now a clean error.
+        const fs = makeFakeFs({
+            'b.js': emitMarkerBlock(map()),
+            'noclasses.json': '{"schema_version": 2, "app": "x", "version": "y"}',
+        });
+        const captured = makeCaptured();
+        await expect(
+            runPatch(['b.js', '--map', 'noclasses.json'], makeIo(fs, captured)),
+        ).rejects.toThrow(/map is missing a `classes` object/);
+    });
+
+    it('throws (minimal pre-emit validation) when a registry entry lacks `classes`', async () => {
+        const fs = makeFakeFs({
+            'b.js': emitMarkerBlock(map()),
+            'reg.json': JSON.stringify({ '1.0.0': { schema_version: 2, app: 'x', version: 'y' } }),
+        });
+        const captured = makeCaptured();
+        await expect(runPatch(['b.js', '--map', 'reg.json'], makeIo(fs, captured))).rejects.toThrow(
+            /registry entry 1\.0\.0 is missing a `classes` object/,
+        );
+    });
+
     it('throws when map is a primitive at top level', async () => {
         const fs = makeFakeFs({
             'b.js': emitMarkerBlock(map()),
