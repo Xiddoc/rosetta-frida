@@ -16,7 +16,7 @@
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
 import { CURRENT_SCHEMA_VERSION } from '../../src/types/map.js';
-import type { RosettaMap } from '../../src/types/map.js';
+import type { RosettaMapInput } from '../../src/types/map.js';
 import { renderJson } from '../../src/convert/json.js';
 import {
     assertValidApp,
@@ -70,7 +70,7 @@ export function parseInitArgs(argv: readonly string[]): InitOptions {
  * `maps/com.example.app/3.4.5.json` for a fully-worked example.
  */
 export function renderSkeleton(app: string, version: string): string {
-    const skeleton: RosettaMap = {
+    const skeleton: RosettaMapInput = {
         schema_version: CURRENT_SCHEMA_VERSION,
         app,
         version,
