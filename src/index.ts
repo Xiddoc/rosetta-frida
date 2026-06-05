@@ -18,6 +18,13 @@ export { validateMap, rosettaMapSchema } from './validate/index.js';
 // Resolver
 export { createResolver, ResolverImpl, makeSentinel, isSentinel } from './resolver/index.js';
 export type { CreateResolverOptions } from './resolver/index.js';
+export {
+    DEFAULT_DENY_PREFIXES,
+    DEFAULT_APP_NAMESPACE_LABELS,
+    appPrefixOf,
+    isTargetAllowed,
+    assertTargetAllowed,
+} from './resolver/index.js';
 
 // Marker block
 export {
@@ -34,7 +41,7 @@ export {
 export type { ParsedMarker, ParsedSingle, ParsedRegistry } from './marker/index.js';
 
 // Converters
-export { yamlToMap, tsModuleToMap, convertToJson, renderJson } from './convert/index.js';
+export { yamlToMap, convertToJson, renderJson } from './convert/index.js';
 export type { ConvertFormat } from './convert/index.js';
 
 // Session + auto-detect + health-check (Wave 2G)
@@ -42,6 +49,9 @@ export {
     RosettaSession,
     createSession,
     detectAppAndVersion,
+    detectSigners,
+    checkSigner,
+    normalizeSignerHash,
     pickMapForVersion,
     runHealthCheck,
     DEFAULT_HEALTH_CHECK_THRESHOLD,

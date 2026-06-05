@@ -2,12 +2,9 @@
  * Tests for the canonical strict-JSON emitter + `convertToJson` entry point.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
+import { describe, it, expect } from 'vitest';
 import { convertToJson, renderJson, detectFormat } from './json.js';
-import { MapValidationError } from '../errors.js';
+import { MapValidationError, RosettaError } from '../errors.js';
 import type { RosettaMap } from '../types/map.js';
 
 const SAMPLE_YAML = `
@@ -36,31 +33,6 @@ const SAMPLE_MAP: RosettaMap = {
         },
     },
 };
-
-const TS_MODULE_SRC = `
-export default {
-    schema_version: 2,
-    app: 'com.example.app',
-    version: '1.0.0',
-    version_code: 100,
-    classes: {
-        IFoo: { obfuscated: 'aaaa' },
-    },
-};
-`;
-
-let tsFixture: string;
-let fixturesDir: string;
-
-beforeAll(async () => {
-    fixturesDir = await fs.mkdtemp(path.join(os.tmpdir(), 'rosetta-json-'));
-    tsFixture = path.join(fixturesDir, 'fixture.mjs');
-    await fs.writeFile(tsFixture, TS_MODULE_SRC, 'utf8');
-});
-
-afterAll(async () => {
-    await fs.rm(fixturesDir, { recursive: true, force: true });
-});
 
 describe('renderJson', () => {
     it('emits a bare JSON body with no comment header', () => {
@@ -94,20 +66,25 @@ describe('detectFormat', () => {
         expect(detectFormat('foo: bar\nbaz: qux')).toBe('yaml');
     });
 
-    it('returns ts for .ts path', () => {
-        expect(detectFormat('/some/path.ts')).toBe('ts');
+    it('refuses a .ts path (no longer imported)', () => {
+        expect(() => detectFormat('/some/path.ts')).toThrow(/no longer supported/);
     });
 
-    it('returns ts for .js path', () => {
-        expect(detectFormat('/some/path.js')).toBe('ts');
+    it('refuses a .js path', () => {
+        expect(() => detectFormat('/some/path.js')).toThrow(RosettaError);
     });
 
-    it('returns ts for .mjs path', () => {
-        expect(detectFormat('module.mjs')).toBe('ts');
+    it('refuses a .mjs path', () => {
+        expect(() => detectFormat('module.mjs')).toThrow(/no longer supported/);
     });
 
-    it('returns ts for .cjs path', () => {
-        expect(detectFormat('module.cjs')).toBe('ts');
+    it('refuses a .cjs path', () => {
+        expect(() => detectFormat('module.cjs')).toThrow(/no longer supported/);
+    });
+
+    it('does NOT refuse module-looking text that contains a newline (it is YAML source)', () => {
+        // A YAML document that happens to mention a .ts path is still YAML.
+        expect(detectFormat('note: see config.ts\napp: com.example.app')).toBe('yaml');
     });
 
     it('returns yaml when extension is unrecognized', () => {
@@ -131,15 +108,8 @@ describe('convertToJson', () => {
         expect(out).toContain('"app": "com.example.app"');
     });
 
-    it('converts a TS-module fixture explicitly', async () => {
-        const out = await convertToJson(tsFixture, 'ts');
-        expect(out).toContain('"app": "com.example.app"');
-        expect(out).toContain('"obfuscated": "aaaa"');
-    });
-
-    it('auto-detects TS module by .mjs extension', async () => {
-        const out = await convertToJson(tsFixture);
-        expect(out).toContain('"app": "com.example.app"');
+    it('refuses a TS-module path under auto-detect (never imported)', async () => {
+        await expect(convertToJson('/some/path.mjs')).rejects.toThrow(/no longer supported/);
     });
 
     it('is deterministic — same input → same output', async () => {

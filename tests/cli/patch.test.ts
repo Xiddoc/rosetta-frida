@@ -294,4 +294,65 @@ describe('runPatch', () => {
         expect(code).toBe(1);
         expect(captured.stderr[0]).toMatch(/cannot write output.*EACCES/);
     });
+
+    it('allows -o with a parent-traversal path (operator may write outside CWD)', async () => {
+        const oldMap = map('1.0.0');
+        const newMap = map('9.9.9');
+        const fs = makeFakeFs({
+            'b.js': emitMarkerBlock(oldMap),
+            'new.json': JSON.stringify(newMap),
+        });
+        const captured = makeCaptured();
+        const code = await runPatch(
+            ['b.js', '--map', 'new.json', '-o', '../escape.js'],
+            makeIo(fs, captured),
+        );
+        expect(code).toBe(0);
+        expect(fs.files.has('../escape.js')).toBe(true);
+        // The original bundle is untouched.
+        expect(fs.files.get('b.js')).toBe(emitMarkerBlock(oldMap));
+    });
+
+    it('allows -o with an absolute path outside the project tree', async () => {
+        const fs = makeFakeFs({
+            'b.js': emitMarkerBlock(map()),
+            'new.json': JSON.stringify(map('9.9.9')),
+        });
+        const captured = makeCaptured();
+        const code = await runPatch(
+            ['b.js', '--map', 'new.json', '-o', '/tmp/out.js'],
+            makeIo(fs, captured),
+        );
+        expect(code).toBe(0);
+        expect(fs.files.has('/tmp/out.js')).toBe(true);
+    });
+
+    it('allows in-place patch when the bundle path is outside CWD', async () => {
+        // No -o: output defaults to the bundle path — operator-supplied, so
+        // containment is not enforced; only NUL is rejected.
+        const originalBundle = emitMarkerBlock(map());
+        const fs = makeFakeFs({
+            '../outside.js': originalBundle,
+            'new.json': JSON.stringify(map('5.0.0')),
+        });
+        const captured = makeCaptured();
+        const code = await runPatch(['../outside.js', '--map', 'new.json'], makeIo(fs, captured));
+        expect(code).toBe(0);
+        expect(fs.files.has('../outside.js')).toBe(true);
+        expect(captured.stdout[0]).toMatch(/in place/);
+    });
+
+    it('exits 1 when -o contains a NUL byte', async () => {
+        const fs = makeFakeFs({
+            'b.js': emitMarkerBlock(map()),
+            'new.json': JSON.stringify(map('9.9.9')),
+        });
+        const captured = makeCaptured();
+        const code = await runPatch(
+            ['b.js', '--map', 'new.json', '-o', 'out.js\0.png'],
+            makeIo(fs, captured),
+        );
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/NUL/);
+    });
 });

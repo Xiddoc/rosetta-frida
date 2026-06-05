@@ -75,7 +75,7 @@ Usage: rosetta <command> [options]
 Commands:
   init <app> <version>                 Scaffold a new map skeleton
   validate <map>                       Schema + sanity check (auto-detect format)
-  convert <in> -o <out>                Convert YAML/TS module to canonical JSON
+  convert <in> -o <out>                Convert YAML map to canonical JSON
   patch <bundle.js> --map <new.json>   Replace embedded map in bundle
   extract <bundle.js> -o <out.json>    Pull embedded map out of bundle
   inspect <bundle.js>                  One-line summary of embedded map

@@ -13,14 +13,26 @@
  *   - Resolver is wired to the session bus.
  */
 
-import { describe, it, expect } from 'vitest';
-import { HealthCheckFailedError, MapVersionMismatchError } from '../errors.js';
+import { createHash } from 'node:crypto';
+import { describe, it, expect, vi } from 'vitest';
+import {
+    HealthCheckFailedError,
+    MalformedSignerError,
+    MapVersionMismatchError,
+    MissingSignerError,
+    SignerMismatchError,
+} from '../errors.js';
 import { EventBus } from '../log.js';
 import type { DiagnosticEvent } from '../types/events.js';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
 import { createSession, RosettaSession, isRegistry } from './session.js';
 import type { AutoDetectJavaApi } from './auto-detect.js';
 import type { HealthCheckJavaApi } from './health-check.js';
+import {
+    GET_SIGNING_CERTIFICATES,
+    type SignerByteArray,
+    type SignerJavaApi,
+} from './signer-detect.js';
 
 function buildMap(version: string, app = 'com.example.app', versionCode = 1): RosettaMap {
     return {
@@ -610,5 +622,322 @@ describe('createSession — trace + bus + resolver', () => {
 
     it('re-exports isRegistry from the session module', () => {
         expect(isRegistry(buildMap('1.2.3'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Signer-certificate enforcement (RFC 0001 Decision 3)
+// ---------------------------------------------------------------------------
+
+/** SHA-256 hex of some certificate bytes (masking signed Java bytes). */
+function certHash(bytes: number[]): string {
+    return createHash('sha256')
+        .update(Buffer.from(bytes.map((b) => b & 0xff)))
+        .digest('hex');
+}
+
+/**
+ * Build a signer Java API exposing ActivityThread + MessageDigest with the
+ * supplied certificate byte arrays as the live signers (via API 28+
+ * signingInfo). `usePre28` routes through the legacy signatures field.
+ */
+function makeSignerJavaApi(certs: number[][], usePre28 = false): SignerJavaApi {
+    const activityThread = {
+        currentApplication: () => ({
+            getApplicationContext: () => ({
+                getPackageManager: () => ({
+                    getPackageInfo: (_pkg: string, flags: number) => {
+                        const sigs = certs.map((bytes) => ({ toByteArray: () => bytes }));
+                        if (usePre28) {
+                            // Modern flag yields nothing; legacy field carries them.
+                            return flags === GET_SIGNING_CERTIFICATES
+                                ? {}
+                                : { signatures: { value: sigs } };
+                        }
+                        return {
+                            signingInfo: { value: { getApkContentsSigners: () => sigs } },
+                        };
+                    },
+                }),
+            }),
+            getPackageName: () => 'com.example.app',
+        }),
+    };
+    const messageDigestClass = {
+        getInstance: () => ({
+            digest: (input: SignerByteArray): SignerByteArray => {
+                const arr: number[] = [];
+                for (let i = 0; i < input.length; i += 1) arr.push((input[i] ?? 0) & 0xff);
+                const hex = createHash('sha256').update(Buffer.from(arr)).digest('hex');
+                const out: number[] = [];
+                for (let i = 0; i < hex.length; i += 2) out.push(parseInt(hex.slice(i, i + 2), 16));
+                return out;
+            },
+        }),
+    };
+    return {
+        use: ((name: string) =>
+            name === 'android.app.ActivityThread'
+                ? activityThread
+                : messageDigestClass) as SignerJavaApi['use'],
+    };
+}
+
+/** A map that carries a signer_sha256 equal to the hash of `certs[0]`. */
+function buildSignedMap(certs: number[][]): RosettaMap {
+    return { ...buildMap('1.2.3'), signer_sha256: certHash(certs[0]) };
+}
+
+describe('createSession — signer enforcement', () => {
+    const liveCerts = [[1, 2, 3, 4]];
+
+    it('proceeds and emits a passing signer-check when a signer matches', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        const session = createSession({
+            map: buildSignedMap(liveCerts),
+            app: 'com.example.app',
+            version: '1.2.3',
+            events,
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+            signerJavaApi: makeSignerJavaApi(liveCerts),
+        });
+        expect(session.healthy).toBe(true);
+        const sc = captured.find((e) => e.type === 'signer-check');
+        expect(sc).toBeDefined();
+        if (sc?.type === 'signer-check') {
+            expect(sc.passed).toBe(true);
+            expect(sc.app).toBe('com.example.app');
+            expect(sc.source).toBe('signingInfo');
+            expect(sc.expected).toBe(certHash(liveCerts[0]));
+        }
+    });
+
+    it('throws SignerMismatchError and emits a failing event on mismatch', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        const map: RosettaMap = { ...buildMap('1.2.3'), signer_sha256: 'a'.repeat(64) };
+        expect(() =>
+            createSession({
+                map,
+                app: 'com.example.app',
+                version: '1.2.3',
+                events,
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+                signerJavaApi: makeSignerJavaApi(liveCerts),
+            }),
+        ).toThrow(SignerMismatchError);
+        const sc = captured.find((e) => e.type === 'signer-check');
+        expect(sc).toBeDefined();
+        if (sc?.type === 'signer-check') {
+            expect(sc.passed).toBe(false);
+            expect(sc.expected).toBe('a'.repeat(64));
+            expect(sc.actual).toEqual([certHash(liveCerts[0])]);
+        }
+    });
+
+    it('carries structured context on the thrown SignerMismatchError', () => {
+        let caught: SignerMismatchError | undefined;
+        try {
+            createSession({
+                map: { ...buildMap('1.2.3'), signer_sha256: 'b'.repeat(64) },
+                app: 'com.example.app',
+                version: '1.2.3',
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+                signerJavaApi: makeSignerJavaApi(liveCerts),
+            });
+        } catch (e) {
+            caught = e as SignerMismatchError;
+        }
+        expect(caught).toBeInstanceOf(SignerMismatchError);
+        expect(caught?.app).toBe('com.example.app');
+        expect(caught?.expected).toBe('b'.repeat(64));
+        expect(caught?.actual).toEqual([certHash(liveCerts[0])]);
+    });
+
+    it('skips the check (no event) when the map has no signer_sha256', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        const session = createSession({
+            map: buildMap('1.2.3'), // no signer_sha256
+            app: 'com.example.app',
+            version: '1.2.3',
+            events,
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+            // signerJavaApi intentionally omitted — must never be consulted.
+        });
+        expect(session.healthy).toBe(true);
+        expect(captured.find((e) => e.type === 'signer-check')).toBeUndefined();
+    });
+
+    it('skips the check when enforceSigner is false even if signer_sha256 is set', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        const session = createSession({
+            map: { ...buildMap('1.2.3'), signer_sha256: 'a'.repeat(64) },
+            app: 'com.example.app',
+            version: '1.2.3',
+            enforceSigner: false,
+            events,
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(session.healthy).toBe(true);
+        expect(captured.find((e) => e.type === 'signer-check')).toBeUndefined();
+    });
+
+    it('matches when ANY of multiple live signers matches the map', () => {
+        const multi = [
+            [9, 9, 9],
+            [1, 2, 3, 4],
+        ];
+        // Map expects the SECOND signer's hash.
+        const map: RosettaMap = { ...buildMap('1.2.3'), signer_sha256: certHash(multi[1]) };
+        const session = createSession({
+            map,
+            app: 'com.example.app',
+            version: '1.2.3',
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+            signerJavaApi: makeSignerJavaApi(multi),
+        });
+        expect(session.healthy).toBe(true);
+    });
+
+    it('reads signers via the pre-28 GET_SIGNATURES fallback path', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        createSession({
+            map: buildSignedMap(liveCerts),
+            app: 'com.example.app',
+            version: '1.2.3',
+            events,
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+            signerJavaApi: makeSignerJavaApi(liveCerts, /* usePre28 */ true),
+        });
+        const sc = captured.find((e) => e.type === 'signer-check');
+        expect(sc?.type === 'signer-check' && sc.source).toBe('signatures');
+    });
+
+    it('throws MissingSignerError when the live app exposes no readable signer', () => {
+        let caught: MissingSignerError | undefined;
+        try {
+            createSession({
+                map: { ...buildMap('1.2.3'), signer_sha256: 'c'.repeat(64) },
+                app: 'com.example.app',
+                version: '1.2.3',
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+                // No signers present on the live app (empty signingInfo, no legacy).
+                signerJavaApi: makeSignerJavaApi([]),
+            });
+        } catch (e) {
+            caught = e as MissingSignerError;
+        }
+        expect(caught).toBeInstanceOf(MissingSignerError);
+        expect(caught?.expected).toBe('c'.repeat(64));
+    });
+
+    it('throws MalformedSignerError when the MAP hash is ill-formed', () => {
+        let caught: MalformedSignerError | undefined;
+        try {
+            createSession({
+                map: { ...buildMap('1.2.3'), signer_sha256: 'not-a-real-hash' },
+                app: 'com.example.app',
+                version: '1.2.3',
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+                signerJavaApi: makeSignerJavaApi(liveCerts),
+            });
+        } catch (e) {
+            caught = e as MalformedSignerError;
+        }
+        expect(caught).toBeInstanceOf(MalformedSignerError);
+        expect(caught?.value).toBe('not-a-real-hash');
+    });
+
+    it('emits a deterministically SORTED actual list on a mismatch', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        // Three live signers; none matches the map's expected hash.
+        const multi = [[3], [1], [2]];
+        const sortedHashes = multi.map((c) => certHash(c)).sort();
+        let caught: SignerMismatchError | undefined;
+        try {
+            createSession({
+                map: { ...buildMap('1.2.3'), signer_sha256: 'a'.repeat(64) },
+                app: 'com.example.app',
+                version: '1.2.3',
+                events,
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+                signerJavaApi: makeSignerJavaApi(multi),
+            });
+        } catch (e) {
+            caught = e as SignerMismatchError;
+        }
+        expect(caught?.actual).toEqual(sortedHashes);
+        const sc = captured.find((e) => e.type === 'signer-check');
+        if (sc?.type === 'signer-check') {
+            expect(sc.actual).toEqual(sortedHashes);
+        }
+    });
+});
+
+describe('createSession — health check honours the target-namespace guard', () => {
+    /** A map whose single class points at a forbidden framework FQN. */
+    function maliciousMap(): RosettaMap {
+        return {
+            schema_version: 2,
+            version_code: 1,
+            app: 'com.example.app',
+            version: '1.2.3',
+            classes: {
+                'com.example.app.Evil': { obfuscated: 'java.lang.Runtime' },
+            },
+        };
+    }
+
+    it('does NOT call Java.use for a guard-denied entry at attach time', () => {
+        const useSpy = vi.fn(() => ({}));
+        // warn policy so a failed health check does not throw — we want to
+        // inspect that the forbidden name never reached Java.use.
+        const session = createSession({
+            map: maliciousMap(),
+            app: 'com.example.app',
+            version: '1.2.3',
+            failurePolicy: 'warn',
+            healthCheckJavaApi: { use: useSpy },
+        });
+        expect(useSpy).not.toHaveBeenCalled();
+        // The denied entry is counted as a failed health-check entry.
+        expect(session.healthy).toBe(false);
+    });
+
+    it('reports the guard-denied entry as a failed health-check entry', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        createSession({
+            map: maliciousMap(),
+            app: 'com.example.app',
+            version: '1.2.3',
+            failurePolicy: 'warn',
+            events,
+            healthCheckJavaApi: { use: () => ({}) },
+        });
+        const hc = captured.find((e) => e.type === 'health-check');
+        if (hc?.type === 'health-check') {
+            expect(hc.passed).toBe(false);
+            expect(hc.failedEntries).toEqual(['com.example.app.Evil']);
+        } else {
+            throw new Error('expected a health-check event');
+        }
+    });
+
+    it('throws HealthCheckFailedError in strict mode for a guard-denied entry', () => {
+        expect(() =>
+            createSession({
+                map: maliciousMap(),
+                app: 'com.example.app',
+                version: '1.2.3',
+                failurePolicy: 'strict',
+                healthCheckJavaApi: { use: () => ({}) },
+            }),
+        ).toThrow(HealthCheckFailedError);
     });
 });

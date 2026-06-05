@@ -210,7 +210,8 @@ What landed in V1.0:
 - Tier 3 (`rosetta.map.*`, `rosetta.events.*`).
 - Methods + fields + classes all covered.
 - Schema v2 (`schema_version: 2`), no migrators yet (1→2 was a hard cutover).
-- JSON loader + Zod schema validator. YAML and TS-module converters.
+- JSON loader + Zod schema validator. YAML converter (TS/JS-module
+  ingestion removed — build-time RCE; maps are pure data).
 - Marker-block embedding in the compiled bundle (manual wrapping;
   `frida-compile` plugin deferred to V1.5).
 - Attach-time health check.
@@ -267,9 +268,12 @@ Strict JSON (no comments, no trailing commas) is the on-disk artifact
 format: the data round-trips machine-cleanly, the on-disk shape matches
 the runtime shape exactly, and JS bundlers / `frida-compile` consume
 the `.json` import natively with no conversion step. Comment-bearing
-YAML and TS-module input exist via converters for authors who prefer
-them — `rosetta convert` renders those to the JSON artifact — but the
-*runtime* only ever sees strict JSON.
+YAML input exists via a converter for authors who prefer it —
+`rosetta convert` renders it to the JSON artifact — but the *runtime*
+only ever sees strict JSON. (TS/JS-module input was removed: importing
+a contributor-supplied module to read its map was a build-time RCE.
+Maps are pure data, so JSON + YAML cover authoring without executing
+anything.)
 
 The *schema* that this JSON conforms to is owned by the separate
 [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo

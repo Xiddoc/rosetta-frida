@@ -58,8 +58,33 @@ export interface MapLoadEvent {
     schemaVersion: number;
 }
 
+/**
+ * Event emitted by the attach-time signer-certificate authenticity check.
+ *
+ * Only emitted when the loaded map carries a `signer_sha256` (the check is
+ * skipped, and no event is emitted, when the field is absent).
+ */
+export interface SignerCheckEvent {
+    type: 'signer-check';
+    /** True if a live signer matched the map's expected hash. */
+    passed: boolean;
+    /** Detected app package name. */
+    app: string;
+    /** The map's expected signer hash (normalized). */
+    expected: string;
+    /** Every live signing-certificate hash observed (normalized). */
+    actual: readonly string[];
+    /** Which PackageManager flag yielded the signers. */
+    source: 'signingInfo' | 'signatures';
+}
+
 /** Union of all diagnostic events. */
-export type DiagnosticEvent = ResolveEvent | HealthCheckEvent | DetectEvent | MapLoadEvent;
+export type DiagnosticEvent =
+    | ResolveEvent
+    | HealthCheckEvent
+    | DetectEvent
+    | MapLoadEvent
+    | SignerCheckEvent;
 
 /** Subscriber type. */
 export type EventListener<E extends DiagnosticEvent = DiagnosticEvent> = (event: E) => void;

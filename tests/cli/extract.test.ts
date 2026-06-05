@@ -144,4 +144,33 @@ describe('runExtract', () => {
         expect(code).toBe(1);
         expect(captured.stderr[0]).toMatch(/cannot write output.*EACCES/);
     });
+
+    it('allows -o with a parent-traversal path (operator may write outside CWD)', async () => {
+        const map = minimalMap();
+        const fs = makeFakeFs({ 'b.js': emitMarkerBlock(map) });
+        const captured = makeCaptured();
+        const code = await runExtract(['b.js', '-o', '../escape.json'], makeIo(fs, captured));
+        expect(code).toBe(0);
+        expect(fs.files.has('../escape.json')).toBe(true);
+        expect(captured.stdout[0]).toMatch(/wrote \.\.\/escape\.json/);
+    });
+
+    it('allows -o with an absolute path outside the project tree', async () => {
+        // Regression: CI smoke test uses `extract <bundle> -o /tmp/extracted.json`.
+        const map = minimalMap();
+        const fs = makeFakeFs({ 'b.js': emitMarkerBlock(map) });
+        const captured = makeCaptured();
+        const code = await runExtract(['b.js', '-o', '/tmp/extracted.json'], makeIo(fs, captured));
+        expect(code).toBe(0);
+        expect(fs.files.has('/tmp/extracted.json')).toBe(true);
+        expect(JSON.parse(fs.files.get('/tmp/extracted.json')!)).toEqual(map);
+    });
+
+    it('exits 1 when -o contains a NUL byte', async () => {
+        const fs = makeFakeFs({ 'b.js': emitMarkerBlock(minimalMap()) });
+        const captured = makeCaptured();
+        const code = await runExtract(['b.js', '-o', 'out.json\0.png'], makeIo(fs, captured));
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/NUL/);
+    });
 });

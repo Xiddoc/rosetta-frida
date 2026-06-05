@@ -165,7 +165,7 @@ Every exported name from `rosetta-frida`, grouped:
 | `createResolver`, `ResolverImpl`, `makeSentinel`, `isSentinel` | Function, class | [Tier 3](tier-3.md), [design](../reference/design.md#resolver) |
 | `loadMap`, `parseJson`, `looksLikeJsonSource` | Function | [Maps — format](../maps/format.md) |
 | `validateMap`, `rosettaMapSchema` | Function, schema | [Maps — format](../maps/format.md) |
-| `yamlToMap`, `tsModuleToMap`, `convertToJson`, `renderJson` | Function | [Maps — conversion](../maps/conversion.md) |
+| `yamlToMap`, `convertToJson`, `renderJson` | Function | [Maps — conversion](../maps/conversion.md) |
 | `BEGIN_MARKER`, `END_MARKER`, `BEGIN_REGISTRY`, `END_REGISTRY`, `MARKER_REGEX`, `emitMarkerBlock`, `emitMarkerRegistry`, `parseMarkerBlock`, `patchMarkerBlock` | Constants, function | [Marker block](../maps/marker-block.md) |
 | `EventBus`, `formatEvent`, `createSilentBus` | Class, function | [Events reference](../reference/events.md) |
 | `RosettaError`, `ResolveError`, `AmbiguousOverloadError`, `MapValidationError`, `JsonParseError`, `MapVersionMismatchError`, `HealthCheckFailedError`, `MarkerBlockError`, `UnresolvedAccessError` | Error classes | [Errors](../reference/errors.md) |

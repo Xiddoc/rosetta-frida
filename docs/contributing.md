@@ -51,7 +51,7 @@ All four must pass before a PR merges. Master is gated on this.
 rosetta-frida/
 ├── src/                       # Library runtime source
 │   ├── api/                   # Tier 1/2/3 entry points + rosetta namespace
-│   ├── convert/               # YAML / TS-module converters
+│   ├── convert/               # YAML converter (+ JSON renderer)
 │   ├── diagnostics/           # EventBus re-export
 │   ├── marker/                # PEM-style marker block emit/parse/patch
 │   ├── parse/                 # JSON parser + loadMap

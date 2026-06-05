@@ -40,27 +40,50 @@ move between them as priorities shift.
   is **currently failing — and appears to have never been green.**
 - **Root cause (confirmed).** The AIDL fixture
   `tests/fixtures/test-app/app/src/main/aidl/com/example/testapp/IRemoteService.aidl`
-  declares `requestTicket` **twice** ("to exercise the multi-overload
+  declared `requestTicket` **twice** ("to exercise the multi-overload
   form"). AIDL does **not** support method overloading — interface
   methods must have unique names — so `:app:compileReleaseAidl` fails and
   the APK never builds. Pre-existing since the fixture's founding commit
   (`6ebd5a6`); the schema-v2 work was simply the first change to touch
   this job's trigger paths and make it run.
+- **Why it stayed green / invisible.** Two independent gaps, neither
+  of which built the APK on a normal branch: (1) the main `ci.yml`
+  `verify` job (`.github/workflows/ci.yml`) never touches the test-app
+  — it runs typecheck/lint/format/schema-version/tests only; (2) the
+  only workflow that *does* build the APK, `pipeline.yml`, is both
+  **path-gated** (`paths:` to `tests/fixtures/test-app/**`,
+  `tools/adapters/**`, `src/parse/**`, `src/validate/**`,
+  `pipeline.yml`) **and** only triggers `push`/`pull_request` against
+  `master` (plus a weekly cron). So a duplicate-AIDL change on a
+  feature branch never built the APK, and the goldens were
+  hand-authored rather than verified against a real build — the failure
+  could only ever surface on `master` or the Monday canary.
+- **Fixed.** The duplicate `requestTicket` overload was removed
+  (`7d44dfb`); `IRemoteService` now declares a single `requestTicket`
+  plus `requestPrompt`, and the Java source / goldens / README were
+  made consistent. A new SDK-free structural guard
+  (`scripts/lint-aidl.mjs`, wired into `npm run verify` /
+  `verify:fast` as `aidl:lint`, and into the `ci.yml` `verify` job)
+  fails fast on any duplicate interface-method name, with a regression
+  test at `tests/lint-aidl.test.ts`. This closes the
+  **duplicate-AIDL-method** visibility gap on every branch without needing
+  an Android SDK in CI. (The broader class of build-visibility gaps —
+  end-to-end APK compilation and golden diffs — remains open; closing that
+  requires hardening `pipeline.yml`'s trigger scope, a separate
+  follow-up.)
 - **Why it matters.** This is the only check that exercises the **real
   sigmatcher output ordering** end-to-end; the unit suite can't. Until
   it's green, the goldens and the adapter's class/method emission order
   are unverified against a real sigmatcher run (the goldens are
   hand-authored today and almost certainly do *not* byte-match a real
   build).
-- **Suggested fix.**
-  1. **Remove the same-name AIDL overload** — AIDL cannot express it.
-     The multi-overload schema feature is *already* exercised by
-     `BlobCache.put` (a plain class with `put_2arg` / `put_3arg` in the
-     `methodNameMap`), so the AIDL doesn't need to. Make `IRemoteService`
-     declare a single `requestTicket` (plus `requestPrompt`) and fix the
-     now-misleading header comment. Check the Java sources, the
-     `proguard-rules`/applymapping seeds, and `signatures/test-app.yaml`
-     for references to the dropped overload.
+- **Remaining work.** The AIDL fix above unblocks the *build*; the
+  goldens themselves are still hand-authored and have **not** been
+  byte-verified against a real sigmatcher run. That last step needs the
+  Android SDK + sigmatcher and remains the open item:
+  1. ~~**Remove the same-name AIDL overload**~~ — done (`7d44dfb`); the
+     multi-overload schema feature is exercised by `BlobCache.put`
+     (`put_2arg` / `put_3arg` in the `methodNameMap`).
   2. **Regenerate the goldens** with
      `tests/fixtures/test-app/regenerate-goldens.sh` (it now passes
      `--version-code`) against a real build, and commit them — the
@@ -72,8 +95,28 @@ move between them as priorities shift.
   (`dl.google.com` / `maven.google.com` return 403 while PyPI/GitHub are
   reachable). Do this in a session/environment where those hosts are
   allowlisted (or against CI).
-- **Status.** blocked (needs the Android SDK reachable); high priority
-  once unblocked.
+- **Pipeline-trigger hardening — done.** `pipeline.yml`'s
+  `pull_request` trigger no longer gates on `branches: [master]`: it now
+  fires on PRs targeting **any** branch (path filter unchanged —
+  `tests/fixtures/test-app/**` already covers the Java/AIDL sources,
+  signatures, and goldens), so a fixture/adapter change that breaks the
+  real APK build surfaces on the **feature-branch PR** that introduces
+  it rather than only on `master` or the Monday canary. The APK build
+  stays its **own** `pipeline` job, so the fast SDK-free `verify` job in
+  `ci.yml` (which includes the `aidl:lint` guard) remains the
+  **required** gate. Because the build needs the Android SDK and pulls
+  from network-restricted Google Maven hosts (`dl.google.com` /
+  `maven.google.com`), the `pipeline` job is **advisory /
+  `continue-on-error`**: a flaky SDK/Maven outage reports on the PR but
+  does not block unrelated merges. Promote it to a required check only
+  once it is reliably green in a network environment where those hosts
+  are allowlisted. The remaining golden-regeneration step below still
+  needs that environment.
+- **Status.** AIDL root cause **fixed** + an SDK-free duplicate-AIDL-
+  method guard now runs in `verify`/`ci.yml`; the `pipeline.yml`
+  trigger is now broadened to all-branch PRs (advisory). The end-to-end
+  golden-diff (full APK build + sigmatcher, byte-verified goldens)
+  remains blocked on a real Android-SDK environment.
 
 ---
 
@@ -85,22 +128,30 @@ These close out the app-identity work that landed the `version_code` and
 ### On-device `signer_sha256` enforcement
 
 - **Purpose.** The schema carries an optional `signer_sha256` (the hash
-  of the APK signing certificate), but nothing reads it at runtime yet.
-  Wire the session attach path to read the running app's signing
-  certificate (via `PackageManager` signing info), hash it, and compare
-  it against `map.signer_sha256` when the field is present.
+  of the APK signing certificate); the session attach path now reads the
+  running app's signing certificate (via `PackageManager` signing info),
+  hashes it, and compares it against `map.signer_sha256` when the field
+  is present.
 - **Benefit.** Turns the field from documentation into a real trust
   gate: a map cannot be silently applied to a **repackaged or spoofed**
   build that happens to share the same `version_code`. This is the
   authenticity half of the "right map for the right app" guarantee.
-- **Scope / dependencies.** Extend `src/session/auto-detect.ts` (or a
-  sibling) to read signing certs; add a comparison step + a new failure
-  mode in `src/session/session.ts`; surface a `Config`/`SessionOptions`
-  opt-out (`verifySigner?: boolean`, default on when the field is
-  present). New error type or reuse `MapVersionMismatchError`'s sibling.
-  Needs Frida-mock support for the signing API.
-- **Status.** planned. The field, adapter option, and sample data
-  already shipped; only the runtime guard remains.
+- **What shipped.** A sibling module `src/session/signer-detect.ts`
+  reads signers in-process (`GET_SIGNING_CERTIFICATES` →
+  `signingInfo.apkContentsSigners` on API 28+, `GET_SIGNATURES` →
+  `packageInfo.signatures` as the pre-28 fallback), SHA-256's each
+  certificate via `java.security.MessageDigest`, and normalizes to
+  lowercase colon-free hex. The session compares after version selection
+  and before the health check, **fails closed** with the new
+  `SignerMismatchError`, and emits a structured `signer-check`
+  diagnostic event. An app may carry multiple signers (key-rotation
+  lineage); a match on **any** one is accepted. The
+  `SessionOptions.enforceSigner` knob (default `true`, the secure
+  default) opts out; the check is skipped entirely when the map has no
+  `signer_sha256`.
+- **Status.** **done** (V1.5). Reference: [`api/session.md`](api/session.md),
+  [`reference/errors.md`](reference/errors.md),
+  [`reference/events.md`](reference/events.md).
 
 ### `rosetta migrate` + schema migrators
 

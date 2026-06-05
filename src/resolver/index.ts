@@ -9,7 +9,7 @@
 import { EventBus } from '../log.js';
 import type { RosettaMap } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
-import type { FailurePolicy } from '../types/session.js';
+import type { FailurePolicy, TargetPolicy } from '../types/session.js';
 import { ResolverImpl } from './resolver.js';
 
 export { ResolverImpl } from './resolver.js';
@@ -21,6 +21,13 @@ export {
 export type { ResolverOptions } from './resolver.js';
 export { makeSentinel, isSentinel, SENTINEL_REAL_NAME } from './sentinel.js';
 export { parseSignatureArgs, toJvmDescriptor } from './signature.js';
+export {
+    DEFAULT_DENY_PREFIXES,
+    DEFAULT_APP_NAMESPACE_LABELS,
+    appPrefixOf,
+    isTargetAllowed,
+    assertTargetAllowed,
+} from './target-policy.js';
 
 /** Options accepted by `createResolver`. */
 export interface CreateResolverOptions {
@@ -34,6 +41,16 @@ export interface CreateResolverOptions {
     events?: EventBus;
     /** Failure policy for sentinel-aware wrappers. Default 'strict'. */
     failurePolicy?: FailurePolicy;
+    /**
+     * Target-namespace guard policy (RFC 0001 C1). Omitted → built-in
+     * fail-closed defaults (see {@link DEFAULT_DENY_PREFIXES}).
+     */
+    targetPolicy?: TargetPolicy;
+    /**
+     * App package used to derive the app's own namespace prefix for the
+     * guard. Defaults to `map.app` when omitted.
+     */
+    appPackage?: string;
 }
 
 /**
@@ -43,9 +60,12 @@ export interface CreateResolverOptions {
  */
 export function createResolver(map: RosettaMap, options: CreateResolverOptions = {}): Resolver {
     const events = options.events ?? new EventBus();
-    return new ResolverImpl({
+    const resolverOptions: ConstructorParameters<typeof ResolverImpl>[0] = {
         map,
         events,
         failurePolicy: options.failurePolicy ?? 'strict',
-    });
+    };
+    if (options.targetPolicy !== undefined) resolverOptions.targetPolicy = options.targetPolicy;
+    if (options.appPackage !== undefined) resolverOptions.appPackage = options.appPackage;
+    return new ResolverImpl(resolverOptions);
 }

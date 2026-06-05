@@ -3,8 +3,14 @@
  *
  * Before user hooks run, verify the loaded map matches the running app:
  *
- *   1. For every mapped class, attempt `Java.use(obfName)`. Failed
- *      lookups mark the class as a failure.
+ *   0. For every mapped class, run the target-namespace guard
+ *      ({@link isTargetAllowed}) on the raw `obfName` BEFORE it reaches
+ *      `Java.use`. A denied entry is counted as a failure and the
+ *      forbidden name never reaches Frida (mirrors the resolver's
+ *      fail-closed invariant and the Kotlin client, which funnels every
+ *      load through the guard).
+ *   1. For every allowed mapped class, attempt `Java.use(obfName)`.
+ *      Failed lookups mark the class as a failure.
  *   2. For AIDL stubs/callbacks with `aidl_descriptor`, additionally
  *      check `Klass.$aidlDescriptor` matches.
  *   3. For classes carrying `anchors`, verify each appears in
@@ -19,7 +25,9 @@
  * touching global state.
  */
 
+import { isTargetAllowed } from '../resolver/index.js';
 import type { RosettaMap } from '../types/map.js';
+import type { TargetPolicy } from '../types/session.js';
 
 /** Minimal Frida-shaped Java API used by the health check. */
 export interface HealthCheckJavaApi {
@@ -40,6 +48,20 @@ export interface RunHealthCheckOptions {
     threshold?: number;
     /** Injectable Java runtime. Defaults to the global `Java`. */
     javaApi?: HealthCheckJavaApi;
+    /**
+     * Target-namespace guard policy (RFC 0001 C1). The same policy the
+     * Session threads into the resolver. Each class's raw `obfuscated`
+     * name is checked against it BEFORE `Java.use`, so a map-controlled
+     * framework FQN never gets loaded by the health check. Omitted →
+     * built-in fail-closed defaults.
+     */
+    targetPolicy?: TargetPolicy;
+    /**
+     * App namespace prefix used by the guard (derived from the resolved
+     * app package, the same source the resolver uses). Defaults to the
+     * empty string (no app-owned namespace is implicitly allowed).
+     */
+    appPrefix?: string;
 }
 
 /** Health-check result. */
@@ -71,6 +93,8 @@ export function runHealthCheck(options: RunHealthCheckOptions): HealthCheckResul
     const { map } = options;
     const threshold = options.threshold ?? DEFAULT_HEALTH_CHECK_THRESHOLD;
     const javaApi = options.javaApi ?? (globalThis as { Java?: HealthCheckJavaApi }).Java ?? null;
+    const targetPolicy = options.targetPolicy ?? {};
+    const appPrefix = options.appPrefix ?? '';
 
     if (!javaApi) {
         // Without a Java runtime, no entries can be verified.
@@ -89,6 +113,13 @@ export function runHealthCheck(options: RunHealthCheckOptions): HealthCheckResul
     let passing = 0;
 
     for (const [realName, entry] of entries) {
+        // (0) Guard the raw, map-controlled obfuscated name BEFORE it can
+        //     reach `Java.use`. A denied entry is a failed health-check
+        //     entry — it must never be loaded / `<clinit>`-initialized.
+        if (!isTargetAllowed(entry.obfuscated, appPrefix, targetPolicy)) {
+            failedEntries.push(realName);
+            continue;
+        }
         let ok: boolean;
         try {
             const klass = javaApi.use(entry.obfuscated);

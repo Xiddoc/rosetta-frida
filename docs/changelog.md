@@ -1,5 +1,58 @@
 # Changelog
 
+## Unreleased
+
+### Runtime
+
+- **On-device `signer_sha256` enforcement** (`src/session/signer-detect.ts`)
+  — when the loaded map carries a `signer_sha256`, `rosetta.session(...)`
+  now reads the running app's signing certificate **in-process**
+  (`GET_SIGNING_CERTIFICATES` → `signingInfo.apkContentsSigners` on
+  API 28+, `GET_SIGNATURES` → `packageInfo.signatures` as the pre-28
+  fallback), SHA-256's each certificate, and **fails closed** with the new
+  [`SignerMismatchError`](reference/errors.md#signermismatcherror) if no
+  live signer matches. A match on **any** one of several signers passes
+  (key-rotation lineage). The check runs after version selection and before
+  the health check, emits a structured
+  [`signer-check`](reference/events.md#signercheckevent) diagnostic event,
+  and is gated by the new `SessionOptions.enforceSigner` knob (default
+  `true`, the secure default; set `false` to opt out). When the map has no
+  `signer_sha256` the check is skipped entirely. Moves the V2-roadmap item
+  out of *planned*.
+
+### Validation (security bounds)
+
+- **Map input bounds + key safety** (`src/validate/schema.ts`) — the Zod
+  validator now enforces size/cardinality caps, string `maxLength`s, an
+  `app` package-name pattern, a `version_code` int32 ceiling, an `extends`
+  cap, a `signer_sha256` 64-hex pattern, and rejection of reserved keys
+  (`__proto__`/`constructor`/`prototype`) — mirroring the canonical
+  rosetta-maps JSON Schema so all clients agree.
+
+### CLI security hardening
+
+- **Removed TS/JS-module map ingestion (build-time RCE).** `rosetta
+  convert` / `validate` no longer accept `.ts`/`.js`/`.mjs`/`.cjs`
+  inputs. They used to be loaded via dynamic `import()`, executing
+  arbitrary contributor-supplied code *before* validation. Maps are
+  pure data — author them as JSON or YAML. Module inputs are now
+  refused with a clear error, never imported. `tsModuleToMap` is gone;
+  `convertToJson` accepts YAML only.
+- **Path containment for CLI writers (arbitrary file write).** All
+  commands that build an on-disk path (`init`, `convert`, `extract`,
+  `patch`) now validate the `app`/`version` identity tokens and
+  contain every output path to the project tree (CWD). Traversal
+  (`../…`), absolute escapes, and NUL bytes are refused before any IO.
+  See `src/parse/paths.ts`.
+
+### CI / supply chain
+
+- Least-privilege workflow permissions; the APK-building `pipeline`
+  job now runs on all-branch PRs as an advisory (`continue-on-error`)
+  check while the SDK-free `verify` (with `aidl:lint`) stays the
+  required gate; apktool downloads and third-party actions are pinned
+  by SHA-256 / commit SHA.
+
 ## V1.0 — proof of life
 
 The first complete release. Every subsystem the strategic design
@@ -82,11 +135,10 @@ called out is implemented and tested.
   authoritative `version_code` key and the optional `signer_sha256`
   authenticity guard; drops `apk_sha256`. Validated by Zod.
 - **Strict JSON** — canonical on-disk format (no comments / trailing
-  commas). Comment-bearing YAML / TS modules are authoring inputs
-  rendered to JSON via `rosetta convert`.
+  commas). Comment-bearing YAML is the authoring input rendered to
+  JSON via `rosetta convert`. (V1.0 also shipped a TS-module input;
+  it was removed in *Unreleased* above — build-time RCE.)
 - **YAML converter** — `yamlToMap(...)` via the `yaml` package.
-- **TS-module converter** — `tsModuleToMap(...)` via dynamic
-  `import()`.
 - **Single-map and registry forms** — `RosettaMap` and
   `RosettaMapRegistry`.
 - **15-class anonymized sample map** at
@@ -111,9 +163,8 @@ The `rosetta` binary, six commands:
 
 - [`init <app> <version>`](cli/init.md) — scaffold a new JSON map.
 - [`validate <map>`](cli/validate.md) — schema + sanity check.
-  Auto-detects JSON / YAML / TS-module from extension.
-- [`convert <in> -o <out>`](cli/convert.md) — YAML / TS module →
-  canonical JSON.
+  Auto-detects JSON / YAML from extension.
+- [`convert <in> -o <out>`](cli/convert.md) — YAML → canonical JSON.
 - [`patch <bundle.js> --map <new>`](cli/patch.md) — replace embedded
   map in a compiled bundle. In-place by default.
 - [`extract <bundle.js> -o <out>`](cli/extract.md) — pull the

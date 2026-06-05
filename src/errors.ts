@@ -31,6 +31,39 @@ export class ResolveError extends RosettaError {
     }
 }
 
+/**
+ * Thrown when a resolution TARGET (the FQN that would be passed to
+ * `Java.use`) is rejected by the namespace guard (RFC 0001 C1, critical
+ * security fix).
+ *
+ * Fail-closed: a community map maps a real name to an arbitrary obfuscated
+ * string, and that string is fed verbatim into `Java.use(...)`. A malicious
+ * or buggy map could redirect a hook at a sensitive framework class (e.g.
+ * `java.lang.Runtime`, `android.app.*`). The guard confines targets to
+ * package-local / app-owned namespaces (plus an explicit escape-hatch
+ * allowlist) and THROWS this — before any `Java.use` call — for anything
+ * else. There is no warn-and-proceed mode (strict only).
+ *
+ * Distinct from {@link ResolveError} (the "real name has no map entry"
+ * case): a `TargetPolicyError` means the resolved target is *forbidden*,
+ * not merely *absent*. Mirrors the Kotlin `TargetPolicyException`.
+ */
+export class TargetPolicyError extends RosettaError {
+    constructor(
+        message: string,
+        /** The real name being resolved when the forbidden target was produced. */
+        public readonly realName: string,
+        /** The rejected target FQN (what would have been passed to `Java.use`). */
+        public readonly target: string,
+        /** Which rule denied the target. */
+        public readonly reason: 'reserved-namespace' | 'foreign-namespace',
+        /** The class scope, when the rejected target was a method/field/arg-type class. */
+        public readonly classScope?: string,
+    ) {
+        super(message);
+    }
+}
+
 /** Thrown when a method real-name has multiple overloads and the user didn't disambiguate. */
 export class AmbiguousOverloadError extends RosettaError {
     constructor(
@@ -72,6 +105,71 @@ export class MapVersionMismatchError extends RosettaError {
         public readonly detectedVersion: string,
         public readonly mapApp: string,
         public readonly mapVersion: string,
+    ) {
+        super(message);
+    }
+}
+
+/**
+ * Thrown when the loaded map carries a `signer_sha256` but none of the
+ * running app's signing certificates match it.
+ *
+ * This is a fail-closed authenticity guard (RFC 0001 Decision 3): a map
+ * cannot be silently applied to a repackaged or spoofed build that merely
+ * shares the same `version_code`. Carries the expected hash and every
+ * live signer hash that was observed so reports are actionable.
+ *
+ * One of three signer error types mirroring the Kotlin taxonomy
+ * (`SignerMismatchException`); see {@link MalformedSignerError} (the map's
+ * own hash is ill-formed) and {@link MissingSignerError} (the live app
+ * exposes no readable signer).
+ */
+export class SignerMismatchError extends RosettaError {
+    constructor(
+        message: string,
+        public readonly app: string,
+        public readonly expected: string,
+        public readonly actual: readonly string[],
+    ) {
+        super(message);
+    }
+}
+
+/**
+ * Thrown when the loaded map's `signer_sha256` is not well-formed: after
+ * normalization (trim surrounding whitespace, strip `:`, lowercase) it is
+ * not exactly 64 lowercase hex characters (`^[0-9a-f]{64}$`).
+ *
+ * This is an **author error** in the map artifact, not a spoof — treating
+ * it as a mismatch would mask a bad map as an attacker. Mirrors the Kotlin
+ * `MalformedSignerException`; the canonical maps schema also pins
+ * `signer_sha256` to `^[0-9a-f]{64}$`, so a conformant map can never trip
+ * this at runtime.
+ */
+export class MalformedSignerError extends RosettaError {
+    constructor(
+        /** The offending hash value, as supplied (before/around normalization). */
+        public readonly value: string,
+        /** Why it was rejected (e.g. "expected 64 hex chars, got 8"). */
+        public readonly reason: string,
+    ) {
+        super(`rosetta-frida: malformed signer_sha256 "${value}": ${reason}`);
+    }
+}
+
+/**
+ * Thrown when the loaded map carries a valid `signer_sha256` but the live
+ * app exposes no readable signing certificate, so the authenticity guard
+ * cannot be satisfied.
+ *
+ * Fail-closed: a map that *demands* a signer must not silently pass against
+ * an app that presents none. Mirrors the Kotlin `MissingSignerException`.
+ */
+export class MissingSignerError extends RosettaError {
+    constructor(
+        message: string,
+        /** The normalized signer hash the map demands but could not verify. */
+        public readonly expected: string,
     ) {
         super(message);
     }

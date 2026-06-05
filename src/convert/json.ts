@@ -2,8 +2,12 @@
  * Canonical JSON emission + the user-facing `convertToJson` entry point.
  *
  * `convertToJson` is the single function the CLI / tooling should call
- * to turn a YAML source string or TS-module path into the canonical
- * strict-JSON representation that lives on disk.
+ * to turn a YAML source string into the canonical strict-JSON
+ * representation that lives on disk.
+ *
+ * Maps are pure data: only JSON and YAML are accepted. TS/JS-module
+ * ingestion was removed because it executed arbitrary code (via dynamic
+ * `import()`) at author/build time before any validation ran.
  *
  * Output is deterministic: the same input always produces byte-identical
  * output, because we use a stable indent (4 spaces) and rely on
@@ -11,45 +15,40 @@
  * guarantee for string keys).
  */
 
-import { extname } from 'node:path';
 import { RosettaError } from '../errors.js';
 import type { RosettaMap } from '../types/map.js';
 import { yamlToMap } from './yaml.js';
-import { tsModuleToMap } from './ts-module.js';
+import { isModuleExtension, refuseModuleInput } from './ts-module.js';
 
 /** Input formats accepted by `convertToJson`. */
-export type ConvertFormat = 'yaml' | 'ts' | 'auto';
+export type ConvertFormat = 'yaml' | 'auto';
 
 /**
- * Convert `input` (file path or raw source) to canonical strict JSON.
+ * Convert `input` (YAML source text) to canonical strict JSON.
  *
  * The `format` parameter selects the converter:
  *   - `'yaml'`: `input` is YAML *source text*; parse + validate + emit.
- *   - `'ts'`:   `input` is a *file path* to a TS/JS module; dynamic-import
- *               + validate + emit.
- *   - `'auto'`: heuristic. Inputs that contain a newline or are not a path
- *               with a recognized JS/TS extension are treated as YAML
- *               source. Recognized extensions: `.ts`, `.js`, `.mjs`,
- *               `.cjs`.
+ *   - `'auto'`: treat `input` as YAML source. (A JS/TS-module *path*
+ *               passed here is refused, never imported.)
  *
  * Output is deterministic: same input → byte-identical output.
  */
-export async function convertToJson(
-    input: string,
-    format: ConvertFormat = 'auto',
-): Promise<string> {
-    const resolved = format === 'auto' ? detectFormat(input) : format;
-    let map: RosettaMap;
-    if (resolved === 'yaml') {
-        map = yamlToMap(input);
-    } else if (resolved === 'ts') {
-        map = await tsModuleToMap(input);
-    } else {
-        // Unreachable when called through the public type but defensive
-        // for callers that bypass TS (e.g. plain-JS consumers).
-        throw new RosettaError(`unsupported convert format: ${String(resolved)}`);
-    }
-    return renderJson(map);
+export function convertToJson(input: string, format: ConvertFormat = 'auto'): Promise<string> {
+    // Conversion is fully synchronous now that TS/JS-module ingestion
+    // (the only async path) is gone. The signature stays `Promise`-typed
+    // for API stability; thrown errors surface as a rejected promise.
+    return Promise.resolve().then(() => {
+        const resolved = format === 'auto' ? detectFormat(input) : format;
+        let map: RosettaMap;
+        if (resolved === 'yaml') {
+            map = yamlToMap(input);
+        } else {
+            // Unreachable when called through the public type but defensive
+            // for callers that bypass TS (e.g. plain-JS consumers).
+            throw new RosettaError(`unsupported convert format: ${String(resolved)}`);
+        }
+        return renderJson(map);
+    });
 }
 
 /**
@@ -65,17 +64,16 @@ export function renderJson(map: RosettaMap): string {
 }
 
 /**
- * Detect input format from a heuristic on the raw input string. Inputs
- * with a JS/TS extension and no newline are treated as TS module paths;
- * anything else is YAML source.
+ * Detect input format from a heuristic on the raw input string. The only
+ * supported input format is YAML source text; a JS/TS-module *path* (no
+ * newline, module extension) is REFUSED with a helpful error rather than
+ * imported. Everything else is treated as YAML.
+ *
+ * @throws RosettaError if `input` looks like a TS/JS-module path.
  */
-export function detectFormat(input: string): 'yaml' | 'ts' {
-    if (input.includes('\n')) {
-        return 'yaml';
-    }
-    const ext = extname(input).toLowerCase();
-    if (ext === '.ts' || ext === '.js' || ext === '.mjs' || ext === '.cjs') {
-        return 'ts';
+export function detectFormat(input: string): 'yaml' {
+    if (!input.includes('\n') && isModuleExtension(input)) {
+        refuseModuleInput(input);
     }
     return 'yaml';
 }

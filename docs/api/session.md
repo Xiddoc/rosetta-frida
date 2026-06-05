@@ -24,6 +24,15 @@ interface SessionOptions {
     trace?: boolean;                          // default: false
     healthCheckThreshold?: number;            // default: 0.8
     skipHealthCheck?: boolean;                // default: false
+    enforceSigner?: boolean;                  // default: true (secure default)
+    targetPolicy?: TargetPolicy;              // default: built-in denylist, fail-closed
+}
+
+interface TargetPolicy {
+    denyPrefixes?: readonly string[];         // augments (or replaces) the built-in denylist
+    mergeDenylist?: boolean;                  // default: true (augment); false replaces
+    allow?: readonly string[];                // exact-FQN escape hatch
+    appNamespaceLabels?: number;              // default: 2 (e.g. com.example)
 }
 ```
 
@@ -140,6 +149,121 @@ session reports `healthy: true` regardless. Use only in tests or when
 your hook does not depend on the mapped classes being live yet
 (e.g., late-loaded plugins).
 
+### `enforceSigner`
+
+Whether to enforce the map's signing-certificate authenticity guard
+(`signer_sha256`) at attach time. Default `true` — the secure default.
+
+When the loaded map carries a `signer_sha256` and `enforceSigner` is
+not `false`, the session reads the running app's signing certificate
+**in-process** (see [Signer enforcement](#signer-enforcement)),
+SHA-256's it, and **fails closed** with
+[`SignerMismatchError`](../reference/errors.md#signermismatcherror) if
+no live signer matches. When the map has no `signer_sha256`, the check
+is skipped regardless of this flag (and no `signer-check` event is
+emitted).
+
+Set to `false` to opt out — e.g. when attaching to a locally re-signed
+debug build of an app whose map was captured from the production-signed
+APK.
+
+**Cross-client contract.** `enforceSigner: false` is the Frida-idiomatic
+equivalent of the Kotlin `rosetta-xposed` client's
+`RosettaXposed.fromMapUnverified` construction path: both select the
+**unverified** path that skips the signer guard entirely. Frida has no
+constructor-overload idiom, so the opt-out is expressed as a typed
+`SessionOptions` flag instead; opted-out (`enforceSigner: false`) ==
+the unverified path. With the flag on (the default) and a valid
+`signer_sha256` present, enforcement is unconditional and fail-closed on
+both clients, with a matching error taxonomy (`MalformedSignerError` /
+`MissingSignerError` / `SignerMismatchError`).
+
+### `targetPolicy`
+
+The **target-namespace guard** (RFC 0001 C1). A community map maps a
+real name to an arbitrary obfuscated string, and the runtime feeds that
+string verbatim into `Java.use(...)`. A malicious or simply wrong map
+could therefore redirect a hook at a sensitive framework class —
+`java.lang.Runtime`, `android.app.*`, a `dagger.internal.Provider`, etc.
+This guard confines a resolution **target** (the FQN passed to
+`Java.use`: a resolved class `obfName`, a method/field's owning class,
+and the obfuscated output of arg-type translation) to the app's own /
+package-local namespace, and **throws**
+[`TargetPolicyError`](../reference/errors.md#targetpolicyerror) before
+the `Java.use` call for anything else. **Strict only — there is no
+warn-and-proceed mode.**
+
+Omitting `targetPolicy` is **fail-closed**: the built-in
+`DEFAULT_DENY_PREFIXES`, an empty allowlist, and 2 app-namespace labels
+apply, so a map pointing a hook at `java.lang.Runtime` is rejected with
+no configuration needed.
+
+Decision order (first match wins):
+
+0. **normalization** — strip array markers down to the element class
+   FQN; a primitive / `void` / empty result → ALLOW (not a loadable
+   class). (Matches the Kotlin `decide` step 0.)
+1. **`allow`** exact-FQN match → ALLOW (the escape hatch for legitimate
+   framework hooks; exact, case-sensitive, against the normalized
+   element FQN).
+2. top-level prefix on the **reserved denylist** → DENY (`reason:
+   'reserved-namespace'`), even if it also matches the app prefix.
+3. **package-local** (no `.` in the namespace) → ALLOW (the common case
+   — obfuscators emit single-letter / short names).
+4. starts with the **app's own prefix** (first `appNamespaceLabels`
+   labels of the app package, dot-boundary) → ALLOW.
+5. else → DENY (`reason: 'foreign-namespace'`).
+
+Normalization strips array markers (`[`, `L…;`, `…[]`) down to the
+element class FQN; primitives and `void` are always allowed (not
+loadable); nested classes split the namespace on `.` only
+(`com.example.app.Foo$Bar` is app-owned; `android.os.Foo$Bar` is
+denied). Matching is case-sensitive.
+
+`denyPrefixes` augments the built-in list by default; set
+`mergeDenylist: false` to **replace** it entirely (use with care — that
+re-opens framework namespaces). The default denylist:
+
+```
+java.  javax.  jdk.  sun.  com.sun.  dalvik.  android.  androidx.
+com.android.  kotlin.  kotlinx.  dagger.  com.google.android.  libcore.
+org.apache.harmony.
+```
+
+**Cross-client contract.** This is the Frida twin of the Kotlin
+`rosetta-xposed` `TargetGuard`; both clients share the same decision
+order and the same `DEFAULT_DENY_PREFIXES` (value-for-value) so they
+accept/reject the same maps.
+
+#### Programmatic guard helpers
+
+The guard predicates are also part of the **public API**, re-exported
+from the package root for callers who want to apply the same fail-closed
+decision outside a session (e.g. pre-validating a map before bundling,
+or in their own tooling). They are the Frida twins of the Kotlin
+`TargetGuard` / `isAllowed` / `assertAllowed` surface:
+
+```typescript
+import {
+    DEFAULT_DENY_PREFIXES,      // readonly string[] — the built-in reserved denylist
+    DEFAULT_APP_NAMESPACE_LABELS, // number — default app-prefix label count (2)
+    appPrefixOf,                // (app, policy?) => string — derive the app namespace prefix
+    isTargetAllowed,            // (fqn, appPrefix, policy?) => boolean — pure predicate
+    assertTargetAllowed,        // (realName, fqn, appPrefix, policy?, classScope?) => void — throws TargetPolicyError
+} from 'rosetta-frida';
+
+const appPrefix = appPrefixOf('com.example.app'); // 'com.example'
+isTargetAllowed('java.lang.Runtime', appPrefix);  // false (reserved)
+isTargetAllowed('aaaa', appPrefix);               // true  (package-local)
+assertTargetAllowed('com.example.app.Evil', 'java.lang.Runtime', appPrefix); // throws TargetPolicyError
+```
+
+`isTargetAllowed` / `assertTargetAllowed` apply the exact decision order
+above; `assertTargetAllowed` throws
+[`TargetPolicyError`](../reference/errors.md#targetpolicyerror) on a
+denial (the form the session's resolver and attach-time health check use
+internally). All four are pure and side-effect-free.
+
 ## Return value — `Session`
 
 ```typescript
@@ -171,6 +295,7 @@ sequenceDiagram
     participant S as RosettaSession ctor
     participant D as detectAppAndVersion
     participant P as pickMapForVersion
+    participant G as checkSigner
     participant H as runHealthCheck
     participant R as createResolver
 
@@ -182,6 +307,14 @@ sequenceDiagram
     P-->>S: { map, fuzzy?, registryKey? }
     Note over S: cross-check map.app; version_code (or label) acceptable
     Note over S: emit 'map-load' event
+    opt map.signer_sha256 set AND enforceSigner!=false
+        S->>G: checkSigner(map.signer_sha256)
+        G-->>S: { passed, expected, actual, source }
+        Note over S: emit 'signer-check' event
+        opt !passed
+            S--xU: throw SignerMismatchError
+        end
+    end
     alt skipHealthCheck=false
         S->>H: runHealthCheck(map, threshold)
         H-->>S: { passed, rate, failedEntries }
@@ -195,9 +328,10 @@ sequenceDiagram
     S-->>U: Session
 ```
 
-The session emits four events as it spins up — `detect`,
-`map-load`, `health-check`, and `resolve` events as your hooks
-exercise the resolver. Subscribe via
+The session emits a sequence of events as it spins up — `detect`,
+`map-load`, an optional `signer-check` (only when the map carries a
+`signer_sha256` and enforcement is on), `health-check`, and `resolve`
+events as your hooks exercise the resolver. Subscribe via
 [`rosetta.events.on(...)`](tier-3.md#rosettaevents).
 
 ## Errors
@@ -205,6 +339,10 @@ exercise the resolver. Subscribe via
 | Error | When |
 |---|---|
 | [`MapVersionMismatchError`](../reference/errors.md#mapversionmismatcherror) | The picked map's `(app, version)` does not match the detected `(app, version)`. Includes a hint about `versionMatch: 'fuzzy'` if applicable. |
+| [`SignerMismatchError`](../reference/errors.md#signermismatcherror) | The map carries a valid `signer_sha256`, enforcement is on, the app presents signer(s), and none matched. Carries `expected` + sorted `actual` hashes. Override with `enforceSigner: false`. |
+| [`MalformedSignerError`](../reference/errors.md#malformedsignererror) | The map's `signer_sha256` is not 64 hex chars after normalization (author error). Raised before the live signers are read. |
+| [`MissingSignerError`](../reference/errors.md#missingsignererror) | The map carries a valid `signer_sha256`, enforcement is on, but the live app exposes no readable signing certificate. Override with `enforceSigner: false`. |
+| [`TargetPolicyError`](../reference/errors.md#targetpolicyerror) | A resolved target FQN is forbidden by the namespace guard (`reason: 'reserved-namespace' \| 'foreign-namespace'`). Thrown at resolution time, before any `Java.use`. Strict only. Allow a legit framework hook via `targetPolicy.allow`. |
 | [`HealthCheckFailedError`](../reference/errors.md#healthcheckfailederror) | Health check failed and `failurePolicy === 'strict'`. |
 | `Error` ("no map for version …") | Registry has no exact-version entry and `versionMatch !== 'fuzzy'`. |
 | `Error` ("registry is empty") | Registry has no entries at all. |
@@ -266,6 +404,86 @@ rosetta.events.onType('health-check', (e) => {
 
 See [Events reference](../reference/events.md#healthcheckevent) for
 the full event shape.
+
+## Signer enforcement
+
+When the loaded map carries a `signer_sha256` (the SHA-256 of the APK
+**signing certificate**, not the APK bytes) and `enforceSigner` is not
+`false`, the session verifies the running app was actually signed by
+the expected party **before** any hook installs. This is the
+authenticity half of the "right map for the right app" guarantee
+(RFC 0001 Decision 3): it stops a map from being silently applied to a
+**repackaged or spoofed** build that merely shares the same
+`version_code`.
+
+The read mirrors the auto-detect chain but asks `PackageManager` for
+signing info instead of versions:
+
+```typescript
+const pm = ctx.getPackageManager();
+// API 28+ — the v2/v3 signing block:
+let info = pm.getPackageInfo(pkg, PackageManager.GET_SIGNING_CERTIFICATES);
+let signers = info.signingInfo.value.getApkContentsSigners();
+// pre-28 fallback — the deprecated signatures array:
+if (!signers) signers = pm.getPackageInfo(pkg, PackageManager.GET_SIGNATURES).signatures.value;
+// each Signature → SHA-256(cert bytes) → lowercase, colon-free hex
+```
+
+Behaviour:
+
+- **Match** — at least one live signer's SHA-256 equals the map's
+  `signer_sha256`. The session emits a passing `signer-check` event and
+  proceeds.
+- **Mismatch** — no live signer matches. The session emits a failing
+  `signer-check` event and **fails closed** with
+  [`SignerMismatchError`](../reference/errors.md#signermismatcherror)
+  (carrying the `expected` hash and every `actual` live hash). Unlike
+  the health check, this is *not* gated by `failurePolicy` — an
+  authenticity failure always halts, because the whole point is to
+  refuse a map that does not belong to the running app.
+- **Map hash malformed** — the map's `signer_sha256` is not 64 lowercase
+  hex characters after normalization. This is an **author error**, not a
+  spoof, so it fails closed with
+  [`MalformedSignerError`](../reference/errors.md#malformedsignererror)
+  *before* the live signers are even read (rather than a misleading
+  mismatch).
+- **App signer unreadable** — the map has a valid `signer_sha256` but the
+  running app exposes no readable signing certificate. Fails closed with
+  [`MissingSignerError`](../reference/errors.md#missingsignererror).
+- **Field absent** — the map has no `signer_sha256`. The check is
+  skipped and no `signer-check` event is emitted.
+- **Opted out** — `enforceSigner: false` (the equivalent of the Kotlin
+  client's unverified construction path). Same as field-absent: skipped
+  and silent.
+
+**Multiple signers.** An APK may be signed by more than one certificate
+(e.g. a signing-key rotation lineage). The check hashes every signer
+and accepts a match on **any** one — requiring all to match would
+reject legitimate key-rotation builds, and a single trusted-signer
+match already establishes "this build was signed by the expected
+party."
+
+**Normalization.** Both the map's `signer_sha256` and the live hashes
+are normalized before comparison — lowercased, with colon separators
+stripped and *surrounding* whitespace trimmed — so a map authored as
+`AB:CD:...` compares equal to the runtime bytes. Interior whitespace is
+deliberately **not** stripped, so a garbled hash survives to fail the
+64-hex well-formedness check (rejected as `MalformedSignerError`); this
+matches the Kotlin client so malformed input is rejected identically on
+both. The reported `actual` live-signer hashes are **sorted**, so
+mismatch reports are deterministic and align with the Kotlin client's
+sorted-set rendering.
+
+```typescript
+rosetta.events.onType('signer-check', (e) => {
+    if (!e.passed) {
+        send({ stage: 'signer-mismatch', expected: e.expected, actual: e.actual });
+    }
+});
+```
+
+See [Events reference](../reference/events.md#signercheckevent) for the
+full event shape.
 
 ## Switching sessions
 

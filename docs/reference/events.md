@@ -1,13 +1,18 @@
 # Diagnostic events
 
-The session's `EventBus` emits four kinds of structured events.
+The session's `EventBus` emits five kinds of structured events.
 Subscribers — programmatic, via `rosetta.events.on(...)` — get every
 event. Trace mode (`trace: true`) also writes each event to
 `console.error` as a single-line formatted string. The two channels
 coexist; the same event reaches both.
 
 ```typescript
-type DiagnosticEvent = ResolveEvent | HealthCheckEvent | DetectEvent | MapLoadEvent;
+type DiagnosticEvent =
+    | ResolveEvent
+    | HealthCheckEvent
+    | DetectEvent
+    | MapLoadEvent
+    | SignerCheckEvent;
 ```
 
 ## `ResolveEvent`
@@ -188,6 +193,56 @@ rosetta.events.onType('map-load', (e) => {
   a `versionMatch: 'fuzzy'` fall-back).
 - Asserting in CI that the expected map made it into the bundle.
 
+## `SignerCheckEvent`
+
+Emitted once at session creation **only when** the loaded map carries a
+`signer_sha256` and enforcement is on (`enforceSigner !== false`),
+after the map is picked and before the health check. When the map has
+no `signer_sha256` — or `enforceSigner: false` — no event is emitted.
+
+```typescript
+interface SignerCheckEvent {
+    type: 'signer-check';
+    passed: boolean;
+    app: string;
+    expected: string;
+    actual: readonly string[];
+    source: 'signingInfo' | 'signatures';
+}
+```
+
+| Field | Description |
+|---|---|
+| `passed` | `true` if any live signer's SHA-256 matched the map's expected hash. When `false`, the session throws [`SignerMismatchError`](errors.md#signermismatcherror) right after emitting this event. |
+| `app` | The session's detected/supplied app package name. |
+| `expected` | The map's `signer_sha256`, normalized (lowercase, no colons). |
+| `actual` | Every live signing-certificate SHA-256 observed (normalized). More than one entry when the app has multiple signers. |
+| `source` | Which PackageManager flag yielded the signers — `'signingInfo'` (API 28+ `GET_SIGNING_CERTIFICATES`) or `'signatures'` (pre-28 `GET_SIGNATURES`). |
+
+**Trace-line format:**
+
+- Pass: `[rosetta] signer-check PASS com.example.app expected=ab… signers=1 (signingInfo)`
+- Fail: `[rosetta] signer-check FAIL com.example.app expected=cd… signers=2 (signatures)`
+
+**Subscribing:**
+
+```typescript
+rosetta.events.onType('signer-check', (e) => {
+    if (!e.passed) {
+        send({ alert: 'signer-mismatch', expected: e.expected, actual: e.actual });
+    }
+});
+```
+
+**Use cases:**
+
+- Asserting in CI that the bundled map's `signer_sha256` matches the
+  build under test.
+- Recording which signing path (modern vs. legacy) the device used.
+- Catching a repackaged/spoofed build before any hook installs.
+
+See [API · Session · Signer enforcement](../api/session.md#signer-enforcement).
+
 ## Event ordering
 
 A clean session-creation flow emits events in this order:
@@ -199,6 +254,9 @@ sequenceDiagram
 
     S->>L: DetectEvent { source: 'auto' | 'override' }
     S->>L: MapLoadEvent { app, version, classCount }
+    opt map.signer_sha256 set AND enforceSigner!=false
+        S->>L: SignerCheckEvent { passed, expected, actual }
+    end
     S->>L: HealthCheckEvent { passed, rate, ... }
     Note over S: ... user hooks install ...
     S->>L: ResolveEvent { name, obfName, source: 'map' }
@@ -208,9 +266,9 @@ sequenceDiagram
 ```
 
 `DetectEvent` always precedes `MapLoadEvent` (you need to know the
-version to pick a map). `MapLoadEvent` always precedes
-`HealthCheckEvent` (you need a map to check). `ResolveEvent`s flow
-indefinitely after.
+version to pick a map). `MapLoadEvent` always precedes the optional
+`SignerCheckEvent` and then `HealthCheckEvent` (you need a map to check).
+`ResolveEvent`s flow indefinitely after.
 
 ## Subscribing to all events
 

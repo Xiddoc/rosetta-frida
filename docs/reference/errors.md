@@ -11,10 +11,14 @@ All error classes are exported from the package root:
 import {
     RosettaError,
     ResolveError,
+    TargetPolicyError,
     AmbiguousOverloadError,
     MapValidationError,
     JsonParseError,
     MapVersionMismatchError,
+    SignerMismatchError,
+    MalformedSignerError,
+    MissingSignerError,
     HealthCheckFailedError,
     MarkerBlockError,
     UnresolvedAccessError,
@@ -83,6 +87,55 @@ class ResolveError extends RosettaError {
 - `rosetta.field(instance, 'someField')` when `someField` is not
   mapped on the instance's class.
 
+## `TargetPolicyError`
+
+A resolution **target** (the FQN that would be passed to `Java.use`) is
+forbidden by the target-namespace guard (RFC 0001 C1). This is a
+**critical security guard**: a community map maps a real name to an
+arbitrary obfuscated string, and a malicious or buggy map could redirect
+a hook at a sensitive framework class (`java.lang.Runtime`,
+`android.app.*`, a `dagger.internal.Provider`). The guard confines
+targets to package-local / app-owned namespaces (plus an explicit
+escape-hatch allowlist) and throws this **before any `Java.use` call**.
+
+Distinct from [`ResolveError`](#resolveerror): a `TargetPolicyError`
+means the resolved target is *forbidden*, not merely *absent*. Mirrors
+the Kotlin `rosetta-xposed` `TargetPolicyException`. **Strict only —
+there is no warn-and-proceed mode.**
+
+```typescript
+class TargetPolicyError extends RosettaError {
+    readonly realName: string;
+    readonly target: string;
+    readonly reason: 'reserved-namespace' | 'foreign-namespace';
+    readonly classScope?: string;
+}
+```
+
+| Field | Description |
+|---|---|
+| `realName` | The real name being resolved when the forbidden target was produced. |
+| `target` | The rejected target FQN (what would have been passed to `Java.use`). |
+| `reason` | `'reserved-namespace'` (matched the built-in/extended denylist) or `'foreign-namespace'` (neither package-local nor app-owned). |
+| `classScope` | For method/field/arg-type targets, the owning class real-name. Undefined for class-level lookups. |
+
+**Example message:** `rosetta-frida: target 'java.lang.Runtime' for real
+name 'com.example.app.Evil' is forbidden by the namespace guard:
+namespace 'java.lang.Runtime' is on the reserved denylist (prefix
+'java.').`
+
+**When fired:**
+
+- `rosetta.use(...)` / `rosetta.hook(...)` / `rosetta.map.resolveClass(...)`
+  / `resolveMethod` / `resolveField` when the resolved obfuscated class
+  lands on a reserved or foreign namespace.
+- arg-type translation (the `.overload(...)` secondary vector) when a
+  mapped arg-type's obfuscated form is forbidden.
+- a runtime `override(...)` pointing at a forbidden FQN.
+
+Permit a legitimate framework hook with the exact-FQN escape hatch:
+`rosetta.session({ map, targetPolicy: { allow: ['java.lang.Runtime'] } })`.
+
 ## `AmbiguousOverloadError`
 
 A method real-name has multiple overloads in the map and the user
@@ -146,8 +199,7 @@ with `issues`:
 
 - `loadMap('./x.json')` when the parsed object doesn't satisfy the
   Zod schema.
-- `yamlToMap(...)` / `tsModuleToMap(...)` — the converters all run
-  the same validator.
+- `yamlToMap(...)` — the converter runs the same validator.
 - `rosetta validate <map>` CLI when the file fails the check.
 
 ## `JsonParseError`
@@ -203,6 +255,99 @@ versionMatch: 'fuzzy'.`
 
 - `rosetta.session({ map })` when the map's `app`/`version` doesn't
   match the detected pair (and `versionMatch` is not `'fuzzy'`).
+
+## `SignerMismatchError`
+
+The loaded map carries a `signer_sha256`, enforcement is on
+(`enforceSigner !== false`), and **no** live signing certificate
+matched the expected hash. This is a fail-closed authenticity guard
+(RFC 0001 Decision 3) — it is **not** gated by `failurePolicy`; an
+authenticity failure always halts.
+
+```typescript
+class SignerMismatchError extends RosettaError {
+    readonly app: string;
+    readonly expected: string;
+    readonly actual: readonly string[];
+}
+```
+
+| Field | Description |
+|---|---|
+| `app` | The session's detected/supplied app package name. |
+| `expected` | The map's `signer_sha256`, normalized (lowercase, no colons). |
+| `actual` | Every live signing-certificate SHA-256 observed (normalized, **sorted** for deterministic reporting). May contain more than one when the app has multiple signers. |
+
+**Example message:** `rosetta-frida: signer mismatch for
+com.example.app — the loaded map (com.example.app@3.4.5) expects
+signing-certificate SHA-256 ab… , but the running app is signed by
+[cd…]. Refusing to apply a map to an app it was not captured for (pass
+enforceSigner: false to override).`
+
+**When fired:**
+
+- `rosetta.session({ map })` when the map has a valid `signer_sha256`,
+  the flag is on, the live app presents signer(s), and none match.
+
+The check is **skipped** (and no error is possible) when the map has no
+`signer_sha256` or when `enforceSigner: false`. A match on **any** one
+of several live signers passes. See
+[API · Session · Signer enforcement](../api/session.md#signer-enforcement).
+
+`SignerMismatchError` is one of three signer error types mirroring the
+Kotlin `rosetta-xposed` `SignerGuard` taxonomy:
+`MalformedSignerError` (the map's own hash is ill-formed),
+`MissingSignerError` (the live app exposes no readable signer), and this
+`SignerMismatchError` (signers present, none match).
+
+## `MalformedSignerError`
+
+The loaded map's `signer_sha256` is not well-formed. After normalization
+(trim surrounding whitespace, strip `:`, lowercase) it is **not** exactly
+64 lowercase hex characters (`^[0-9a-f]{64}$`).
+
+This is treated as an **author error in the map artifact**, distinct from
+a mismatch — reporting it as a mismatch would mask a bad map as a spoof.
+The canonical maps schema also pins `signer_sha256` to `^[0-9a-f]{64}$`,
+so a conformant map can never trip this at runtime. Mirrors the Kotlin
+`MalformedSignerException`.
+
+```typescript
+class MalformedSignerError extends RosettaError {
+    readonly value: string;
+    readonly reason: string;
+}
+```
+
+| Field | Description |
+|---|---|
+| `value` | The offending hash value as supplied (before/around normalization). |
+| `reason` | Why it was rejected (e.g. "must be 64 hex chars after normalization, got 8"). |
+
+**When fired:** during signer enforcement, *before* the live signers are
+read, so a bad map hash is reported even when the app exposes no signer.
+
+## `MissingSignerError`
+
+The loaded map carries a **valid** `signer_sha256` but the live app
+exposes **no readable** signing certificate, so the authenticity guard
+cannot be satisfied. Fail-closed (not gated by `failurePolicy`): a map
+that demands a signer must not silently pass against an app that presents
+none. Mirrors the Kotlin `MissingSignerException`.
+
+```typescript
+class MissingSignerError extends RosettaError {
+    readonly expected: string;
+}
+```
+
+| Field | Description |
+|---|---|
+| `expected` | The normalized signer hash the map demands but could not verify. |
+
+**When fired:** `rosetta.session({ map })` when the map has a valid
+`signer_sha256`, the flag is on, and the running app exposes no readable
+signing certificate. Override with `enforceSigner: false`.
 
 ## `HealthCheckFailedError`
 

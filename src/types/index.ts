@@ -19,7 +19,13 @@ export type {
     RosettaMapRegistry,
 } from './map.js';
 
-export type { FailurePolicy, VersionMatch, SessionOptions, Session } from './session.js';
+export type {
+    FailurePolicy,
+    VersionMatch,
+    TargetPolicy,
+    SessionOptions,
+    Session,
+} from './session.js';
 
 export type { ResolvedClass, ResolvedMethod, ResolvedField, Resolver } from './resolver.js';
 
