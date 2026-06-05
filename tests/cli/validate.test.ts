@@ -9,10 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type * as fsMod from 'node:fs/promises';
-import * as fsReal from 'node:fs/promises';
-import * as os from 'node:os';
 import * as path from 'node:path';
-import { beforeAll, afterAll } from 'vitest';
 import { parseValidateArgs, loadMap, runValidate } from '../../cli/commands/validate.js';
 import { RosettaError } from '../../src/errors.js';
 
@@ -36,17 +33,6 @@ classes:
     obfuscated: aaaa
 `;
 
-const TS_MODULE_SRC = `
-export default {
-    schema_version: 2, version_code: 1,
-    app: 'com.example.app',
-    version: '1.0.0',
-    classes: {
-        IFoo: { obfuscated: 'aaaa' },
-    },
-};
-`;
-
 function enoent(p: string): NodeJS.ErrnoException {
     const err = new Error(`ENOENT: ${p}`) as NodeJS.ErrnoException;
     err.code = 'ENOENT';
@@ -62,19 +48,6 @@ function makeFs(initial: Record<string, string>): typeof fsMod {
         },
     } as unknown as typeof fsMod;
 }
-
-let tsFixture: string;
-let fixturesDir: string;
-
-beforeAll(async () => {
-    fixturesDir = await fsReal.mkdtemp(path.join(os.tmpdir(), 'rosetta-validate-'));
-    tsFixture = path.join(fixturesDir, 'fixture.mjs');
-    await fsReal.writeFile(tsFixture, TS_MODULE_SRC, 'utf8');
-});
-
-afterAll(async () => {
-    await fsReal.rm(fixturesDir, { recursive: true, force: true });
-});
 
 describe('parseValidateArgs', () => {
     it('accepts exactly one positional', () => {
@@ -115,9 +88,19 @@ describe('loadMap', () => {
         expect(map.app).toBe('com.example.app');
     });
 
-    it('loads a .mjs TS module', async () => {
-        const map = await loadMap(tsFixture);
-        expect(map.app).toBe('com.example.app');
+    it('refuses a .mjs TS/JS module (never imported)', async () => {
+        const fs = makeFs({});
+        await expect(loadMap('/some/fixture.mjs', fs)).rejects.toThrow(/no longer supported/);
+    });
+
+    it('refuses a .ts module', async () => {
+        const fs = makeFs({});
+        await expect(loadMap('/some/fixture.ts', fs)).rejects.toThrow(RosettaError);
+    });
+
+    it('refuses a NUL byte in the path', async () => {
+        const fs = makeFs({});
+        await expect(loadMap('/m.json\0.png', fs)).rejects.toThrow(/NUL/);
     });
 
     it('throws on unsupported extension', async () => {

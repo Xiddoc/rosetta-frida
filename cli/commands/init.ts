@@ -17,6 +17,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
 import { CURRENT_SCHEMA_VERSION } from '../../src/types/map.js';
+import { assertValidApp, assertValidVersion, assertContained } from '../../src/parse/index.js';
 
 export interface InitOptions {
     app: string;
@@ -121,7 +122,12 @@ export function defaultOutputPath(app: string, version: string): string {
  */
 export async function runInit(argv: readonly string[], fsImpl: typeof fs = fs): Promise<string> {
     const opts = parseInitArgs(argv);
+    // Validate the identity tokens BEFORE they are interpolated into a path.
+    assertValidApp(opts.app);
+    assertValidVersion(opts.version);
     const outPath = opts.output ?? defaultOutputPath(opts.app, opts.version);
+    // Contain the (possibly user-supplied) output path to the project tree.
+    assertContained(outPath);
     if (!opts.force && (await fileExists(outPath, fsImpl))) {
         throw new RosettaError(
             `refusing to overwrite existing file: ${outPath} (pass --force to overwrite)`,

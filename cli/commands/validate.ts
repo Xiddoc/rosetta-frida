@@ -1,16 +1,21 @@
 /**
- * `rosetta validate <map.{json,yaml,yml,ts,js,mjs,cjs}>`
+ * `rosetta validate <map.{json,yaml,yml}>`
  *
  * Loads a map via the appropriate path (auto-detected by extension),
  * runs structural validation, and prints either "OK" or a structured
  * error report. Exit code is 0 on success, 1 on failure.
+ *
+ * Only JSON and YAML are accepted — maps are pure data. TS/JS-module
+ * inputs are refused (importing a module to validate it was a
+ * build-time RCE), never imported.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError, MapValidationError } from '../../src/errors.js';
-import { yamlToMap, tsModuleToMap, validateStructure } from '../../src/convert/index.js';
+import { yamlToMap, refuseModuleInput, validateStructure } from '../../src/convert/index.js';
 import { parseJson } from '../../src/parse/json.js';
+import { assertNoNul } from '../../src/parse/index.js';
 import type { RosettaMap } from '../../src/types/map.js';
 
 export interface ValidateOptions {
@@ -39,6 +44,7 @@ export function parseValidateArgs(argv: readonly string[]): ValidateOptions {
  * extension.
  */
 export async function loadMap(inputPath: string, fsImpl: typeof fs = fs): Promise<RosettaMap> {
+    assertNoNul(inputPath);
     const ext = path.extname(inputPath).toLowerCase();
     if (ext === '.json') {
         const raw = await fsImpl.readFile(inputPath, 'utf8');
@@ -55,7 +61,8 @@ export async function loadMap(inputPath: string, fsImpl: typeof fs = fs): Promis
         return yamlToMap(raw);
     }
     if (ext === '.ts' || ext === '.js' || ext === '.mjs' || ext === '.cjs') {
-        return tsModuleToMap(inputPath);
+        // Maps are pure data — never import a contributor-supplied module.
+        refuseModuleInput(inputPath);
     }
     throw new RosettaError(`unsupported map extension: ${ext} (path: ${inputPath})`);
 }

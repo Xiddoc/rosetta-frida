@@ -6,16 +6,21 @@
  *
  * Recognized inputs:
  *   - `.yaml` / `.yml`         → YAML source.
- *   - `.ts` / `.js` / `.mjs` / `.cjs` → TS/JS module exporting a RosettaMap.
  *
  * JSON input (`.json`) is rejected here: it's already in the canonical
- * format, so there's nothing to convert.
+ * format, so there's nothing to convert. TS/JS-module inputs
+ * (`.ts`/`.js`/`.mjs`/`.cjs`) are refused — maps are pure data and must
+ * be authored as JSON or YAML (module ingestion was a build-time RCE).
+ *
+ * The output path is contained to the project tree (CWD); a traversal
+ * or absolute `-o` is refused.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
-import { convertToJson, yamlToMap, tsModuleToMap, renderJson } from '../../src/convert/index.js';
+import { convertToJson, yamlToMap, refuseModuleInput } from '../../src/convert/index.js';
+import { assertContained, assertNoNul } from '../../src/parse/index.js';
 
 export interface ConvertOptions {
     inputPath: string;
@@ -60,6 +65,9 @@ export function parseConvertArgs(argv: readonly string[]): ConvertOptions {
 /** Run `rosetta convert`. Returns the absolute output path on success. */
 export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs): Promise<string> {
     const opts = parseConvertArgs(argv);
+    assertNoNul(opts.inputPath);
+    // Contain the output path to the project tree before any IO.
+    assertContained(opts.outputPath);
     const ext = path.extname(opts.inputPath).toLowerCase();
 
     if (!opts.force && (await fileExists(opts.outputPath, fsImpl))) {
@@ -73,10 +81,8 @@ export async function runConvert(argv: readonly string[], fsImpl: typeof fs = fs
         const raw = await fsImpl.readFile(opts.inputPath, 'utf8');
         json = await convertToJson(raw, 'yaml');
     } else if (ext === '.ts' || ext === '.js' || ext === '.mjs' || ext === '.cjs') {
-        // For TS modules we go through the module-loader directly, since the
-        // path-vs-source disambiguation is explicit here.
-        const map = await tsModuleToMap(opts.inputPath);
-        json = renderJson(map);
+        // Maps are pure data — never import a contributor-supplied module.
+        refuseModuleInput(opts.inputPath);
     } else if (ext === '.json') {
         throw new RosettaError(`input is already in canonical format (${ext}); nothing to convert`);
     } else {

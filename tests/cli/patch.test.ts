@@ -294,4 +294,58 @@ describe('runPatch', () => {
         expect(code).toBe(1);
         expect(captured.stderr[0]).toMatch(/cannot write output.*EACCES/);
     });
+
+    it('exits 1 and writes nothing when -o escapes the project tree', async () => {
+        const fs = makeFakeFs({
+            'b.js': emitMarkerBlock(map()),
+            'new.json': JSON.stringify(map('9.9.9')),
+        });
+        const captured = makeCaptured();
+        const code = await runPatch(
+            ['b.js', '--map', 'new.json', '-o', '../escape.js'],
+            makeIo(fs, captured),
+        );
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/patch:.*outside the project tree/);
+        expect(fs.files.has('../escape.js')).toBe(false);
+        // The input bundle is untouched.
+        expect(fs.files.get('b.js')).toBe(emitMarkerBlock(map()));
+    });
+
+    it('exits 1 when -o is an absolute path outside the tree', async () => {
+        const fs = makeFakeFs({
+            'b.js': emitMarkerBlock(map()),
+            'new.json': JSON.stringify(map('9.9.9')),
+        });
+        const captured = makeCaptured();
+        const code = await runPatch(
+            ['b.js', '--map', 'new.json', '-o', '/etc/out.js'],
+            makeIo(fs, captured),
+        );
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/outside the project tree/);
+    });
+
+    it('exits 1 when the in-place bundle path escapes the project tree', async () => {
+        // No -o: output defaults to the bundle path, which is also contained.
+        const fs = makeFakeFs({ '../outside.js': emitMarkerBlock(map()) });
+        const captured = makeCaptured();
+        const code = await runPatch(['../outside.js', '--map', 'new.json'], makeIo(fs, captured));
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/outside the project tree/);
+    });
+
+    it('exits 1 when -o contains a NUL byte', async () => {
+        const fs = makeFakeFs({
+            'b.js': emitMarkerBlock(map()),
+            'new.json': JSON.stringify(map('9.9.9')),
+        });
+        const captured = makeCaptured();
+        const code = await runPatch(
+            ['b.js', '--map', 'new.json', '-o', 'out.js\0.png'],
+            makeIo(fs, captured),
+        );
+        expect(code).toBe(1);
+        expect(captured.stderr[0]).toMatch(/NUL/);
+    });
 });
