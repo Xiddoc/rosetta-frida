@@ -23,7 +23,12 @@
  * Document this in the JSDoc on `createSession`.
  */
 
-import { HealthCheckFailedError, MapVersionMismatchError, SignerMismatchError } from '../errors.js';
+import {
+    HealthCheckFailedError,
+    MapVersionMismatchError,
+    MissingSignerError,
+    SignerMismatchError,
+} from '../errors.js';
 import { EventBus } from '../log.js';
 import { createResolver } from '../resolver/index.js';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
@@ -35,7 +40,12 @@ import {
     DEFAULT_HEALTH_CHECK_THRESHOLD,
     type HealthCheckJavaApi,
 } from './health-check.js';
-import { checkSigner, type SignerJavaApi } from './signer-detect.js';
+import {
+    checkSigner,
+    NoSignerReadableError,
+    normalizeSignerHash,
+    type SignerJavaApi,
+} from './signer-detect.js';
 import { isRegistry, pickMapForVersion } from './version-match.js';
 
 /**
@@ -199,18 +209,47 @@ export class RosettaSession implements Session {
      * Run the signing-certificate authenticity guard for the active map.
      *
      * No-op (and emits nothing) when the map has no `signer_sha256` or when
-     * `enforceSigner: false`. Otherwise reads the live app's signer(s)
-     * in-process, emits a structured `signer-check` event, and FAILS CLOSED
-     * with `SignerMismatchError` if no live signer matches the map's
-     * expected hash. An app may carry multiple signers (key-rotation
-     * lineage / multi-signer builds); a match on ANY one is accepted.
+     * `enforceSigner: false` (the Frida-idiomatic equivalent of the Kotlin
+     * client's unverified construction path). Otherwise reads the live
+     * app's signer(s) in-process, emits a structured `signer-check` event,
+     * and FAILS CLOSED. The three failure modes mirror the Kotlin
+     * `SignerGuard.verify` taxonomy:
+     *
+     *   - the map's own `signer_sha256` is ill-formed (not 64 hex after
+     *     normalization) → `MalformedSignerError` (raised by `checkSigner`);
+     *   - the map's hash is valid but the live app exposes no readable
+     *     signer → `MissingSignerError`;
+     *   - the map's hash is valid, signers are present, but none matches →
+     *     `SignerMismatchError`.
+     *
+     * An app may carry multiple signers (key-rotation lineage / multi-signer
+     * builds); a match on ANY one is accepted.
      */
     private enforceSignerGuard(options: InternalSessionOptions, events: EventBus): void {
         const expected = this.map.signer_sha256;
         if (expected === undefined || expected === null) return;
         if (options.enforceSigner === false) return;
 
-        const result = checkSigner(expected, options.signerJavaApi);
+        let result;
+        try {
+            result = checkSigner(expected, options.signerJavaApi);
+        } catch (e) {
+            // A map that demands a signer the live app can't produce must
+            // fail closed with the typed MissingSignerError (carrying the
+            // map's normalized expected hash). Other errors — notably the
+            // MalformedSignerError for an ill-formed map hash — propagate.
+            if (e instanceof NoSignerReadableError) {
+                throw new MissingSignerError(
+                    `rosetta-frida: the loaded map (${this.map.app}@${this.map.version}) expects ` +
+                        `signing-certificate SHA-256 ${normalizeSignerHash(expected)}, but the running app ` +
+                        `${this.app} exposed no readable signing certificate. ` +
+                        'Refusing to apply a map whose signer guard cannot be satisfied ' +
+                        '(pass enforceSigner: false to override).',
+                    normalizeSignerHash(expected),
+                );
+            }
+            throw e;
+        }
         events.emit({
             type: 'signer-check',
             passed: result.passed,

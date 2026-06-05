@@ -15,7 +15,13 @@
 
 import { createHash } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
-import { HealthCheckFailedError, MapVersionMismatchError, SignerMismatchError } from '../errors.js';
+import {
+    HealthCheckFailedError,
+    MalformedSignerError,
+    MapVersionMismatchError,
+    MissingSignerError,
+    SignerMismatchError,
+} from '../errors.js';
 import { EventBus } from '../log.js';
 import type { DiagnosticEvent } from '../types/events.js';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
@@ -809,5 +815,66 @@ describe('createSession — signer enforcement', () => {
         });
         const sc = captured.find((e) => e.type === 'signer-check');
         expect(sc?.type === 'signer-check' && sc.source).toBe('signatures');
+    });
+
+    it('throws MissingSignerError when the live app exposes no readable signer', () => {
+        let caught: MissingSignerError | undefined;
+        try {
+            createSession({
+                map: { ...buildMap('1.2.3'), signer_sha256: 'c'.repeat(64) },
+                app: 'com.example.app',
+                version: '1.2.3',
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+                // No signers present on the live app (empty signingInfo, no legacy).
+                signerJavaApi: makeSignerJavaApi([]),
+            });
+        } catch (e) {
+            caught = e as MissingSignerError;
+        }
+        expect(caught).toBeInstanceOf(MissingSignerError);
+        expect(caught?.expected).toBe('c'.repeat(64));
+    });
+
+    it('throws MalformedSignerError when the MAP hash is ill-formed', () => {
+        let caught: MalformedSignerError | undefined;
+        try {
+            createSession({
+                map: { ...buildMap('1.2.3'), signer_sha256: 'not-a-real-hash' },
+                app: 'com.example.app',
+                version: '1.2.3',
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+                signerJavaApi: makeSignerJavaApi(liveCerts),
+            });
+        } catch (e) {
+            caught = e as MalformedSignerError;
+        }
+        expect(caught).toBeInstanceOf(MalformedSignerError);
+        expect(caught?.value).toBe('not-a-real-hash');
+    });
+
+    it('emits a deterministically SORTED actual list on a mismatch', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        // Three live signers; none matches the map's expected hash.
+        const multi = [[3], [1], [2]];
+        const sortedHashes = multi.map((c) => certHash(c)).sort();
+        let caught: SignerMismatchError | undefined;
+        try {
+            createSession({
+                map: { ...buildMap('1.2.3'), signer_sha256: 'a'.repeat(64) },
+                app: 'com.example.app',
+                version: '1.2.3',
+                events,
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+                signerJavaApi: makeSignerJavaApi(multi),
+            });
+        } catch (e) {
+            caught = e as SignerMismatchError;
+        }
+        expect(caught?.actual).toEqual(sortedHashes);
+        const sc = captured.find((e) => e.type === 'signer-check');
+        if (sc?.type === 'signer-check') {
+            expect(sc.actual).toEqual(sortedHashes);
+        }
     });
 });
