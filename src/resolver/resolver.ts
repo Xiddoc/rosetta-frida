@@ -98,10 +98,17 @@ const PRIMITIVE_TYPE_NAMES: ReadonlySet<string> = new Set([
  * an UNMAPPED CLASS NAME (→ {@link UnknownArgTypeError}) versus a legitimate
  * no-overload-matches miss (→ generic {@link ResolveError}).
  *
- * This is the Frida twin of the Kotlin `unknownArgTypeOrNull` heuristic
- * (rosetta-xposed `Resolver.kt`); it MUST make the same distinction so the
- * two clients raise comparable errors for the same inputs (shared
- * conformance fixtures pin this).
+ * KEEP IN SYNC — this function is DUPLICATED by value in two languages:
+ * rosetta-frida (TS, here) and rosetta-xposed
+ * (`core/.../resolver/Resolver.kt`, the Kotlin twin). The duplication is
+ * intentional (each client stays pure-TS / pure-JVM with no shared runtime),
+ * so the two copies MUST make the same distinction or the clients raise
+ * different errors for the same input. The shared conformance fixtures
+ * (`errors.json`, `methods.json`, `overloads.json`) PIN the boundary cases.
+ * Changing the heuristic here requires: (a) making the same change in the
+ * Kotlin twin, (b) verifying the conformance fixtures still cover the new
+ * boundary, and (c) adding a fixture case (byte-identical in both repos, with
+ * both sha256 manifests regenerated) if they do not.
  *
  * Returns the first offending arg type, or `null` when every arg is either a
  * known class, a primitive/array/raw descriptor, or a descriptor some
