@@ -336,7 +336,8 @@ describe('rosettaMapSchema', () => {
         ).toThrow();
     });
 
-    it('strips unknown top-level keys (forward-compat)', () => {
+    it('strips unknown sibling keys WITHIN the pinned version (additive tolerance)', () => {
+        // Lenient on unknown keys at the same schema_version...
         const parsed = rosettaMapSchema.parse({
             schema_version: 2,
             version_code: 1,
@@ -346,6 +347,20 @@ describe('rosettaMapSchema', () => {
             future_field: 'ignored',
         });
         expect((parsed as Record<string, unknown>).future_field).toBeUndefined();
+    });
+
+    it('hard-rejects a NEWER schema_version (no cross-version forward-compat)', () => {
+        // ...but strict on the version key itself: a newer-format map is
+        // rejected, not best-effort read. This is the reconciled story.
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 3,
+                version_code: 1,
+                app: 'com.example.app',
+                version: 'v',
+                classes: {},
+            }),
+        ).toThrow();
     });
 });
 

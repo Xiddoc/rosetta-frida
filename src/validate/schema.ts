@@ -11,8 +11,24 @@
  * one per invalid field — so callers can render a useful failure
  * report without parsing message strings.
  *
- * Unknown keys are accepted (and stripped) so additive schema
- * evolution doesn't break older library versions reading newer maps.
+ * Compatibility story (one story, not two):
+ *
+ *   - `schema_version` is a HARD GATE (`z.literal(CURRENT_SCHEMA_VERSION)`).
+ *     A map whose `schema_version` differs — older OR newer — is REJECTED.
+ *     There is deliberately NO cross-version forward-compat: a wrong-version
+ *     map silently corrupts hooks, so an exact miss must fail loudly (RFC
+ *     0001 Decision 7 / AGENTS.md §7). Bumping the format means re-emitting
+ *     the map at the new version, not best-effort reading the old/new one.
+ *
+ *   - WITHIN the pinned version, unknown object keys are accepted and
+ *     STRIPPED (Zod's default object behaviour). This tolerates additive,
+ *     non-breaking annotations a newer minor emitter might attach to a
+ *     `schema_version: 2` map (extra provenance, hints, etc.) without
+ *     failing validation — they simply don't surface in the typed result.
+ *
+ * So: strict on the version key, lenient on unknown sibling keys at the
+ * same version. The two are not in tension — they operate at different
+ * granularities (whole-format vs. individual fields).
  */
 
 import { z } from 'zod';
