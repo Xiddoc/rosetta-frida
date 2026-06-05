@@ -137,7 +137,13 @@ export interface RosettaMap {
      * the optional `signer_sha256` authenticity guard; drops `apk_sha256`.
      */
     schema_version: typeof CURRENT_SCHEMA_VERSION;
-    /** Android package name (e.g. "com.example.app"). */
+    /**
+     * Android package name (e.g. "com.example.app").
+     *
+     * Validated against the dotted-package pattern
+     * `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$` and capped at 256 chars
+     * by the schema (see `src/validate/schema.ts`).
+     */
     app: string;
     /**
      * Human-readable version label (e.g. "3.4.5"), from
@@ -160,6 +166,10 @@ export interface RosettaMap {
      * certificate (not the APK bytes). Cheap to verify on-device via
      * PackageManager; guards against loading a map for a repackaged or
      * spoofed app. See RFC 0001 Decision 3.
+     *
+     * Enforced as 64 lowercase hex chars (`^[0-9a-f]{64}$`) by the schema
+     * so a malformed digest fails validation early; the session layer
+     * additionally normalises + re-validates it at runtime.
      */
     signer_sha256?: string;
     /** Minimum Frida version this map is known to work with. */
