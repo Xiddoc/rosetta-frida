@@ -17,9 +17,10 @@ import { AmbiguousOverloadError, ResolveError } from '../errors.js';
 import type { EventBus } from '../log.js';
 import type { ClassEntry, FieldEntry, MethodEntry, RosettaMap } from '../types/map.js';
 import type { ResolvedClass, ResolvedField, ResolvedMethod, Resolver } from '../types/resolver.js';
-import type { FailurePolicy } from '../types/session.js';
+import type { FailurePolicy, TargetPolicy } from '../types/session.js';
 import { makeSentinel } from './sentinel.js';
 import { parseSignatureArgs, toJvmDescriptor } from './signature.js';
+import { appPrefixOf, assertTargetAllowed } from './target-policy.js';
 
 /** Options for constructing a Resolver directly. */
 export interface ResolverOptions {
@@ -37,6 +38,17 @@ export interface ResolverOptions {
      * level up.
      */
     failurePolicy?: FailurePolicy;
+    /**
+     * Target-namespace guard policy (RFC 0001 C1). Confines the FQNs a map
+     * can redirect hooks at. Omitted → built-in `DEFAULT_DENY_PREFIXES`,
+     * empty allowlist, 2 app-namespace labels — fail-closed.
+     */
+    targetPolicy?: TargetPolicy;
+    /**
+     * The app package name used to derive the app's own namespace prefix
+     * for the guard. Defaults to `map.app` when omitted.
+     */
+    appPackage?: string;
 }
 
 interface CachedClass {
@@ -87,9 +99,17 @@ export class ResolverImpl implements Resolver {
     /** Reverse index: obfuscated class short name → real FQN. */
     readonly #reverseClassIndex = new Map<string, string>();
 
+    /** Target-namespace guard policy (RFC 0001 C1). */
+    readonly #targetPolicy: TargetPolicy;
+
+    /** The app's own namespace prefix, derived once from the app package. */
+    readonly #appPrefix: string;
+
     constructor(options: ResolverOptions) {
         this.#map = options.map;
         this.#events = options.events;
+        this.#targetPolicy = options.targetPolicy ?? {};
+        this.#appPrefix = appPrefixOf(options.appPackage ?? this.#map.app, this.#targetPolicy);
         for (const [realName, entry] of Object.entries(this.#map.classes)) {
             this.#reverseClassIndex.set(entry.obfuscated, realName);
         }
@@ -116,6 +136,9 @@ export class ResolverImpl implements Resolver {
 
         const override = this.#overrides.get(realName);
         if (override !== undefined) {
+            // Guard BEFORE caching — a denied target must never be cached
+            // (no cache poisoning) and must throw before any Java.use call.
+            assertTargetAllowed(realName, override.obfuscated, this.#appPrefix, this.#targetPolicy);
             const value: ResolvedClass = {
                 realName,
                 obfName: override.obfuscated,
@@ -137,6 +160,8 @@ export class ResolverImpl implements Resolver {
                 'class',
             );
         }
+        // Guard BEFORE caching — see the override branch above.
+        assertTargetAllowed(realName, entry.obfuscated, this.#appPrefix, this.#targetPolicy);
         const value: ResolvedClass = { realName, obfName: entry.obfuscated, entry };
         this.#classCache.set(realName, { source: 'map', value });
         this.#emitResolve({ name: realName, obfName: value.obfName, source: 'map' });
@@ -299,12 +324,19 @@ export class ResolverImpl implements Resolver {
     }
 
     translateType(typeName: string): string {
+        // Secondary vector (decision #4): the arg-type → obf descriptor path
+        // also produces a map-controlled FQN that flows into Java.use via
+        // .overload(...). Guard the MAPPED-output branches through the same
+        // predicate; the unmapped passthrough is the caller's own input, not
+        // a map-controlled target, so it is left untouched.
         const override = this.#overrides.get(typeName);
         if (override !== undefined) {
+            assertTargetAllowed(typeName, override.obfuscated, this.#appPrefix, this.#targetPolicy);
             return override.obfuscated;
         }
         const entry = this.#map.classes[typeName];
         if (entry !== undefined) {
+            assertTargetAllowed(typeName, entry.obfuscated, this.#appPrefix, this.#targetPolicy);
             return entry.obfuscated;
         }
         return typeName;

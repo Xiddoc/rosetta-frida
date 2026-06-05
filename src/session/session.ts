@@ -199,9 +199,15 @@ export class RosettaSession implements Session {
         }
 
         // 5. Build the resolver, bound to the session bus + policy.
+        //    The target-namespace guard (RFC 0001 C1) is threaded here: the
+        //    app's own prefix is derived from the detected/resolved app
+        //    package, and the policy is the user's (or the fail-closed
+        //    default when omitted).
         this.resolver = createResolver(this.map, {
             events: this.events,
             failurePolicy: this.failurePolicy,
+            targetPolicy: options.targetPolicy ?? {},
+            appPackage: this.app,
         });
     }
 

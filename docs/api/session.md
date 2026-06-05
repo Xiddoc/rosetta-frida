@@ -25,6 +25,14 @@ interface SessionOptions {
     healthCheckThreshold?: number;            // default: 0.8
     skipHealthCheck?: boolean;                // default: false
     enforceSigner?: boolean;                  // default: true (secure default)
+    targetPolicy?: TargetPolicy;              // default: built-in denylist, fail-closed
+}
+
+interface TargetPolicy {
+    denyPrefixes?: readonly string[];         // augments (or replaces) the built-in denylist
+    mergeDenylist?: boolean;                  // default: true (augment); false replaces
+    allow?: readonly string[];                // exact-FQN escape hatch
+    appNamespaceLabels?: number;              // default: 2 (e.g. com.example)
 }
 ```
 
@@ -170,6 +178,60 @@ the unverified path. With the flag on (the default) and a valid
 both clients, with a matching error taxonomy (`MalformedSignerError` /
 `MissingSignerError` / `SignerMismatchError`).
 
+### `targetPolicy`
+
+The **target-namespace guard** (RFC 0001 C1). A community map maps a
+real name to an arbitrary obfuscated string, and the runtime feeds that
+string verbatim into `Java.use(...)`. A malicious or simply wrong map
+could therefore redirect a hook at a sensitive framework class —
+`java.lang.Runtime`, `android.app.*`, a `dagger.internal.Provider`, etc.
+This guard confines a resolution **target** (the FQN passed to
+`Java.use`: a resolved class `obfName`, a method/field's owning class,
+and the obfuscated output of arg-type translation) to the app's own /
+package-local namespace, and **throws**
+[`TargetPolicyError`](../reference/errors.md#targetpolicyerror) before
+the `Java.use` call for anything else. **Strict only — there is no
+warn-and-proceed mode.**
+
+Omitting `targetPolicy` is **fail-closed**: the built-in
+`DEFAULT_DENY_PREFIXES`, an empty allowlist, and 2 app-namespace labels
+apply, so a map pointing a hook at `java.lang.Runtime` is rejected with
+no configuration needed.
+
+Decision order (first match wins):
+
+1. **`allow`** exact-FQN match → ALLOW (the escape hatch for legitimate
+   framework hooks; exact, case-sensitive, against the normalized
+   element FQN).
+2. top-level prefix on the **reserved denylist** → DENY (`reason:
+   'reserved-namespace'`), even if it also matches the app prefix.
+3. **package-local** (no `.` in the namespace) → ALLOW (the common case
+   — obfuscators emit single-letter / short names).
+4. starts with the **app's own prefix** (first `appNamespaceLabels`
+   labels of the app package, dot-boundary) → ALLOW.
+5. else → DENY (`reason: 'foreign-namespace'`).
+
+Normalization strips array markers (`[`, `L…;`, `…[]`) down to the
+element class FQN; primitives and `void` are always allowed (not
+loadable); nested classes split the namespace on `.` only
+(`com.example.app.Foo$Bar` is app-owned; `android.os.Foo$Bar` is
+denied). Matching is case-sensitive.
+
+`denyPrefixes` augments the built-in list by default; set
+`mergeDenylist: false` to **replace** it entirely (use with care — that
+re-opens framework namespaces). The default denylist:
+
+```
+java.  javax.  jdk.  sun.  com.sun.  dalvik.  android.  androidx.
+com.android.  kotlin.  kotlinx.  dagger.  com.google.android.  libcore.
+org.apache.harmony.
+```
+
+**Cross-client contract.** This is the Frida twin of the Kotlin
+`rosetta-xposed` `TargetGuard`; both clients share the same decision
+order and the same `DEFAULT_DENY_PREFIXES` (value-for-value) so they
+accept/reject the same maps.
+
 ## Return value — `Session`
 
 ```typescript
@@ -248,6 +310,7 @@ events as your hooks exercise the resolver. Subscribe via
 | [`SignerMismatchError`](../reference/errors.md#signermismatcherror) | The map carries a valid `signer_sha256`, enforcement is on, the app presents signer(s), and none matched. Carries `expected` + sorted `actual` hashes. Override with `enforceSigner: false`. |
 | [`MalformedSignerError`](../reference/errors.md#malformedsignererror) | The map's `signer_sha256` is not 64 hex chars after normalization (author error). Raised before the live signers are read. |
 | [`MissingSignerError`](../reference/errors.md#missingsignererror) | The map carries a valid `signer_sha256`, enforcement is on, but the live app exposes no readable signing certificate. Override with `enforceSigner: false`. |
+| [`TargetPolicyError`](../reference/errors.md#targetpolicyerror) | A resolved target FQN is forbidden by the namespace guard (`reason: 'reserved-namespace' \| 'foreign-namespace'`). Thrown at resolution time, before any `Java.use`. Strict only. Allow a legit framework hook via `targetPolicy.allow`. |
 | [`HealthCheckFailedError`](../reference/errors.md#healthcheckfailederror) | Health check failed and `failurePolicy === 'strict'`. |
 | `Error` ("no map for version …") | Registry has no exact-version entry and `versionMatch !== 'fuzzy'`. |
 | `Error` ("registry is empty") | Registry has no entries at all. |

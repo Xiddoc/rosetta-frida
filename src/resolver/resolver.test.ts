@@ -6,7 +6,12 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { AmbiguousOverloadError, ResolveError, UnresolvedAccessError } from '../errors.js';
+import {
+    AmbiguousOverloadError,
+    ResolveError,
+    TargetPolicyError,
+    UnresolvedAccessError,
+} from '../errors.js';
 import { EventBus } from '../log.js';
 import type { ClassEntry, RosettaMap } from '../types/map.js';
 import type { ResolveEvent } from '../types/events.js';
@@ -684,5 +689,138 @@ describe('sentinel-aware wrappers', () => {
         expect(() => resolveMethodOrSentinel(stubResolver, 'X', 'y', undefined, 'warn')).toThrow(
             /not a resolve error/,
         );
+    });
+});
+
+describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
+    /** A map whose obfuscated targets point at framework classes. */
+    function maliciousMap(): RosettaMap {
+        return {
+            schema_version: 2,
+            version_code: 1,
+            app: 'com.example.app',
+            version: '1.0.0',
+            classes: {
+                'com.example.app.Evil': { obfuscated: 'java.lang.Runtime' },
+                'com.example.app.EvilMethod': {
+                    obfuscated: 'android.app.ActivityThread',
+                    methods: { go: { obfuscated: 'm', signature: '()V' } },
+                },
+                'com.example.app.EvilField': {
+                    obfuscated: 'dalvik.system.DexClassLoader',
+                    fields: { f: { obfuscated: 'a', type: 'I' } },
+                },
+                'com.example.app.Good': {
+                    obfuscated: 'aaaa',
+                    methods: { ok: { obfuscated: 'c', signature: '()V' } },
+                    fields: { g: { obfuscated: 'b', type: 'I' } },
+                },
+                // Arg-type secondary vector: a "callback" real type whose obf
+                // name is a framework class.
+                EvilCallback: { obfuscated: 'kotlin.Unit' },
+                GoodCallback: { obfuscated: 'bbbb' },
+            },
+        };
+    }
+
+    function harness(map: RosettaMap): { resolver: ResolverImpl; events: ResolveEvent[] } {
+        const bus = new EventBus();
+        const events: ResolveEvent[] = [];
+        bus.onType('resolve', (e) => events.push(e));
+        const resolver = new ResolverImpl({ map, events: bus });
+        return { resolver, events };
+    }
+
+    it('rejects a map redirecting a class at java.lang.Runtime (default fail-closed)', () => {
+        const { resolver } = harness(maliciousMap());
+        try {
+            resolver.resolveClass('com.example.app.Evil');
+            expect.fail('expected throw');
+        } catch (e) {
+            expect(e).toBeInstanceOf(TargetPolicyError);
+            const err = e as TargetPolicyError;
+            expect(err.realName).toBe('com.example.app.Evil');
+            expect(err.target).toBe('java.lang.Runtime');
+            expect(err.reason).toBe('reserved-namespace');
+        }
+    });
+
+    it('does NOT cache a denied class (no cache poisoning)', () => {
+        const { resolver, events } = harness(maliciousMap());
+        expect(() => resolver.resolveClass('com.example.app.Evil')).toThrow(TargetPolicyError);
+        // Second attempt must re-evaluate (and re-throw), not return a cache.
+        expect(() => resolver.resolveClass('com.example.app.Evil')).toThrow(TargetPolicyError);
+        // No 'cache'-sourced resolve event was ever emitted for it.
+        expect(events.some((e) => e.source === 'cache')).toBe(false);
+    });
+
+    it('rejects via resolveMethod when the owning class target is forbidden', () => {
+        const { resolver } = harness(maliciousMap());
+        expect(() => resolver.resolveMethod('com.example.app.EvilMethod', 'go')).toThrow(
+            TargetPolicyError,
+        );
+    });
+
+    it('rejects via resolveField when the owning class target is forbidden', () => {
+        const { resolver } = harness(maliciousMap());
+        expect(() => resolver.resolveField('com.example.app.EvilField', 'f')).toThrow(
+            TargetPolicyError,
+        );
+    });
+
+    it('allows package-local and app-prefixed targets', () => {
+        const { resolver } = harness(maliciousMap());
+        expect(resolver.resolveClass('com.example.app.Good').obfName).toBe('aaaa');
+        expect(resolver.resolveMethod('com.example.app.Good', 'ok').obfName).toBe('c');
+        expect(resolver.resolveField('com.example.app.Good', 'g').obfName).toBe('b');
+    });
+
+    it('guards translateType mapped output (arg-type secondary vector)', () => {
+        const { resolver } = harness(maliciousMap());
+        expect(() => resolver.translateType('EvilCallback')).toThrow(TargetPolicyError);
+        // Good callback still translates.
+        expect(resolver.translateType('GoodCallback')).toBe('bbbb');
+        // Unmapped passthrough is untouched (caller's own input, not map-controlled).
+        expect(resolver.translateType('android.os.Bundle')).toBe('android.os.Bundle');
+    });
+
+    it('guards an override that points at a framework class', () => {
+        const { resolver } = harness(maliciousMap());
+        resolver.override('com.example.app.Hijack', { obfuscated: 'java.lang.System' });
+        expect(() => resolver.resolveClass('com.example.app.Hijack')).toThrow(TargetPolicyError);
+    });
+
+    it('guards translateType through an override', () => {
+        const { resolver } = harness(maliciousMap());
+        resolver.override('com.example.app.HijackType', { obfuscated: 'javax.crypto.Cipher' });
+        expect(() => resolver.translateType('com.example.app.HijackType')).toThrow(
+            TargetPolicyError,
+        );
+    });
+
+    it('an explicit allowlist permits an otherwise-forbidden framework target', () => {
+        const bus = new EventBus();
+        const resolver = new ResolverImpl({
+            map: maliciousMap(),
+            events: bus,
+            targetPolicy: { allow: ['java.lang.Runtime'] },
+        });
+        expect(resolver.resolveClass('com.example.app.Evil').obfName).toBe('java.lang.Runtime');
+    });
+
+    it('uses appPackage override to derive the app prefix when supplied', () => {
+        const map: RosettaMap = {
+            schema_version: 2,
+            version_code: 1,
+            app: 'com.example.app',
+            version: '1.0.0',
+            classes: {
+                Foreign: { obfuscated: 'org.other.lib.Thing' },
+            },
+        };
+        // With appPackage = org.other, the org.other.* target is app-owned.
+        const bus = new EventBus();
+        const resolver = new ResolverImpl({ map, events: bus, appPackage: 'org.other.app' });
+        expect(resolver.resolveClass('Foreign').obfName).toBe('org.other.lib.Thing');
     });
 });
