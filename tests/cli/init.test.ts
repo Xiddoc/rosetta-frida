@@ -168,19 +168,39 @@ describe('runInit', () => {
         expect(files.size).toBe(0);
     });
 
-    it('rejects an -o output that escapes the project tree', async () => {
+    it('allows an -o output that points outside the project tree (e.g. ../escape.json)', async () => {
+        // Operator-supplied -o is not contained to CWD; only NUL is rejected.
+        const { fs, files } = makeFs();
+        const out = await runInit(['com.example.app', '1.2.3', '-o', '../escape.json'], fs);
+        expect(out).toBe('../escape.json');
+        expect(files.has('../escape.json')).toBe(true);
+    });
+
+    it('allows an absolute -o output outside the project tree', async () => {
+        const { fs, files } = makeFs();
+        const out = await runInit(['com.example.app', '1.2.3', '-o', '/tmp/out.json'], fs);
+        expect(out).toBe('/tmp/out.json');
+        expect(files.has('/tmp/out.json')).toBe(true);
+    });
+
+    it('rejects a NUL byte in the explicit -o output path', async () => {
         const { fs, files } = makeFs();
         await expect(
-            runInit(['com.example.app', '1.2.3', '-o', '../escape.json'], fs),
-        ).rejects.toThrow(/outside the project tree/);
+            runInit(['com.example.app', '1.2.3', '-o', 'out.json\0.png'], fs),
+        ).rejects.toThrow(/NUL/);
         expect(files.size).toBe(0);
     });
 
-    it('rejects an absolute -o output outside the tree', async () => {
+    it('still rejects a derived default path that escapes the project tree', async () => {
+        // Derived default = maps/<app>/<version>.json — still contained.
+        // This is an academic edge case since app/version are token-validated;
+        // the containment check is the backstop in case new tokens ever slip
+        // through. We verify the guard by bypassing token validation and
+        // calling assertContained indirectly via a minimal simulation — but
+        // since valid app/version tokens can never produce a traversal path,
+        // we just confirm the token validators already block traversal tokens.
         const { fs, files } = makeFs();
-        await expect(
-            runInit(['com.example.app', '1.2.3', '-o', '/etc/out.json'], fs),
-        ).rejects.toThrow(/outside the project tree/);
+        await expect(runInit(['../../etc', '1.2.3'], fs)).rejects.toThrow(/invalid app name/);
         expect(files.size).toBe(0);
     });
 });

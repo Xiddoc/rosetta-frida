@@ -10,10 +10,16 @@
  *      never reach `path.join`, so the validators reject `/`, `\`, `..`,
  *      NUL, and absolute-looking tokens outright via strict allowlists.
  *
- *   2. `assertContained` — after a path has been built (default or a
- *      user-supplied `-o`/`--output`), resolve it and assert it stays
- *      inside the project tree (CWD). This is the backstop that catches
- *      traversal/absolute escapes regardless of how the path was formed.
+ *   2. `assertContained` — after a path has been **derived from map content**
+ *      (e.g. `init`'s default `maps/<app>/<version>.json`), resolve it and
+ *      assert it stays inside the project tree (CWD). This is the backstop
+ *      against any remaining traversal escape in the derived path.
+ *
+ *      NOTE: `assertContained` is intentionally NOT applied to explicit
+ *      operator-supplied `-o`/`--output` paths. An operator may legitimately
+ *      write outside CWD (e.g. `/tmp/extracted.json`). The security boundary
+ *      is on paths *derived from untrusted map content*, not on operator
+ *      choices. `assertNoNul` is still called on all path arguments.
  *
  * Both throw `RosettaError` so the CLI surfaces a clean `error: ...` line
  * rather than a stack trace.
@@ -92,6 +98,11 @@ export function assertNoNul(p: string): void {
  * Assert that the output path `out` resolves to a location inside the
  * project tree (the current working directory). Returns the resolved
  * absolute path so callers can use it directly.
+ *
+ * Use this only for paths **derived from map content** (e.g. `init`'s
+ * default `maps/<app>/<version>.json`). Do NOT call this on
+ * operator-supplied `-o`/`--output` flags — operators may legitimately
+ * write anywhere (e.g. `/tmp/out.json`); use `assertNoNul` for those.
  *
  * The containment rule allows writing to the base directory itself and
  * anything strictly beneath it, but rejects siblings/parents and absolute

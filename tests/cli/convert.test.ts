@@ -87,8 +87,6 @@ describe('parseConvertArgs', () => {
 });
 
 describe('runConvert', () => {
-    // Output paths are contained to the project tree (CWD), so tests use
-    // relative output paths. Input paths are read-only and unconstrained.
     it('converts a YAML file to canonical strict JSON', async () => {
         const { fs, files } = makeFs({ '/in.yaml': VALID_YAML });
         const out = await runConvert(['/in.yaml', '-o', 'out.json'], fs);
@@ -120,23 +118,26 @@ describe('runConvert', () => {
         );
     });
 
-    it('refuses an output path that escapes the project tree', async () => {
-        const { fs } = makeFs({ '/in.yaml': VALID_YAML });
-        await expect(runConvert(['/in.yaml', '-o', '../escape.json'], fs)).rejects.toThrow(
-            /outside the project tree/,
-        );
+    it('allows a parent-traversal output path (operator may write outside CWD)', async () => {
+        const { fs, files } = makeFs({ '/in.yaml': VALID_YAML });
+        await runConvert(['/in.yaml', '-o', '../escape.json'], fs);
+        expect(files.get('../escape.json')).toContain('"app": "com.example.app"');
     });
 
-    it('refuses an absolute output path outside the tree', async () => {
-        const { fs } = makeFs({ '/in.yaml': VALID_YAML });
-        await expect(runConvert(['/in.yaml', '-o', '/etc/out.json'], fs)).rejects.toThrow(
-            /outside the project tree/,
-        );
+    it('allows an absolute output path outside the project tree', async () => {
+        const { fs, files } = makeFs({ '/in.yaml': VALID_YAML });
+        await runConvert(['/in.yaml', '-o', '/tmp/out.json'], fs);
+        expect(files.get('/tmp/out.json')).toContain('"app": "com.example.app"');
     });
 
     it('refuses a NUL byte in the input path', async () => {
         const { fs } = makeFs({ '/in.yaml': VALID_YAML });
         await expect(runConvert(['/in.yaml\0.png', '-o', 'out.json'], fs)).rejects.toThrow(/NUL/);
+    });
+
+    it('refuses a NUL byte in the output path', async () => {
+        const { fs } = makeFs({ '/in.yaml': VALID_YAML });
+        await expect(runConvert(['/in.yaml', '-o', 'out.json\0.png'], fs)).rejects.toThrow(/NUL/);
     });
 
     it('refuses to overwrite without --force', async () => {
