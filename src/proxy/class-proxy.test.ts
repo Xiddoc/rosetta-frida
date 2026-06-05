@@ -438,4 +438,43 @@ describe('makeClassProxy — override invalidation (live proxy revalidation)', (
         expect(after).not.toBe(before);
         expect(after.value).toBe(99);
     });
+
+    it('drops a stale memoized METHOD handle after an override (method-handle path)', () => {
+        registerStub();
+        registerOverrideTarget();
+        const resolver = createResolver(map);
+        const Stub = makeClassProxy(resolver, 'com.example.app.Stub');
+
+        // Cache a method handle for the pre-override class: requestTicket → 'c'
+        // on 'aaaa', taking (Bundle, Callback).
+        const before = Stub.requestTicket as {
+            overload: (...a: string[]) => { argumentTypes: { className: string }[] };
+            $native: { holder?: { $className: string } };
+        };
+        const beforePicked = before.overload('android.os.Bundle', 'com.example.app.Callback');
+        expect(beforePicked.argumentTypes.map((a) => a.className)).toEqual([
+            'android.os.Bundle',
+            'bbbb',
+        ]);
+
+        // Re-map the same real method onto a different obfuscated method on a
+        // different class: requestTicket → 'e' on 'zzzz', taking (Bundle).
+        resolver.override('com.example.app.Stub', {
+            obfuscated: 'zzzz',
+            methods: { requestTicket: [{ obfuscated: 'e', signature: '(Landroid/os/Bundle;)V' }] },
+        });
+
+        // Re-accessing the SAME real name must yield a NEW handle bound to the
+        // new obfuscated method/class — not the stale cached one.
+        const after = Stub.requestTicket as {
+            overload: (...a: string[]) => { argumentTypes: { className: string }[] };
+        };
+        expect(after).not.toBe(before);
+        // The new handle resolves the new overload shape ((Bundle) on 'e'),
+        // proving it points at the post-override method, not the stale 'c'.
+        const afterPicked = after.overload('android.os.Bundle');
+        expect(afterPicked.argumentTypes.map((a) => a.className)).toEqual(['android.os.Bundle']);
+        // And the stale 2-arg overload no longer exists on the new handle.
+        expect(() => after.overload('android.os.Bundle', 'com.example.app.Callback')).toThrow();
+    });
 });
