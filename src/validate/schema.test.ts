@@ -599,14 +599,19 @@ describe('validateMap', () => {
             // Names the found version, the expected version, and the remedy.
             expect(err.message).toMatch(/schema_version 1/);
             expect(err.message).toMatch(/supports schema_version 2/);
+            // An older map is re-emitted at the current version (the
+            // upgrade-the-library remedy is for NEWER maps only).
+            expect(err.message).toMatch(/re-emit the map at version 2/);
+            // `rosetta migrate` is named only as a PLANNED command.
             expect(err.message).toMatch(/rosetta migrate/);
+            expect(err.message).toMatch(/planned/i);
             // Single, focused issue scoped to the schema_version field.
             expect(err.issues).toHaveLength(1);
             expect(err.issues[0]?.path).toBe('schema_version');
         }
     });
 
-    it('gives a newer schema_version the same migration-hint message', () => {
+    it('tells a newer schema_version to UPGRADE the library (cannot downgrade)', () => {
         try {
             validateMap({
                 schema_version: 3,
@@ -619,9 +624,38 @@ describe('validateMap', () => {
         } catch (e) {
             expect(e).toBeInstanceOf(MapValidationError);
             const err = e as MapValidationError;
+            // Names the found version and the supported version.
             expect(err.message).toMatch(/schema_version 3/);
+            expect(err.message).toMatch(/supports schema_version 2/);
+            // A newer map cannot be downgraded — the remedy is to upgrade the
+            // install, NOT to re-emit at the current version.
+            expect(err.message).toMatch(/upgrade rosetta-frida/i);
+            // `rosetta migrate` is named only as a PLANNED command.
             expect(err.message).toMatch(/rosetta migrate/);
+            expect(err.message).toMatch(/planned/i);
+            // Symmetric with the older-version test: single, focused issue.
             expect(err.issues).toHaveLength(1);
+            expect(err.issues[0]?.path).toBe('schema_version');
+        }
+    });
+
+    it('does NOT use the migration-hint path for a NaN schema_version', () => {
+        // `NaN` is `typeof 'number'` but names no version: it must fall through
+        // to the normal Zod issue list (the literal gate), not the
+        // migration-hint path.
+        try {
+            validateMap({
+                schema_version: NaN,
+                app: 'com.example.app',
+                version: '1.0.0',
+                version_code: 1,
+                classes: {},
+            });
+            throw new Error('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(MapValidationError);
+            const err = e as MapValidationError;
+            expect(err.message).not.toMatch(/rosetta migrate/);
         }
     });
 

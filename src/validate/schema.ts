@@ -388,17 +388,33 @@ export function validateMap(data: unknown): RosettaMap {
     // author what to do about it. When the input is an object that DID supply
     // a numeric `schema_version` differing from the supported literal, surface
     // a single, clearer issue that states found-vs-expected and points at the
-    // intended `rosetta migrate` remedy — older OR newer, since there is no
+    // remedy. The remedy DIFFERS by direction, because there is no
     // cross-version forward-compat (a wrong-version map must be re-emitted at
     // the supported version, not best-effort read; see the module header /
-    // RFC 0001 Decision 7).
+    // RFC 0001 Decision 7):
+    //
+    //   - NEWER map (found > current): this build cannot read it and cannot
+    //     downgrade it — the user must UPGRADE their rosetta-frida install to
+    //     a build that supports that version.
+    //   - OLDER map (found < current): re-emit it at the current version.
+    //
+    // In BOTH directions the remedy tooling (`rosetta migrate`) is only
+    // PLANNED, not shipped, so the message says so honestly rather than
+    // implying a runnable command exists today.
     const found = foundSchemaVersion(data);
     if (found !== undefined && found !== CURRENT_SCHEMA_VERSION) {
-        const message =
+        const preamble =
             `Map has schema_version ${found}, but this build of rosetta-frida only ` +
-            `supports schema_version ${CURRENT_SCHEMA_VERSION}. There is no cross-version ` +
-            `auto-upgrade: re-emit the map at version ${CURRENT_SCHEMA_VERSION} ` +
-            `(the planned \`rosetta migrate\` command will do this) and reload it.`;
+            `supports schema_version ${CURRENT_SCHEMA_VERSION}.`;
+        const remedy =
+            found > CURRENT_SCHEMA_VERSION
+                ? `That map is NEWER than this build understands and cannot be downgraded; ` +
+                  `upgrade rosetta-frida to a build that supports schema_version ${found} ` +
+                  `and reload it. (A \`rosetta migrate\` command is planned but not yet shipped.)`
+                : `There is no cross-version auto-upgrade: re-emit the map at version ` +
+                  `${CURRENT_SCHEMA_VERSION} and reload it. (A \`rosetta migrate\` command to ` +
+                  `do this is planned but not yet shipped.)`;
+        const message = `${preamble} ${remedy}`;
         throw new MapValidationError(message, [{ path: 'schema_version', message }]);
     }
     const issues = result.error.issues.map((issue) => ({
@@ -413,7 +429,8 @@ export function validateMap(data: unknown): RosettaMap {
  * Read a numeric `schema_version` off an unknown input, or `undefined` if the
  * input is not an object or did not supply a numeric `schema_version`. Used by
  * {@link validateMap} to give a wrong-but-numeric version a dedicated
- * migration-hint message (L6); a missing / non-numeric `schema_version` falls
+ * migration-hint message (L6); a missing / non-numeric `schema_version` (and
+ * `NaN`, which is technically `typeof 'number'` but names no version) falls
  * through to the normal Zod issue list instead.
  */
 function foundSchemaVersion(data: unknown): number | undefined {
@@ -421,7 +438,7 @@ function foundSchemaVersion(data: unknown): number | undefined {
         return undefined;
     }
     const value = (data as { schema_version?: unknown }).schema_version;
-    return typeof value === 'number' ? value : undefined;
+    return typeof value === 'number' && !Number.isNaN(value) ? value : undefined;
 }
 
 /**
