@@ -645,10 +645,21 @@ describe('app pattern', () => {
 
     it('rejects single-segment / malformed names', () => {
         expect(APP_PATTERN.test('a')).toBe(false);
+        // A single un-dotted token is not a package name.
+        expect(APP_PATTERN.test('myapp')).toBe(false);
         expect(APP_PATTERN.test('com.')).toBe(false);
         expect(APP_PATTERN.test('.com.example')).toBe(false);
         expect(APP_PATTERN.test('1com.example')).toBe(false);
         expect(APP_PATTERN.test('com..example')).toBe(false);
+    });
+
+    it('rejects a segment that does not start with a letter (parity)', () => {
+        // Every dotted segment must begin with a letter — the tightened
+        // canonical pattern. A digit-first interior segment is rejected.
+        expect(APP_PATTERN.test('com.2example.app')).toBe(false);
+        expect(APP_PATTERN.test('com.example.2app')).toBe(false);
+        // ...but a letter-first segment with later digits is fine.
+        expect(APP_PATTERN.test('com.example.app')).toBe(true);
     });
 
     it('rejects a bad app pattern at the map level', () => {

@@ -181,8 +181,9 @@ export interface RosettaMap {
      * Android package name (e.g. "com.example.app").
      *
      * Validated against the dotted-package pattern
-     * `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$` and capped at 256 chars
-     * by the schema (see `src/validate/schema.ts`).
+     * `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$` (every segment
+     * must start with a letter) and capped at 256 chars by the schema (see
+     * `src/validate/schema.ts`).
      */
     app: string;
     /**

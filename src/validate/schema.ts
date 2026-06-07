@@ -285,11 +285,12 @@ export const classMapSchema = boundedRecord(
 // ---------------------------------------------------------------------------
 
 /**
- * Android package-name shape: a leading identifier segment followed by at
- * least one dotted segment (e.g. `com.example.app`). Mirrors the canonical
- * schema's `app` pattern.
+ * Android package-name shape: at least two dot-separated segments, and EVERY
+ * segment must start with a letter (e.g. `com.example.app`). A digit-first
+ * segment (`com.2example.app`) or a single un-dotted token (`myapp`) is
+ * rejected. Mirrors the tightened canonical schema's `app` pattern.
  */
-export const APP_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
+export const APP_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
 
 /**
  * The `version` label must contain at least one non-whitespace character —
