@@ -16,6 +16,31 @@
  * Users who prefer explicit composition can still import the underlying
  * functions (`use`, `hook`, `createMapApi`, ...) directly from
  * `rosetta-frida`; this namespace is a convenience layer above them.
+ *
+ * ## Re-attach / singleton semantics (L12)
+ *
+ * The ambient session is a single module-level slot. Its lifecycle
+ * contract is deliberately simple and deterministic so repeated
+ * `Java.perform` blocks (or a hot-reloaded agent) behave predictably:
+ *
+ *   - **Replace, never stack.** A second `rosetta.session(...)` call
+ *     cleanly SUPERSEDES the previous ambient session — it does not throw
+ *     and it does not keep the old one around. The new session becomes the
+ *     one every subsequent `rosetta.use/hook/map/events` call routes
+ *     through. Before swapping, the previous session's diagnostic bus is
+ *     cleared so its subscribers stop firing; no listener leaks across the
+ *     swap. (Already-installed hooks are unaffected — `rosetta.hook(...)`
+ *     captures its session's resolver at install time, per the docs.)
+ *   - **`rosetta.reset()` disposes the ambient session.** After a reset
+ *     there is no active session, so any ambient call throws the same
+ *     `RosettaError` as before the first `session(...)`. Reset also clears
+ *     the disposed session's bus. It is idempotent — resetting when no
+ *     session is active is a no-op.
+ *
+ * The replace-on-re-call policy (rather than throw-on-second-call) is the
+ * right default for the Frida runtime: an agent re-injected against the
+ * same process, or a script that re-runs its `Java.perform` block, must be
+ * able to re-open a session without first tearing the old one down.
  */
 
 import { RosettaError } from '../errors.js';
@@ -50,12 +75,31 @@ export function getCurrentSession(): RosettaSession {
 }
 
 /**
- * Internal — reset the ambient session (test helper). Production code
- * should call `rosetta.session(...)` to replace; this is only used by
- * the namespace's own test suite.
+ * Dispose the active ambient session, if any, and clear the slot.
+ *
+ * Clears the disposed session's diagnostic bus so its subscribers stop
+ * firing, then drops the reference. Idempotent: a no-op when no session is
+ * active. Shared by the public {@link rosetta.reset} and by the swap a
+ * second `rosetta.session(...)` performs, so both go through one clean
+ * teardown path (L12).
+ */
+function disposeCurrentSession(): void {
+    if (currentSession !== null) {
+        // Stop the superseded session's subscribers from firing against a
+        // session that is no longer ambient — no listener leaks across a
+        // reset or a re-attach.
+        currentSession.events.clear();
+        currentSession = null;
+    }
+}
+
+/**
+ * Internal — reset the ambient session (test helper alias for the public
+ * {@link rosetta.reset}). Kept as a named export the test suite imports;
+ * delegates to the same {@link disposeCurrentSession} teardown.
  */
 export function _resetCurrentSession(): void {
-    currentSession = null;
+    disposeCurrentSession();
 }
 
 /**
@@ -69,8 +113,25 @@ export const rosetta = {
      * tier-1 / tier-2 / tier-3 calls. Returns the public Session view.
      */
     session(options: SessionOptions): Session {
+        // Replace, never stack: cleanly supersede any prior ambient session
+        // (clearing its bus) before installing the new one (L12).
+        disposeCurrentSession();
         currentSession = createSession(options);
         return currentSession;
+    },
+
+    /**
+     * Dispose the active ambient session, if any (L12).
+     *
+     * After `reset()` there is no active session, so any subsequent ambient
+     * call (`rosetta.use/hook/map/events`, …) throws the same `RosettaError`
+     * as before the first `session(...)`. Idempotent — calling it with no
+     * active session is a no-op. Use it to tear a session down explicitly
+     * (e.g. between independent `Java.perform` blocks in a long-lived agent)
+     * rather than relying on a later `session(...)` to supersede it.
+     */
+    reset(): void {
+        disposeCurrentSession();
     },
 
     /** Tier 2: resolve a class real-name to a `ClassProxy`. */

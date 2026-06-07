@@ -485,10 +485,18 @@ rosetta.events.onType('signer-check', (e) => {
 See [Events reference](../reference/events.md#signercheckevent) for the
 full event shape.
 
-## Switching sessions
+## Switching and disposing sessions
 
-`rosetta.session(...)` replaces the ambient session. Subsequent
-calls run against the new session.
+The ambient session is a single module-level slot with a deliberately
+simple, deterministic lifecycle so repeated `Java.perform` blocks (or a
+hot-reloaded agent) behave predictably.
+
+### Re-attach — `session(...)` **replaces**, never stacks
+
+`rosetta.session(...)` cleanly **supersedes** any prior ambient session.
+A second call does **not** throw and does **not** keep the old session
+around — the new one becomes the session every subsequent tier-1/2/3 call
+routes through.
 
 ```typescript
 rosetta.session({ map: mapForA });
@@ -498,9 +506,40 @@ rosetta.session({ map: mapForB });
 // ... tier-1/2/3 calls against mapForB ...
 ```
 
+On the swap, the **previous session's diagnostic bus is cleared**, so its
+subscribers stop firing — no listener leaks across a re-attach. (You'll
+re-subscribe via `rosetta.events.on(...)` against the new session if you
+want events from it.)
+
 Already-installed hooks keep running with whichever session installed
 them — `rosetta.hook(...)` captures the session's resolver at install
 time. The switch only affects new calls.
+
+The replace-on-re-call policy (rather than throw-on-second-call) is the
+right default for the Frida runtime: an agent re-injected against the same
+process, or a script that re-runs its `Java.perform` block, must be able
+to re-open a session without first tearing the old one down.
+
+### `rosetta.reset()` — dispose the ambient session
+
+```typescript
+rosetta.reset();
+```
+
+Disposes the active ambient session (clearing its bus) and empties the
+slot. After a reset there is **no active session**, so any ambient call
+(`rosetta.use/hook/map/events`, …) throws the same `RosettaError` as
+before the first `session(...)`:
+
+```text
+no active rosetta session — call rosetta.session({ map }) before using rosetta.*
+```
+
+`reset()` is **idempotent** — calling it with no active session is a
+no-op. Use it to tear a session down explicitly (e.g. between independent
+`Java.perform` blocks in a long-lived agent) instead of relying on a later
+`session(...)` to supersede it. A fresh `session(...)` after `reset()`
+re-initialises cleanly with no state leaked from the disposed session.
 
 For two simultaneous sessions, use the explicit composition form
 (see [Advanced composition](overview.md#advanced-composition)).
