@@ -223,7 +223,7 @@ What landed in V1.0:
 - CLI scaffold: `init`, `validate`, `convert`, `patch`, `extract`,
   `inspect`.
 - One sample hook demonstrating the workflow.
-- 611 tests, 100% coverage.
+- 100% coverage (see the repository's CI for the current test count).
 
 What is deferred:
 
@@ -237,7 +237,7 @@ What is deferred:
 | Runtime injection / hot-reload (`rosetta.injectMap(...)`) | V2 |
 | Runtime discovery / self-healing | V2 |
 | Native (JNI / ELF symbol) mapping | V2+ |
-| Non-Frida runtimes (Xposed, iOS, ART) | V3 |
+| Non-Frida runtimes — iOS, ART | V3 |
 
 ## Key decisions
 

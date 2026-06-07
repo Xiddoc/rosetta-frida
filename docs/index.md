@@ -132,7 +132,7 @@ the full motivating story.
 - **Sample map and sample hook.** A 15-class anonymized example map
   covering AIDL stubs, callbacks, overloads, fields, enums, anonymous
   inner classes.
-- **611 tests, 100% coverage.** Every line of the runtime exercised.
+- **100% coverage.** Every line of the runtime exercised (see the repository's CI for the current test count).
 
 What is **not** in V1.0:
 

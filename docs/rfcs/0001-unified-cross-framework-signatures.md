@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Accepted (partially implemented) |
 | **Scope** | Architecture only — no production code in this RFC |
 | **Supersedes** | nothing (companion to [Design](../reference/design.md)) |
 | **Branch** | `claude/rosetta-unified-signatures-8WKsz` |
@@ -131,8 +131,8 @@ flowchart TB
 ```
 
 - `rosetta-frida` stays the Frida (layer-4) adapter.
-- `rosetta-xposed` is a **new sibling** Kotlin/JVM adapter consuming identical
-  maps (scoped here, not built this session).
+- `rosetta-xposed` is a **sibling** Kotlin/JVM adapter consuming identical
+  maps — implemented and tested; see the rosetta-xposed repo.
 - Two resolver implementations (TS + Kotlin) are kept honest by **one shared
   conformance suite**, not shared runtime code.
 - **Anti-scope:** do not try to make Frida "drive" Xposed. The execution models
@@ -165,8 +165,9 @@ Xposed/LSPosed/LSPatch developer gets the **static, sigmatcher-generated map** f
 every version that has one *and* **DexKit self-healing** for brand-new versions
 that don't — through the *same* thin resolver and the *same* map artifact.
 
-**Phasing (confirmed):** the neutral core + static backend + map convergence ship
-first; the on-device DexKit backend is *architected now, built in a later phase*.
+**Phasing (confirmed):** the neutral core + static backend + map convergence shipped
+first; the DexKit backend (`DexKitBackedIndex`, `:dexkit` module) is *implemented
+with an integration test* — only on-device native wiring remains.
 
 **Deferred binding** (the dynamic-class-loading concern): name *resolution* is
 always available (it's data), but the *hook* must wait until the declaring class
@@ -176,7 +177,7 @@ libxposed's `onPackageReady().getClassLoader()`) and binds when the target
 appears. Map metadata (`dex`, `kind`, `extends`, anchors) informs whether deferral
 is needed.
 
-## Decision 3 — App identity: `version_code` selects, signer-cert guards, `apk_sha256` is provenance only
+## Decision 3 — App identity: `version_code` selects, `signer_sha256` guards
 
 Full APK SHA-256 is not O(1) and is unused on-device. Split identity by role:
 
@@ -209,13 +210,15 @@ Full APK SHA-256 is not O(1) and is unused on-device. Split identity by role:
   pre-parsed by the system, not a hash of the whole file) and meaningful: it pins
   *publisher authenticity* and detects repacks. Stable across versions, so it is
   an **authenticity guard, not a version key.** Frida reads the same via
-  `Java.use('android.content.pm.PackageManager')`. **Enforced on the Frida
-  side:** `rosetta.session(...)` reads the live signer in-process and fails
-  closed (`SignerMismatchError`) when the field is present; see
-  [`api/session.md`](../api/session.md#signer-enforcement). (rosetta-xposed
-  enforcement remains planned.)
-- **`apk_sha256` (existing)** — offline **provenance only**, computed once by the
-  contributor when generating the map; **never recomputed on-device.**
+  `Java.use('android.content.pm.PackageManager')`. **Enforced on both sides:**
+  `rosetta.session(...)` reads the live signer in-process and fails closed
+  (`SignerMismatchError`) when the field is present (see
+  [`api/session.md`](../api/session.md#signer-enforcement)); rosetta-xposed
+  enforces the same via `SignerGuard.verify`, fail-closed, used by `fromRegistry`
+  and the identity-bearing `fromMap`.
+- **`apk_sha256`** — this field was **dropped** from the `schema_version: 2`
+  schema. Provenance is now carried via `sources[]`, `signer_sha256`, and
+  the `captured_at` / `version_code` fields.
 
 ## Decision 4 — Knowledge base: signatures are the source, maps are published artifacts, validation is layered
 
@@ -223,33 +226,34 @@ Full APK SHA-256 is not O(1) and is unused on-device. Split identity by role:
 technical lever: a resolved map is *reproducible* from its signatures + the APK,
 which is what makes it *verifiable*. **Resolved maps are generated, published
 artifacts** for the many consumers (especially Frida authors) who won't run a
-matcher or supply an APK. Provenance rides on existing schema fields (`apk_sha256`,
-anchors, `source`, `confidence`, `sources[]`) plus the new `version_code` /
-`signer_sha256`.
+matcher or supply an APK. Provenance rides on the schema fields `sources[]`,
+`signer_sha256`, `version_code`, anchors, `source`, and `confidence`.
 
 Validation is layered and deliberately **does not host APKs in public CI**
 (APKMirror/APKPure ToS forbid automated access; hosting copyrighted APKs is a
 liability):
 
-1. **CI structural checks (no APK, blocking).** Schema valid; descriptors parse;
-   overloads distinct; anchors present; `version_code` set; cross-version
-   class/method count-delta sanity; referenced types resolvable within the map.
-   Reuses `src/validate/schema.ts`. This is the gate to land.
-2. **Reproduction + signed attestation.** ≥ N independent contributors (or a
-   trusted runner) reproduce the map from the signatures and sign "ran signatures
-   S vs `version_code` V / cert H → map M." Only the *attestation* enters the repo
-   — never the APK. (Off-the-shelf: reproducible-builds, SLSA, in-toto,
-   Sigstore/Rekor.)
-3. **Optional self-hosted trusted runner.** The "CI with APK," moved *off* public
-   CI onto a legally-clean machine (FOSS apps, or a maintainer's device). Public
-   CI only verifies attestation signatures.
-4. **Device-side health-check as the correctness oracle (post-landing).** Reuses
-   `src/session/health-check.ts` (plus a Kotlin twin): verify resolved
+1. **CI structural checks (no APK, blocking) — SHIPPED.** Schema valid;
+   descriptors parse; overloads distinct; anchors present; `version_code` set;
+   cross-version class/method count-delta sanity; referenced types resolvable
+   within the map. Reuses `src/validate/schema.ts`. This is the gate to land.
+2. **Reproduction + signed attestation — deferred to V2.** ≥ N independent
+   contributors (or a trusted runner) reproduce the map from the signatures and
+   sign "ran signatures S vs `version_code` V / cert H → map M." Only the
+   *attestation* enters the repo — never the APK. (Off-the-shelf:
+   reproducible-builds, SLSA, in-toto, Sigstore/Rekor.)
+3. **Optional self-hosted trusted runner — deferred to V2.** The "CI with APK,"
+   moved *off* public CI onto a legally-clean machine (FOSS apps, or a
+   maintainer's device). Public CI only verifies attestation signatures.
+4. **Device-side health-check as the correctness oracle — deferred to V2.**
+   Reuses `src/session/health-check.ts` (plus a Kotlin twin): verify resolved
    classes/methods exist and AIDL descriptors match, running where the APK
-   legitimately lives. Opt-in telemetry aggregates pass/fail into a "verified-on
-   `version_code` V" signal; `confidence` is a gradient, not a binary.
-5. **Reputation / web-of-trust.** High confidence requires multiple independent
-   reproductions or a trusted-runner attestation; maintainers can revert.
+   legitimately lives. Opt-in telemetry aggregates pass/fail into a
+   "verified-on `version_code` V" signal; `confidence` is a gradient, not a
+   binary.
+5. **Reputation / web-of-trust — deferred to V2.** High confidence requires
+   multiple independent reproductions or a trusted-runner attestation;
+   maintainers can revert.
 
 Trust model in one line: **like a CVE DB — attest with provenance, CI checks
 well-formedness, the device confirms correctness, reputation accrues over time.**
