@@ -36,7 +36,7 @@ schema](../maps/format.md#validation) check, then prints either:
 **Pass:**
 
 ```text
-OK: maps/com.example.app/3.4.5.json — com.example.app@3.4.5, 15 class(es), schema_version=2
+OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=2
 ```
 
 Exit code 0.
@@ -44,7 +44,7 @@ Exit code 0.
 **Fail:**
 
 ```text
-FAIL: maps/com.example.app/3.4.5.json — invalid map
+FAIL: maps/com.example.app/30405.json — invalid map
   at classes.com.example.app.IRemoteService$Stub.obfuscated: required
   at classes.com.example.app.Foo.methods.bar.signature: must match /\(.*\)[^()]+/
 ```
@@ -56,8 +56,8 @@ Exit code 1.
 ### JSON
 
 ```sh
-$ npx rosetta validate maps/com.example.app/3.4.5.json
-OK: maps/com.example.app/3.4.5.json — com.example.app@3.4.5, 15 class(es), schema_version=2
+$ npx rosetta validate maps/com.example.app/30405.json
+OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=2
 ```
 
 ### YAML
@@ -141,7 +141,7 @@ checks are identical post-conversion.
 import { loadMap, MapValidationError } from 'rosetta-frida';
 
 try {
-    const map = await loadMap('maps/com.example.app/3.4.5.json');
+    const map = await loadMap('maps/com.example.app/30405.json');
     console.log(`${map.app}@${map.version}, ${Object.keys(map.classes).length} classes`);
 } catch (e) {
     if (e instanceof MapValidationError) {

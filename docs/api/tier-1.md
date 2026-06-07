@@ -267,7 +267,7 @@ Same class-detection chain, same errors.
 The canonical sample hook combines all four tier-1 calls:
 
 ```typescript
-import sampleMap from './maps/com.example.app/3.4.5.json' with { type: 'json' };
+import sampleMap from './maps/com.example.app/30405.json' with { type: 'json' };
 import { rosetta, type RosettaMap } from 'rosetta-frida';
 
 const map = sampleMap as unknown as RosettaMap;

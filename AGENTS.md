@@ -96,7 +96,7 @@ loaded map at runtime.
 
 ```ts
 import { rosetta } from 'rosetta-frida';
-import map from './maps/com.example.app/3.4.5.json' with { type: 'json' };
+import map from './maps/com.example.app/30405.json' with { type: 'json' };
 
 Java.perform(() => {
     // Open a session: auto-detect app + version, validate against the
@@ -149,7 +149,7 @@ flavour. Two app-identity changes landed with schema 2:
   (the APK-bytes hash never belonged in a per-version selection key).
 
 ```yaml
-# authoring source — rosetta convert renders this to 3.4.5.json
+# authoring source — rosetta convert renders this to 30405.json
 app: com.example.app
 version: '3.4.5'
 version_code: 30405

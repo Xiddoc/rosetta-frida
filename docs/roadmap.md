@@ -393,17 +393,19 @@ The theme: turn rosetta-frida from a library into an ecosystem.
 - **Scope / dependencies.** A new repo with CI validation using this
   library's validator; a build-time `rosetta pull` verb that fetches a
   single verified map into the developer's project (no device-side
-  client); a contribution + provenance workflow. Depends on
-  `signer_sha256` enforcement and `migrate` for long-term map
-  durability.
+  client) — **shipped, see [`rosetta pull`](cli/pull.md)**; a
+  contribution + provenance workflow. Depends on `signer_sha256`
+  enforcement and `migrate` for long-term map durability.
 - **Status.** in progress — **scaffolded at
   [`Xiddoc/rosetta-maps`](https://github.com/Xiddoc/rosetta-maps)**. The
   repo layout (`signatures/` source-of-truth + `maps/<app>/<version_code>.json`
   artifacts), the structural validation CI (reusing this library's
   `rosetta validate`, no APK hosted), the filename↔`version_code`
   convention check, a JSON-Schema editor aid, and a worked example are in
-  place. Remaining: the build-time `rosetta pull` verb here, plus the
-  attestation / trusted-runner / device-telemetry trust tiers there.
+  place. The build-time [`rosetta pull`](cli/pull.md) verb shipped here
+  (fetch + schema-validate + identity cross-check + write). Remaining:
+  populating the corpus, plus the attestation / trusted-runner /
+  device-telemetry trust tiers there.
 
 ### Runtime map injection
 

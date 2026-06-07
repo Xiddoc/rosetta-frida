@@ -223,7 +223,8 @@ export interface RosettaMapInput extends Omit<RosettaMap, 'classes'> {
 }
 
 /**
- * Multi-version registry — emitted by `rosetta merge-bundle`. The
- * runtime selects the right entry by detected version.
+ * Multi-version registry — a map keyed by version_code string, used when
+ * several versions are bundled together. The runtime selects the right
+ * entry by detected version.
  */
 export type RosettaMapRegistry = Record<string, RosettaMap>;
