@@ -143,9 +143,45 @@ describe('pickMapForVersion — fuzzy', () => {
         expect(picked.registryKey).toBe('1.1.0');
     });
 
+    it('ranks 1.0.142 above 1.1.42 (lexicographic, not weighted-sum: f13/xposed#13)', () => {
+        // The OLD weighted-sum metric (major*10000 + minor*100 + patch)
+        // collapsed both candidates to the SAME distance from target 1.0.0:
+        //   1.0.142 → |Δ| = 0*10000 + 0*100 + 142 = 142
+        //   1.1.42  → |Δ| = 0*10000 + 1*100 + 42  = 142
+        // so the pick was a coin-flip decided by the tie-break, and could
+        // wrongly land on 1.1.42. Component-wise LEXICOGRAPHIC distance ranks
+        // 1.0.142 (Δ = [0,0,142]) strictly below 1.1.42 (Δ = [0,1,42])
+        // because the minor delta dominates — the correct, intuitive pick.
+        const registry: RosettaMapRegistry = {
+            '1.1.42': buildMap('1.1.42'),
+            '1.0.142': buildMap('1.0.142'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.0.0',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.fuzzy).toBe(true);
+        expect(picked.registryKey).toBe('1.0.142');
+    });
+
+    it('ranks 1.0.142 above 1.1.42 regardless of insertion order', () => {
+        // Same as above with the registry keys inserted in the opposite
+        // order, proving the pick is order-independent (not an artifact of
+        // first-seen iteration).
+        const registry: RosettaMapRegistry = {
+            '1.0.142': buildMap('1.0.142'),
+            '1.1.42': buildMap('1.1.42'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.0.0',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('1.0.142');
+    });
+
     it('picks the lower version on a tie (deterministic tie-break)', () => {
-        // 1.0.0 is equidistant from 0.0.0 and 2.0.0 in the weighted distance
-        // metric (10000 either way) — the lower key wins.
+        // 1.0.0 is equidistant from 0.0.0 and 2.0.0 in component-wise distance
+        // (Δ = [1,0,0] either way) — the lower key wins.
         const registry: RosettaMapRegistry = {
             '0.0.0': buildMap('0.0.0'),
             '2.0.0': buildMap('2.0.0'),
@@ -158,7 +194,8 @@ describe('pickMapForVersion — fuzzy', () => {
     });
 
     it('tie-break compares minor components when major is equal', () => {
-        // 1.5.0 equidistant from 1.0.0 (500) and 1.10.0 (500) → picks 1.0.0.
+        // 1.5.0 equidistant from 1.0.0 (Δ=[0,5,0]) and 1.10.0 (Δ=[0,5,0]) →
+        // distance ties, so the lower version 1.0.0 wins.
         const registry: RosettaMapRegistry = {
             '1.10.0': buildMap('1.10.0'),
             '1.0.0': buildMap('1.0.0'),
@@ -171,7 +208,8 @@ describe('pickMapForVersion — fuzzy', () => {
     });
 
     it('tie-break compares patch components when major+minor are equal', () => {
-        // 1.0.5 equidistant from 1.0.0 (5) and 1.0.10 (5) → picks 1.0.0.
+        // 1.0.5 equidistant from 1.0.0 (Δ=[0,0,5]) and 1.0.10 (Δ=[0,0,5]) →
+        // distance ties, so the lower version 1.0.0 wins.
         const registry: RosettaMapRegistry = {
             '1.0.10': buildMap('1.0.10'),
             '1.0.0': buildMap('1.0.0'),
@@ -254,7 +292,8 @@ describe('pickMapForVersion — fuzzy', () => {
 
     it('treats non-numeric components as 0', () => {
         // 'foo.bar.baz' parses to [0, 0, 0] so the closest entry is whichever
-        // key parses closest to [0, 0, 0]: 1.0.0 (distance 10000) beats 2.0.0.
+        // key parses closest to [0, 0, 0]: 1.0.0 (Δ=[1,0,0]) beats 2.0.0
+        // (Δ=[2,0,0]).
         const registry: RosettaMapRegistry = {
             '1.0.0': buildMap('1.0.0'),
             '2.0.0': buildMap('2.0.0'),

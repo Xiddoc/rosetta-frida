@@ -18,17 +18,21 @@
  *      - 'exact' (default) — registry must contain an entry whose key
  *        equals the version label. No match → throw.
  *      - 'fuzzy' — fall back to the closest available label by
- *        major-minor-patch distance (user opts in via
+ *        component-wise major-minor-patch distance (user opts in via
  *        `versionMatch: 'fuzzy'`).
  *
- * Fuzzy comparison is intentionally simple: we parse each version into
- * a numeric `[major, minor, patch]` tuple (defaulting missing
- * components to 0, ignoring pre-release / build suffixes). Distance is
- * the absolute difference summed across components, weighted by
- * positional significance (major × 10_000 + minor × 100 + patch). This
- * is enough to make adjacent point releases collapse onto each other
- * while still preferring closer-numbered versions across larger gaps.
- * If two candidates tie, the lower version wins (deterministic).
+ * Fuzzy comparison parses each version into a numeric
+ * `[major, minor, patch]` tuple (defaulting missing components to 0,
+ * ignoring pre-release / build suffixes) and ranks candidates by
+ * LEXICOGRAPHIC component distance — NOT a weighted positional sum. The
+ * old `major × 10_000 + minor × 100 + patch` heuristic OVERFLOWED its
+ * positional buckets once a component reached its weight (e.g. `1.0.142`
+ * tied `1.1.42`, both summing to 142); the per-component distance vector
+ * `[|Δmajor|, |Δminor|, |Δpatch|]` compared major-first cannot collide
+ * that way (the f13 / xposed#13 parity gap). If two candidates tie on
+ * distance, the lower version wins, then the raw label string — so the
+ * pick is total and deterministic (mirrors the Kotlin
+ * `VersionMatch.versionDistance` + `compareDistance`).
  */
 
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
@@ -153,20 +157,16 @@ export function pickMapForVersion(
     }
 
     const target = parseVersion(version);
-    let best: { key: string; distance: number } | null = null;
+    let best: { key: string; distance: VersionTuple } | null = null;
     for (const key of keys) {
         const distance = versionDistance(target, parseVersion(key));
-        if (
-            best === null ||
-            distance < best.distance ||
-            (distance === best.distance && compareKeys(key, best.key) < 0)
-        ) {
+        if (best === null || compareDistance(distance, best.distance, key, best.key) < 0) {
             best = { key, distance };
         }
     }
 
     // `keys.length > 0` was checked above, so `best` is non-null here.
-    const picked = best as { key: string; distance: number };
+    const picked = best as { key: string; distance: VersionTuple };
     return {
         map: input[picked.key] as RosettaMap,
         fromRegistry: true,
@@ -201,29 +201,46 @@ function numeric(component: string | undefined): number {
     return Number.isFinite(n) ? n : 0;
 }
 
-/** Distance between two version tuples (lower is closer). */
-function versionDistance(a: VersionTuple, b: VersionTuple): number {
-    return Math.abs(a[0] - b[0]) * 10_000 + Math.abs(a[1] - b[1]) * 100 + Math.abs(a[2] - b[2]);
+/**
+ * Per-component absolute distance `[|Δmajor|, |Δminor|, |Δpatch|]`.
+ *
+ * Returned as a 3-vector (NOT a single weighted sum) so ranking is
+ * lexicographic and cannot overflow a positional bucket — the f13 /
+ * xposed#13 bug where `1.0.142` (sum 142) tied `1.1.42` (sum 142).
+ * Compared by {@link compareDistance}. Kotlin twin:
+ * `VersionMatch.versionDistance`.
+ */
+function versionDistance(a: VersionTuple, b: VersionTuple): VersionTuple {
+    return [Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2])];
 }
 
 /**
- * Lexicographic on numeric components — deterministic tie-break.
- *
- * Two distinct keys can still parse to the same tuple (e.g. `'1.0.0'` and
- * `'1.0.0-rc1'` both parse to `[1, 0, 0]`); when that happens we fall
- * back to a string comparison so the result is still total.
+ * Total order over candidates: lexicographic on the distance vector
+ * (major difference dominates, then minor, then patch), then the LOWER
+ * parsed version, then the raw label string — so the pick is
+ * deterministic even when two labels parse to the same tuple (e.g.
+ * `'1.0.0'` vs `'1.0.0-rc1'`). Kotlin twin: `VersionMatch.compareDistance`.
  */
-function compareKeys(a: string, b: string): number {
-    const va = parseVersion(a);
-    const vb = parseVersion(b);
+function compareDistance(
+    distA: VersionTuple,
+    distB: VersionTuple,
+    labelA: string,
+    labelB: string,
+): number {
     for (let i = 0; i < 3; i += 1) {
         // `VersionTuple` is fixed-length [number, number, number], so each
         // index is defined; the cast appeases noUncheckedIndexedAccess.
-        const ai = va[i] as number;
-        const bi = vb[i] as number;
-        if (ai !== bi) return ai - bi;
+        const c = (distA[i] as number) - (distB[i] as number);
+        if (c !== 0) return c;
+    }
+    // Equal distance: prefer the lower actual version, then the raw label.
+    const va = parseVersion(labelA);
+    const vb = parseVersion(labelB);
+    for (let i = 0; i < 3; i += 1) {
+        const c = (va[i] as number) - (vb[i] as number);
+        if (c !== 0) return c;
     }
     // Tuples equal — last-resort string compare keeps ties deterministic.
-    // Object.keys guarantees the two are distinct strings (`a !== b`).
-    return a < b ? -1 : 1;
+    // Object.keys guarantees the two are distinct strings (`labelA !== labelB`).
+    return labelA < labelB ? -1 : 1;
 }
