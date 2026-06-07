@@ -255,7 +255,7 @@ exactly once before it lands.
 
 - `src/types/map.ts` — the locked `RosettaMap` schema this fixture
   exercises.
-- `maps/com.example.app/3.4.5.json` — the canonical example map
+- `maps/com.example.app/30405.json` — the canonical example map
   whose feature coverage this fixture mirrors.
 - `examples/sample-hook/hook.ts` — the canonical example hook; a
   hook written against `com.example.testapp` real names will look

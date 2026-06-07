@@ -142,7 +142,7 @@ called out is implemented and tested.
 - **Single-map and registry forms** — `RosettaMap` and
   `RosettaMapRegistry`.
 - **15-class anonymized sample map** at
-  `maps/com.example.app/3.4.5.json` covering AIDL stubs,
+  `maps/com.example.app/30405.json` covering AIDL stubs,
   callbacks, overloads, fields, constructors, enums, synthetic
   Companions, anonymous inner classes.
 
@@ -159,9 +159,17 @@ called out is implemented and tested.
 
 ### CLI
 
-The `rosetta` binary, six commands:
+The `rosetta` binary, seven commands:
 
-- [`init <app> <version>`](cli/init.md) — scaffold a new JSON map.
+- [`init <app> <version> --version-code <n>`](cli/init.md) — scaffold a
+  new JSON map (the `--version-code` is required and becomes the
+  filename).
+- [`pull <app>@<version_code>`](cli/pull.md) — fetch + schema-validate +
+  identity-cross-check the verified map for an `(app, version_code)`
+  from the community
+  [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo and
+  write it into the project. Build-time only — never fetched on the
+  device.
 - [`validate <map>`](cli/validate.md) — schema + sanity check.
   Auto-detects JSON / YAML from extension.
 - [`convert <in> -o <out>`](cli/convert.md) — YAML → canonical JSON.

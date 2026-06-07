@@ -13,17 +13,19 @@ $ npx rosetta --help
 Usage: rosetta <command> [options]
 
 Commands:
-  init <app> <version>                 Scaffold a new map skeleton
-  validate <map>                       Schema + sanity check (auto-detect format)
-  convert <in> -o <out>                Convert YAML map to canonical JSON
+  init <app> <version> [options]      Scaffold a new map skeleton (--version-code required)
+  pull <app>@<version_code>           Fetch + validate map from rosetta-maps repo
+  validate <map>                      Schema + sanity check (auto-detect format)
+  convert <in> -o <out>               Convert YAML map to canonical JSON
   patch <bundle.js> --map <new.json>  Replace embedded map in bundle
-  extract <bundle.js> -o <out.json>    Pull embedded map out of bundle (JSON output)
-  inspect <bundle.js>                  One-line summary of embedded map
+  extract <bundle.js> -o <out.json>   Pull embedded map out of bundle
+  inspect <bundle.js>                 One-line summary of embedded map
 ```
 
 | Command | What it does | Operates on |
 |---|---|---|
-| [`init`](init.md) | Scaffold a strict-JSON skeleton for a new `(app, version)` pair. | The filesystem — writes `maps/<app>/<version>.json` by default. |
+| [`init`](init.md) | Scaffold a strict-JSON skeleton for a new `(app, version)` pair (`--version-code` required). | The filesystem — writes `maps/<app>/<version_code>.json` by default. |
+| [`pull`](pull.md) | Fetch the verified map for an `(app, version_code)` from the community rosetta-maps repo, validate it, and write it into the project. Build-time only. | The network (read) + the filesystem (write). |
 | [`validate`](validate.md) | Run the schema + sanity check against a map. Auto-detects format from the extension. | One map file (JSON / YAML). |
 | [`convert`](convert.md) | Convert a YAML map to canonical JSON. | One map file. |
 | [`patch`](patch.md) | Replace the embedded map in a compiled bundle with a fresh one. In-place by default. | A compiled bundle + a new map. |
@@ -34,9 +36,10 @@ Commands:
 
 Internally the CLI has two flavors of command:
 
-- **Map authoring** — `init`, `validate`, `convert`. These take an
-  optional `fsImpl` parameter under the hood, return a result value,
-  and surface `RosettaError`s with exit code 1.
+- **Map authoring** — `init`, `pull`, `validate`, `convert`. These take
+  an optional `fsImpl` parameter under the hood (and, for `pull`, an
+  injected `fetch` seam), return a result value, and surface
+  `RosettaError`s with exit code 1.
 - **Bundle manipulation** — `patch`, `extract`, `inspect`. These
   operate against a compiled bundle via the marker block and use a
   shared `CommandIo` injection so the same logic can run under tests
@@ -74,8 +77,8 @@ named output file.
 ```json
 {
     "scripts": {
-        "build:hook": "frida-compile hook.ts -o hook.bundle.js && rosetta patch hook.bundle.js --map maps/com.example.app/3.4.5.json",
-        "validate:maps": "rosetta validate maps/com.example.app/3.4.5.json"
+        "build:hook": "frida-compile hook.ts -o hook.bundle.js && rosetta patch hook.bundle.js --map maps/com.example.app/30405.json",
+        "validate:maps": "rosetta validate maps/com.example.app/30405.json"
     }
 }
 ```
@@ -130,6 +133,10 @@ The following commands are planned for V1.5 but not in V1.0:
 - `rosetta migrate <map.json>` — run schema migrators on old maps.
 - `rosetta verify --device <id>` — live health check via
   `frida-server`.
-- `rosetta fetch <app> <version>` — pull from a public registry (V2+).
+
+> The build-time community-registry fetch (once sketched as
+> `rosetta fetch`) **shipped in V1.0 as [`rosetta pull`](pull.md)**. It
+> pulls the single verified map for an `(app, version_code)` from the
+> rosetta-maps repo on the developer's machine.
 
 Stay tuned for V1.5.

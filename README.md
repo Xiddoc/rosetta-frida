@@ -22,7 +22,7 @@ keeps working — no static-analysis-and-repatch cycle every version.
 
 ```typescript
 import { rosetta } from 'rosetta-frida';
-import map from './maps/com.example.app/3.4.5.json' with { type: 'json' };
+import map from './maps/com.example.app/30405.json' with { type: 'json' };
 
 Java.perform(() => {
     rosetta.session({ map });
@@ -63,7 +63,7 @@ Full docs are published to **[GitHub Pages](https://xiddoc.github.io/rosetta-fri
 - [Getting started](https://xiddoc.github.io/rosetta-frida/getting-started/quick-start/) — install, quick start, concepts
 - [API reference](https://xiddoc.github.io/rosetta-frida/api/overview/) — the three-tier hook API + session
 - [Map format & authoring](https://xiddoc.github.io/rosetta-frida/maps/format/) — schema 2, `version_code`, authoring
-- [CLI reference](https://xiddoc.github.io/rosetta-frida/cli/overview/) — `init`, `validate`, `convert`, `patch`, `extract`, `inspect`
+- [CLI reference](https://xiddoc.github.io/rosetta-frida/cli/overview/) — `init`, `pull`, `validate`, `convert`, `patch`, `extract`, `inspect`
 - [Recipes](https://xiddoc.github.io/rosetta-frida/recipes/aidl-stub-hook/) — common hook patterns
 - [Design](https://xiddoc.github.io/rosetta-frida/reference/design/) and [Roadmap](https://xiddoc.github.io/rosetta-frida/roadmap/) — architecture and what's next
 - [Contributing](https://xiddoc.github.io/rosetta-frida/contributing/) — dev setup, the verify pipeline, conventions

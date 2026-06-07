@@ -129,7 +129,7 @@ suitable for concatenation with a compiled bundle.
 ```typescript
 import { emitMarkerBlock, loadMap } from 'rosetta-frida';
 
-const map = await loadMap('./maps/com.example.app/3.4.5.json');
+const map = await loadMap('./maps/com.example.app/30405.json');
 const markerSrc = emitMarkerBlock(map);
 
 // markerSrc is:
@@ -236,7 +236,7 @@ npx frida-compile hook.ts -o hook.compiled.js
 # 2. Emit the marker block.
 node -e "
   import('rosetta-frida').then(async ({ emitMarkerBlock, loadMap }) => {
-    const map = await loadMap('maps/com.example.app/3.4.5.json');
+    const map = await loadMap('maps/com.example.app/30405.json');
     process.stdout.write(emitMarkerBlock(map));
   });
 " > marker.js

@@ -11,7 +11,7 @@ This recipe walks through the canonical example from
 
 ## The target
 
-In the sample map at `maps/com.example.app/3.4.5.json`:
+In the sample map at `maps/com.example.app/30405.json`:
 
 ```json
 "com.example.app.IRemoteService$Stub": {
@@ -47,7 +47,7 @@ three-arg form (txn 4) takes an opaque tag string.
 ## The hook
 
 ```typescript
-import sampleMap from '../../maps/com.example.app/3.4.5.json' with { type: 'json' };
+import sampleMap from '../../maps/com.example.app/30405.json' with { type: 'json' };
 import { rosetta, type RosettaMap } from 'rosetta-frida';
 
 const map = sampleMap as unknown as RosettaMap;

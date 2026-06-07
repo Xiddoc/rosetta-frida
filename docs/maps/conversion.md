@@ -83,7 +83,7 @@ Convert to the canonical JSON artifact:
 
 ```sh
 npx rosetta convert maps/com.example.app/3.4.5.yaml \
-    -o maps/com.example.app/3.4.5.json
+    -o maps/com.example.app/30405.json
 ```
 
 Programmatically:
