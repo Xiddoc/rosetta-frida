@@ -22,7 +22,9 @@
  * tarball doesn't carry.
  *
  * The check builds `dist/` first when the entrypoint is absent, so it is
- * self-contained on a fresh checkout (where `dist/` is git-ignored).
+ * self-contained on a fresh checkout (where `dist/` is git-ignored). Under
+ * CI (`process.env.CI`) it ALWAYS rebuilds, so CI never validates a stale
+ * `dist/` left over from a previous step.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -40,13 +42,20 @@ interface PackResult {
     files: PackEntry[];
 }
 
+/**
+ * A single `exports` condition map. Conditions are open-ended (`types`,
+ * `import`, `require`, `default`, …); we treat every string-valued condition
+ * as a path the tarball must carry, so adding a `require`/`default` branch
+ * later is covered automatically rather than silently unchecked.
+ */
+type ExportConditions = Record<string, string>;
+
 /** Manifest fields whose values are paths the tarball MUST contain. */
 const pkg = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
     main: string;
-    module: string;
     types: string;
     bin: Record<string, string>;
-    exports: Record<string, { types: string; import: string } | string>;
+    exports: Record<string, ExportConditions | string>;
 };
 
 /** Strip a leading `./` so a manifest path matches an `npm pack` entry path. */
@@ -54,12 +63,35 @@ function rel(p: string): string {
     return p.replace(/^\.\//, '');
 }
 
+/**
+ * Collect every path an `exports` entry resolves to, robust to all known
+ * shapes: a bare string (`"./package.json"`) or a condition map with any mix
+ * of `types`/`import`/`require`/`default`/… string-valued conditions. Nested
+ * condition maps are flattened recursively. Returns the raw (un-`rel`'d)
+ * paths.
+ */
+function exportTargets(entry: ExportConditions | string): string[] {
+    if (typeof entry === 'string') {
+        return [entry];
+    }
+    const out: string[] = [];
+    for (const value of Object.values(entry)) {
+        if (typeof value === 'string') {
+            out.push(value);
+        } else if (value !== null && typeof value === 'object') {
+            out.push(...exportTargets(value));
+        }
+    }
+    return out;
+}
+
 let packedPaths: Set<string>;
 
 beforeAll(() => {
     // Self-contained on a fresh checkout: build the dist the manifest points
-    // at if it isn't there yet (dist/ is git-ignored).
-    if (!existsSync(path.join(repoRoot, rel(pkg.main)))) {
+    // at if it isn't there yet (dist/ is git-ignored). Under CI always
+    // rebuild so a stale dist/ from a prior step is never validated.
+    if (process.env.CI || !existsSync(path.join(repoRoot, rel(pkg.main)))) {
         execFileSync('npm', ['run', 'build'], { cwd: repoRoot, stdio: 'inherit' });
     }
     const raw = execFileSync('npm', ['pack', '--dry-run', '--json'], {
@@ -72,12 +104,7 @@ beforeAll(() => {
 
 describe('publish tarball (npm pack --dry-run)', () => {
     it('includes the built entrypoint, types, and CLI bin the manifest points at', () => {
-        const required = [
-            rel(pkg.main),
-            rel(pkg.module),
-            rel(pkg.types),
-            ...Object.values(pkg.bin).map(rel),
-        ];
+        const required = [rel(pkg.main), rel(pkg.types), ...Object.values(pkg.bin).map(rel)];
         for (const target of required) {
             expect(packedPaths.has(target), `tarball must include ${target}`).toBe(true);
         }
@@ -85,9 +112,7 @@ describe('publish tarball (npm pack --dry-run)', () => {
 
     it('includes every file referenced by the exports map', () => {
         for (const entry of Object.values(pkg.exports)) {
-            const targets = typeof entry === 'string' ? [entry] : [entry.types, entry.import];
-            for (const target of targets) {
-                // package.json is referenced by `./package.json` and always present.
+            for (const target of exportTargets(entry)) {
                 expect(
                     packedPaths.has(rel(target)),
                     `tarball must include exports target ${target}`,
@@ -96,20 +121,21 @@ describe('publish tarball (npm pack --dry-run)', () => {
         }
     });
 
-    it('excludes TypeScript source, the test suite, and tooling configs', () => {
-        const forbidden = [...packedPaths].filter(
-            (p) =>
-                p.startsWith('src/') ||
-                p.startsWith('tests/') ||
-                /\.test\.(ts|js)$/.test(p) ||
-                p === 'tsconfig.json' ||
-                p === 'tsconfig.test.json' ||
-                p === 'vitest.config.ts' ||
-                p === 'eslint.config.js',
+    it('contains ONLY the allowlisted top-level entries (dist, maps, README, LICENSE, package.json)', () => {
+        // Tighten the exclusion to a positive ALLOWLIST: every packed path must
+        // be under one of the `files` allowlist dirs, the always-present
+        // `package.json` (npm injects it regardless of `files`), or a top-level
+        // README/LICENSE. A future `files` edit that adds e.g. `scripts/` or
+        // `docs/` — or a stray `src/`, test, or tooling config leaking in —
+        // fails here instead of shipping silently.
+        const allowedRoots = ['dist/', 'maps/'];
+        const allowedExact = ['package.json', 'README.md', 'LICENSE'];
+        const unexpected = [...packedPaths].filter(
+            (p) => !allowedRoots.some((root) => p.startsWith(root)) && !allowedExact.includes(p),
         );
         expect(
-            forbidden,
-            `unexpected source/test/config files in tarball: ${forbidden.join(', ')}`,
+            unexpected,
+            `unexpected files in tarball (not under the allowlist): ${unexpected.join(', ')}`,
         ).toEqual([]);
     });
 

@@ -4,7 +4,6 @@
     "description": "Translate real (unobfuscated) Java class/method/field names to per-version obfuscated names at Frida-attach time.",
     "type": "module",
     "main": "./dist/src/index.js",
-    "module": "./dist/src/index.js",
     "types": "./dist/src/index.d.ts",
     "exports": {
         ".": {

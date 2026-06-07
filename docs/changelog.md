@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0 — 2026-06-07
+
+First published release (npm). Packages everything described under
+[V1.0 — proof of life](#v10-proof-of-life) below plus the
+[Unreleased](#unreleased) hardening that landed on top of it:
+on-device `signer_sha256` enforcement, the Zod map-input security
+bounds, the CLI hardening (no TS/JS-module ingestion, path
+containment), and the least-privilege CI workflow. Pre-1.0: the
+public surface may still shift before 1.0.0.
+
 ## Unreleased
 
 ### Runtime
