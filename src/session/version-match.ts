@@ -195,10 +195,23 @@ function parseVersion(version: string): VersionTuple {
     return [major, minor, patch];
 }
 
+/**
+ * Parse a single dotted version component to an integer.
+ *
+ * STRICT, to mirror the Kotlin twin (`VersionMatch.numeric`, which uses
+ * `String.toIntOrNull() ?: 0`): a component contributes its value ONLY if
+ * it is a pure non-negative 32-bit integer; anything else contributes 0.
+ * That means embedded/trailing non-numerics (`"12abc"`, `"12 "`, `"1_2"`)
+ * and out-of-`Int`-range values (`> 2147483647`) all collapse to 0, instead
+ * of `Number.parseInt`'s lenient prefix/huge-number behaviour — otherwise
+ * the two clients would parse different tuples for the same label and could
+ * select different maps in the fuzzy path.
+ */
 function numeric(component: string | undefined): number {
     if (component === undefined || component === '') return 0;
+    if (!/^\d+$/.test(component)) return 0;
     const n = Number.parseInt(component, 10);
-    return Number.isFinite(n) ? n : 0;
+    return n <= 2147483647 ? n : 0;
 }
 
 /**

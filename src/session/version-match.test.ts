@@ -304,4 +304,58 @@ describe('pickMapForVersion — fuzzy', () => {
         });
         expect(picked.registryKey).toBe('1.0.0');
     });
+
+    it('parses a partially-numeric component strictly (12abc -> 0), matching Kotlin', () => {
+        // Kotlin's `String.toIntOrNull()` returns null for "12abc" (→ 0), so a
+        // schema-valid label like '1.12abc.3' parses to [1, 0, 3] on BOTH
+        // clients. The OLD lenient `Number.parseInt('12abc', 10)` yielded 12 →
+        // [1, 12, 3] on the Frida side only, which would diverge the fuzzy
+        // pick. For target 1.11.0:
+        //   strict:  1.12abc.3 → [1,0,3]  Δ=[0,11,3]   1.9.0 → [1,9,0] Δ=[0,2,0]
+        //            → 1.9.0 wins (the agreed answer)
+        //   lenient: 1.12abc.3 → [1,12,3] Δ=[0,1,3]    → would wrongly pick it
+        // This case is also pinned in the shared version-select.json fixture.
+        const registry: RosettaMapRegistry = {
+            '1.12abc.3': buildMap('1.12abc.3'),
+            '1.9.0': buildMap('1.9.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.11.0',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('1.9.0');
+    });
+
+    it('treats an out-of-Int-range component as 0 (overflow), matching Kotlin', () => {
+        // 4294967296 (= 2^32, > Int.MAX_VALUE 2147483647) is null under
+        // `toIntOrNull()` → 0, where lenient parseInt keeps the huge number.
+        // '1.4294967296.0' therefore parses to [1, 0, 0]; for target 1.0.0 that
+        // is an exact-tuple match (Δ=[0,0,0]) and beats 2.0.0 (Δ=[1,0,0]).
+        const registry: RosettaMapRegistry = {
+            '1.4294967296.0': buildMap('1.4294967296.0'),
+            '2.0.0': buildMap('2.0.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.0.0',
+            versionMatch: 'fuzzy',
+        });
+        expect(picked.registryKey).toBe('1.4294967296.0');
+    });
+
+    it('accepts exactly Int.MAX_VALUE as a numeric component', () => {
+        // 2147483647 is the boundary (still a valid Int), so it contributes its
+        // value: '0.2147483647.0' → [0, 2147483647, 0]. For target with the
+        // same minor it is the closest entry.
+        const registry: RosettaMapRegistry = {
+            '0.2147483647.0': buildMap('0.2147483647.0'),
+            '0.0.0': buildMap('0.0.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '0.2147483647.0',
+            versionMatch: 'fuzzy',
+        });
+        // exact label match short-circuits fuzzy
+        expect(picked.fuzzy).toBe(false);
+        expect(picked.registryKey).toBe('0.2147483647.0');
+    });
 });
