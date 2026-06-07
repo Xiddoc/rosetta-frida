@@ -395,7 +395,6 @@ export function validateMap(data: unknown): RosettaMap {
  * Exported for testing.
  */
 export function zodPathToString(path: ReadonlyArray<PropertyKey>): string {
-    // Every segment (numeric array index, string key, or — defensively — a
-    // symbol) stringifies the same way, so there is no branch to make.
-    return path.map((segment) => String(segment)).join('.');
+    // Numeric indices, string keys, and symbols all stringify the same way.
+    return path.map(String).join('.');
 }
