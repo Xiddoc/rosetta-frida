@@ -82,8 +82,13 @@ export function isRegistry(input: RosettaMap | RosettaMapRegistry): input is Ros
  * `WeakMap` keys off the registry identity so the index is GC'd with it and
  * we never mutate the caller's object.
  *
- * When two maps share a `version_code` (shouldn't happen in a well-formed
- * bundle) the first one wins, matching the previous linear-scan order.
+ * Collision policy: when two maps share a `version_code` (which shouldn't
+ * happen in a well-formed bundle) the FIRST one in iteration order wins —
+ * the `!index.has(...)` putIfAbsent guard below never overwrites an existing
+ * entry. This FIRST-WINS rule is the CROSS-CLIENT CANONICAL policy: the
+ * Kotlin rosetta-xposed registry loader matches it (putIfAbsent), so a
+ * duplicate-laden bundle selects the same map on both clients. Do not flip
+ * this to last-wins without changing the Kotlin twin in lockstep.
  */
 const versionCodeIndexCache = new WeakMap<RosettaMapRegistry, Map<number, string>>();
 
@@ -93,6 +98,8 @@ function versionCodeIndex(registry: RosettaMapRegistry): Map<number, string> {
         index = new Map<number, string>();
         for (const key of Object.keys(registry)) {
             const candidate = registry[key];
+            // putIfAbsent: first key to claim a version_code keeps it
+            // (FIRST-WINS, the cross-client canonical collision policy).
             if (candidate && !index.has(candidate.version_code)) {
                 index.set(candidate.version_code, key);
             }
