@@ -195,6 +195,13 @@ export const classKindSchema: z.ZodType<ClassKind> = z.union([
     z.literal('anonymous'),
 ]);
 
+// The fixed-shape objects below are all `.strict()`: an unknown / mistyped
+// sibling key is REJECTED, not silently stripped. This is the canonical
+// cross-client strict-keys policy — the canonical rosetta-maps schema went
+// `additionalProperties: false` on every structured object, and the Kotlin
+// rosetta-xposed twin matches it (its model rejects unknown keys too). So a
+// typo'd key fails loudly on both clients rather than producing a subtly
+// wrong map. Keep these in lockstep; do not relax to a passthrough object.
 export const mapSourceSchema: z.ZodType<MapSource> = z
     .object({
         tool: z.string().min(1).max(MAX_FREE_STRING_LEN),
@@ -326,8 +333,13 @@ export const rosettaMapSchema = z
                 message: 'signer_sha256 must be 64 lowercase hex characters',
             })
             .optional(),
-        frida_min_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
-        frida_max_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        client_hints: z
+            .object({
+                frida_min_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
+                frida_max_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
+            })
+            .strict()
+            .optional(),
         sources: z.array(mapSourceSchema).max(MAX_SOURCES).optional(),
         classes: classMapSchema,
     })

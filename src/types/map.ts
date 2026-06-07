@@ -25,6 +25,20 @@ export interface MapSource {
 
 export type Confidence = 'high' | 'medium' | 'low';
 
+/**
+ * Optional, client-specific hints nested under a map's `client_hints`
+ * sub-object. The canonical schema groups per-client metadata here (with its
+ * own `additionalProperties: false`) rather than at the top level, so an
+ * unknown hint key fails loudly on both clients. Frida reads the
+ * `frida_min_version` / `frida_max_version` range; other clients ignore it.
+ */
+export interface ClientHints {
+    /** Minimum Frida version this map is known to work with. */
+    frida_min_version?: string;
+    /** Maximum Frida version this map is known to work with. */
+    frida_max_version?: string;
+}
+
 export type ClassKind =
     | 'class'
     | 'interface'
@@ -199,10 +213,12 @@ export interface RosettaMap {
      * additionally normalises + re-validates it at runtime.
      */
     signer_sha256?: string;
-    /** Minimum Frida version this map is known to work with. */
-    frida_min_version?: string;
-    /** Maximum Frida version this map is known to work with. */
-    frida_max_version?: string;
+    /**
+     * Optional, client-specific hints nested under their own sub-object
+     * (canonical schema groups per-client metadata here, not at the top
+     * level). Frida reads the `frida_min_version` / `frida_max_version` range.
+     */
+    client_hints?: ClientHints;
     /** Provenance — which tools produced which subsets. */
     sources?: MapSource[];
     /** The classes themselves. */

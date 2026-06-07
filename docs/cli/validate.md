@@ -88,9 +88,9 @@ FAIL: maps/example/broken.json — invalid map
 1. **Top-level fields.** `schema_version === 2` (a hard literal gate —
    schema 1 maps are rejected); `app` and `version` are non-empty
    strings; `version_code` is a non-negative integer; `classes` is an
-   object. Optional `captured_at`, `signer_sha256`, `frida_min_version`,
-   `frida_max_version`, and `sources` match their declared types when
-   present.
+   object. Optional `captured_at`, `signer_sha256`, `client_hints`
+   (with strict `frida_min_version` / `frida_max_version` sub-keys), and
+   `sources` match their declared types when present.
 2. **Class entries.** Every entry has `obfuscated: string`. Optional
    fields (`extends`, `kind`, `dex`, `aidl_descriptor`, `anchors`,
    `source`, `confidence`, `methods`, `fields`) match their declared

@@ -29,10 +29,14 @@ interface RosettaMap {
     version_code: number; // authoritative selection key
     captured_at?: string;
     signer_sha256?: string; // signing-cert hash authenticity guard
-    frida_min_version?: string;
-    frida_max_version?: string;
+    client_hints?: ClientHints; // per-client metadata (frida version range)
     sources?: MapSource[];
     classes: ClassMap;
+}
+
+interface ClientHints {
+    frida_min_version?: string;
+    frida_max_version?: string;
 }
 ```
 
