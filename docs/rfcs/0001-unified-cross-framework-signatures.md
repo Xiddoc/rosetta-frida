@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Accepted (partially implemented) |
 | **Scope** | Architecture only — no production code in this RFC |
 | **Supersedes** | nothing (companion to [Design](../reference/design.md)) |
 | **Branch** | `claude/rosetta-unified-signatures-8WKsz` |
@@ -131,8 +131,8 @@ flowchart TB
 ```
 
 - `rosetta-frida` stays the Frida (layer-4) adapter.
-- `rosetta-xposed` is a **new sibling** Kotlin/JVM adapter consuming identical
-  maps (scoped here, not built this session).
+- `rosetta-xposed` is a **sibling** Kotlin/JVM adapter consuming identical
+  maps — implemented and tested; see the rosetta-xposed repo.
 - Two resolver implementations (TS + Kotlin) are kept honest by **one shared
   conformance suite**, not shared runtime code.
 - **Anti-scope:** do not try to make Frida "drive" Xposed. The execution models
@@ -165,8 +165,9 @@ Xposed/LSPosed/LSPatch developer gets the **static, sigmatcher-generated map** f
 every version that has one *and* **DexKit self-healing** for brand-new versions
 that don't — through the *same* thin resolver and the *same* map artifact.
 
-**Phasing (confirmed):** the neutral core + static backend + map convergence ship
-first; the on-device DexKit backend is *architected now, built in a later phase*.
+**Phasing (confirmed):** the neutral core + static backend + map convergence shipped
+first; the DexKit backend (`DexKitBackedIndex`, `:dexkit` module) is *implemented
+with an integration test* — only on-device native wiring remains.
 
 **Deferred binding** (the dynamic-class-loading concern): name *resolution* is
 always available (it's data), but the *hook* must wait until the declaring class
