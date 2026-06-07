@@ -2,7 +2,7 @@
 
 The canonical "what does a real rosetta-frida hook look like" example.
 It targets the synthetic app `com.example.app` whose map ships at
-`maps/com.example.app/3.4.5.json` (15 anonymized classes covering
+`maps/com.example.app/30405.json` (15 anonymized classes covering
 AIDL stubs, callback proxies, value objects, and an inner-class
 chain).
 
@@ -37,7 +37,7 @@ compiled bundle, embed the marker block at build time:
 ```sh
 node -e "
   import { emitMarkerBlock, loadMap } from 'rosetta-frida';
-  const map = await loadMap('maps/com.example.app/3.4.5.json');
+  const map = await loadMap('maps/com.example.app/30405.json');
   process.stdout.write(emitMarkerBlock(map));
 " > marker.js
 

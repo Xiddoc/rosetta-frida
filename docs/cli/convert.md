@@ -41,15 +41,15 @@ that escapes the tree is refused, as is any path containing a NUL byte.
 
 ```sh
 $ npx rosetta convert maps/com.example.app/3.4.5.yaml \
-    -o maps/com.example.app/3.4.5.json
-wrote maps/com.example.app/3.4.5.json
+    -o maps/com.example.app/30405.json
+wrote maps/com.example.app/30405.json
 ```
 
 ### TS/JS module → refused
 
 ```sh
 $ npx rosetta convert maps/com.example.app/3.4.5.ts \
-    -o maps/com.example.app/3.4.5.json
+    -o maps/com.example.app/30405.json
 error: TS/JS map modules are no longer supported; author maps as JSON or YAML (path: maps/com.example.app/3.4.5.ts)
 ```
 
@@ -73,7 +73,7 @@ wrote maps/out.json
 ### Wrong input
 
 ```sh
-$ npx rosetta convert maps/com.example.app/3.4.5.json -o maps/out.json
+$ npx rosetta convert maps/com.example.app/30405.json -o maps/out.json
 error: input is already in canonical format (.json); nothing to convert
 ```
 

@@ -25,20 +25,22 @@ do **not** try to enumerate the whole app's surface up front.
 ## 1. Scaffold
 
 ```sh
-npx rosetta init com.example.app 3.4.5
+npx rosetta init com.example.app 3.4.5 --version-code 30405
 ```
 
-This writes `maps/com.example.app/3.4.5.json` — a plain strict-JSON
+This writes `maps/com.example.app/30405.json` — a plain strict-JSON
 skeleton (no comments; field documentation lives in
-[Map format](format.md)) with all top-level metadata filled in (a
-`version_code: 0` placeholder for you to replace) and a single worked
-example class entry under `classes` to edit in place.
+[Map format](format.md)) with all top-level metadata filled in
+(including the required `version_code` you passed) and a single worked
+example class entry under `classes` to edit in place. `--version-code`
+is mandatory: it is the authoritative selection key and the default
+filename, so there's no placeholder to remember to replace.
 
-By default the path is `maps/<app>/<version>.json`. Override with
+By default the path is `maps/<app>/<version_code>.json`. Override with
 `-o <path>`:
 
 ```sh
-npx rosetta init com.example.app 3.4.5 -o vendor/maps/example-3.4.5.json
+npx rosetta init com.example.app 3.4.5 --version-code 30405 -o vendor/maps/example-30405.json
 ```
 
 Pass `--force` if the file already exists and you want to overwrite.
@@ -148,19 +150,19 @@ the AIDL-descriptor check alone.
 ## 4. Validate
 
 ```sh
-npx rosetta validate maps/com.example.app/3.4.5.json
+npx rosetta validate maps/com.example.app/30405.json
 ```
 
 Success:
 
 ```text
-OK: maps/com.example.app/3.4.5.json — com.example.app@3.4.5, 15 class(es), schema_version=2
+OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=2
 ```
 
 Failure surfaces specific issues:
 
 ```text
-FAIL: maps/com.example.app/3.4.5.json — invalid map
+FAIL: maps/com.example.app/30405.json — invalid map
   at classes.com.example.app.Foo.obfuscated: required
   at classes.com.example.app.Bar.methods.baz.signature: must match /\(.*\)[^()]+/
 ```
@@ -237,11 +239,13 @@ and two synthetic Companions) were hand-authored.
 
 When the next release ships:
 
-1. Copy the previous version's map to a new file:
-   `cp maps/com.example.app/3.4.5.json maps/com.example.app/3.5.0.json`
+1. Copy the previous version's map to a new file named for the **new**
+   `version_code` (the filename is always the version_code, never the
+   versionName): `cp maps/com.example.app/30405.json maps/com.example.app/30500.json`
 2. Update the top-level `version` label **and** `version_code` — the
    latter is the authoritative key the runtime selects by, so a stale
-   `version_code` makes the session reject the map.
+   `version_code` makes the session reject the map. Keep the filename
+   in lockstep with the new `version_code` (here `30500`).
 3. Re-run sigmatcher to refresh class anchors.
 4. For classes sigmatcher couldn't find, jadx them by hand using the
    anchors that survived (AIDL descriptors, stable strings).
@@ -257,7 +261,7 @@ column of the table.
 If hand-writing JSON isn't your preferred authoring environment:
 
 - **YAML** — write `maps/com.example.app/3.4.5.yaml`, then
-  `rosetta convert maps/com.example.app/3.4.5.yaml -o maps/com.example.app/3.4.5.json`.
+  `rosetta convert maps/com.example.app/3.4.5.yaml -o maps/com.example.app/30405.json`.
 
 Strict JSON is the canonical on-disk format; YAML is the one authoring
 convenience. (TS/JS map modules were removed — they executed arbitrary

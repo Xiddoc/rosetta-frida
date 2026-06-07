@@ -137,6 +137,7 @@ nav:
   - CLI:
       - Overview: cli/overview.md
       - rosetta init: cli/init.md
+      - rosetta pull: cli/pull.md
       - rosetta validate: cli/validate.md
       - rosetta convert: cli/convert.md
       - rosetta patch: cli/patch.md

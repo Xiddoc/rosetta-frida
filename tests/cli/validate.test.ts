@@ -175,7 +175,7 @@ describe('runValidate', () => {
             import.meta.dirname,
             '..',
             '..',
-            'maps/com.example.app/3.4.5.json',
+            'maps/com.example.app/30405.json',
         );
         const captured = makeCaptured();
         const io: CommandIo = {

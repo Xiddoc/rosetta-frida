@@ -131,3 +131,15 @@ export function assertContained(out: string): string {
     }
     return resolved;
 }
+
+/**
+ * The default on-disk path for a map: `maps/<app>/<version_code>.json`.
+ *
+ * The basename is the `version_code` (not the versionName) to obey the
+ * canonical rosetta-maps invariant: `basename == version_code`. Shared by
+ * every command that derives a default map path (`init`, `pull`) so the
+ * one filename rule lives in exactly one place.
+ */
+export function defaultMapPath(app: string, version_code: number): string {
+    return path.join('maps', app, `${version_code}.json`);
+}

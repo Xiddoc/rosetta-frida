@@ -179,10 +179,11 @@ export interface RosettaMap {
      */
     version: string;
     /**
-     * Authoritative app-identity key — Android `PackageInfo.versionCode`
-     * (the int field, or the low 32 bits of `longVersionCode`). The
-     * primary, O(1) key the runtime selects maps by; monotonic per build.
-     * See RFC 0001 Decision 3.
+     * Authoritative app-identity key — the full Android `longVersionCode`
+     * (`(versionCodeMajor << 32) | versionCode`), never masked to its low
+     * 32 bits. The primary, O(1) key the runtime selects maps by; monotonic
+     * per build. Bounded to `[0, MAX_VERSION_CODE]` (2^53 − 1, the largest
+     * value a JS number represents exactly). See RFC 0001 Decision 3.
      */
     version_code: number;
     /** ISO date when the map was captured. */
@@ -222,7 +223,8 @@ export interface RosettaMapInput extends Omit<RosettaMap, 'classes'> {
 }
 
 /**
- * Multi-version registry — emitted by `rosetta merge-bundle`. The
- * runtime selects the right entry by detected version.
+ * Multi-version registry — a map keyed by version_code string, used when
+ * several versions are bundled together. The runtime selects the right
+ * entry by detected version.
  */
 export type RosettaMapRegistry = Record<string, RosettaMap>;

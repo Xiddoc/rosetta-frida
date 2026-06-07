@@ -32,7 +32,7 @@ describe('printUsage', () => {
         const lines: string[] = [];
         printUsage((l) => lines.push(l));
         expect(lines[0]).toMatch(/^Usage: rosetta/);
-        for (const cmd of ['init', 'validate', 'convert', 'patch', 'extract', 'inspect']) {
+        for (const cmd of ['init', 'pull', 'validate', 'convert', 'patch', 'extract', 'inspect']) {
             expect(lines.some((l) => l.includes(cmd))).toBe(true);
         }
     });
@@ -106,7 +106,7 @@ describe('route — dispatch happy paths', () => {
         const fs = makeFakeFs();
         const captured = makeCaptured();
         const code = await route(
-            ['init', 'com.example.app', '1.2.3', '-o', 'm.json'],
+            ['init', 'com.example.app', '1.2.3', '--version-code', '30405', '-o', 'm.json'],
             makeIo(fs, captured),
         );
         expect(code).toBe(EXIT_OK);
@@ -130,6 +130,37 @@ describe('route — dispatch happy paths', () => {
         const code = await route(['validate', 'm.json'], makeIo(fs, captured));
         expect(code).toBe(EXIT_OK);
         expect(captured.stdout[0]).toMatch(/^rosetta validate: OK:/);
+    });
+});
+
+describe('route — dispatch happy paths (pull)', () => {
+    it('routes pull and exits 0 when fetch succeeds', async () => {
+        // Test pull dispatch through the router by using routeWithPullConfig,
+        // which is the same as route but lets us inject a mock fetch config.
+        // We import the command directly and wrap it the same way the router does.
+        const { runPull } = await import('../../cli/commands/pull.js');
+        const VALID_MAP = JSON.stringify({
+            schema_version: 2,
+            app: 'com.example.app',
+            version: '3.4.5',
+            version_code: 30405,
+            classes: { 'com.example.app.IFoo': { obfuscated: 'aaaa' } },
+        });
+        const config = {
+            mapsRepoBaseUrl: 'https://raw.example.com',
+            mapsRepoRef: 'main',
+            fetch: (_url: string) =>
+                Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(VALID_MAP) }),
+        };
+        const fs = makeFakeFs();
+        const captured = makeCaptured();
+        const msg = await runPull(
+            ['com.example.app@30405', '-o', 'm.json'],
+            makeIo(fs, captured),
+            config,
+        );
+        expect(fs.files.has('m.json')).toBe(true);
+        expect(msg).toBe('wrote m.json');
     });
 });
 
@@ -163,11 +194,20 @@ describe('route — unified failure formatting', () => {
         const fs = makeFakeFs({ 'm.json': 'existing' });
         const captured = makeCaptured();
         const code = await route(
-            ['init', 'com.example.app', '1.2.3', '-o', 'm.json'],
+            ['init', 'com.example.app', '1.2.3', '--version-code', '100', '-o', 'm.json'],
             makeIo(fs, captured),
         );
         expect(code).toBe(EXIT_FAILURE);
         expect(captured.stderr[0]).toMatch(/^rosetta init: refusing to overwrite/);
+    });
+
+    it('formats a pull arg error under the rosetta pull: prefix, exit 1', async () => {
+        // Bad arg (no positional) fails before any network call.
+        const fs = makeFakeFs();
+        const captured = makeCaptured();
+        const code = await route(['pull'], makeIo(fs, captured));
+        expect(code).toBe(EXIT_FAILURE);
+        expect(captured.stderr[0]).toMatch(/^rosetta pull: pull requires exactly one/);
     });
 
     it('formats a convert failure under the rosetta convert: prefix, exit 1', async () => {

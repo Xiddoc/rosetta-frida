@@ -24,10 +24,20 @@
 
 - **Map input bounds + key safety** (`src/validate/schema.ts`) — the Zod
   validator now enforces size/cardinality caps, string `maxLength`s, an
-  `app` package-name pattern, a `version_code` int32 ceiling, an `extends`
+  `app` package-name pattern, a `version_code` ceiling, an `extends`
   cap, a `signer_sha256` 64-hex pattern, and rejection of reserved keys
   (`__proto__`/`constructor`/`prototype`) — mirroring the canonical
   rosetta-maps JSON Schema so all clients agree.
+- **`version_code` widened to the full 64-bit `longVersionCode`**
+  (rosetta-maps#8). The cap moved from the int32 max (2^31 − 1) to
+  `Number.MAX_SAFE_INTEGER` (2^53 − 1) across the schema, Zod
+  (`MAX_VERSION_CODE`), and the Kotlin client. Android's `longVersionCode`
+  is `(versionCodeMajor << 32) | versionCode`; apps that set
+  `versionCodeMajor` exceeded the old cap and their maps were silently
+  unselectable. The value is **never masked** to its low 32 bits (that
+  would alias distinct releases). `src/session/auto-detect.ts` now reads
+  the full `longVersionCode` and **fails loudly** instead of truncating if
+  a bridge ever returns a value above 2^53 − 1. See RFC 0001 Decision 3.
 
 ### CLI security hardening
 
@@ -142,7 +152,7 @@ called out is implemented and tested.
 - **Single-map and registry forms** — `RosettaMap` and
   `RosettaMapRegistry`.
 - **15-class anonymized sample map** at
-  `maps/com.example.app/3.4.5.json` covering AIDL stubs,
+  `maps/com.example.app/30405.json` covering AIDL stubs,
   callbacks, overloads, fields, constructors, enums, synthetic
   Companions, anonymous inner classes.
 
@@ -159,9 +169,17 @@ called out is implemented and tested.
 
 ### CLI
 
-The `rosetta` binary, six commands:
+The `rosetta` binary, seven commands:
 
-- [`init <app> <version>`](cli/init.md) — scaffold a new JSON map.
+- [`init <app> <version> --version-code <n>`](cli/init.md) — scaffold a
+  new JSON map (the `--version-code` is required and becomes the
+  filename).
+- [`pull <app>@<version_code>`](cli/pull.md) — fetch + schema-validate +
+  identity-cross-check the verified map for an `(app, version_code)`
+  from the community
+  [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo and
+  write it into the project. Build-time only — never fetched on the
+  device.
 - [`validate <map>`](cli/validate.md) — schema + sanity check.
   Auto-detects JSON / YAML from extension.
 - [`convert <in> -o <out>`](cli/convert.md) — YAML → canonical JSON.
@@ -188,8 +206,7 @@ Nine error classes, all subclasses of [`RosettaError`](reference/errors.md#roset
 
 ### Tests
 
-- **611 tests across 41 files.**
-- **100% line / branch / function / statement coverage.**
+- **100% line / branch / function / statement coverage** (611 tests across 41 files as of V1.0; see the repository's CI for the current test count).
 - Test pattern: dependency-injected `Java.use` / `fs`; each
   subsystem unit-testable in isolation.
 

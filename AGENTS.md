@@ -96,7 +96,7 @@ loaded map at runtime.
 
 ```ts
 import { rosetta } from 'rosetta-frida';
-import map from './maps/com.example.app/3.4.5.json' with { type: 'json' };
+import map from './maps/com.example.app/30405.json' with { type: 'json' };
 
 Java.perform(() => {
     // Open a session: auto-detect app + version, validate against the
@@ -140,16 +140,16 @@ time. YAML and TS modules remain _authoring inputs_ converted to JSON
 via `rosetta convert` — the YAML below is shown for authoring
 flavour. Two app-identity changes landed with schema 2:
 
-- **`version_code` is required and authoritative.** It is the Android
-  `PackageInfo.versionCode` (or low 32 bits of `longVersionCode`) and
-  is the primary, O(1) key the runtime selects maps by. The `version`
+- **`version_code` is required and authoritative.** It is the full Android
+  `longVersionCode` (`(versionCodeMajor << 32) | versionCode`), never masked,
+  and is the primary, O(1) key the runtime selects maps by. The `version`
   (versionName) string is a human label / fuzzy fallback only.
 - **`signer_sha256`** (optional) replaced `apk_sha256`: it is the hash
   of the signing certificate, a cheap on-device authenticity guard
   (the APK-bytes hash never belonged in a per-version selection key).
 
 ```yaml
-# authoring source — rosetta convert renders this to 3.4.5.json
+# authoring source — rosetta convert renders this to 30405.json
 app: com.example.app
 version: '3.4.5'
 version_code: 30405
@@ -272,8 +272,8 @@ Shipped V1.0 went past the original weekend prototype: a three-tier
 hook API (`rosetta.hook`, `rosetta.use`, `rosetta.map`) over
 `rosetta.session(...)`, in-process auto-detect, attach-time health
 check, a full CLI (`init`, `validate`, `convert`, `patch`, `extract`,
-`inspect`), a 15-class sample map, and a sample hook — at 611 tests /
-100% coverage.
+`inspect`), a 15-class sample map, and a sample hook — at 100%
+coverage (see CI badge for current test count).
 
 ### 5. TypeScript vs plain JS?
 
@@ -317,7 +317,7 @@ function() { ... }`.
 
 ## Orientation for a fresh session
 
-V1.0 is built (Java-only runtime + CLI, 611 tests at 100% coverage).
+V1.0 is built (Java-only runtime + CLI, 100% coverage — see CI badge for current test count).
 The design decisions above are settled; the next frontier is the V1.5 /
 V2 roadmap (`docs/reference/design.md`). When picking up work here:
 

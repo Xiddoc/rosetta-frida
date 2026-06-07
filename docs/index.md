@@ -39,9 +39,10 @@ every time the obfuscator rotates.
 
     ---
 
-    `rosetta init`, `validate`, `convert`, `patch`, `extract`,
-    `inspect` — scaffold maps, swap them into compiled bundles, and
-    audit what every bundle actually targets.
+    `rosetta init`, `pull`, `validate`, `convert`, `patch`, `extract`,
+    `inspect` — scaffold maps, pull verified maps from the community
+    repo at build time, swap them into compiled bundles, and audit what
+    every bundle actually targets.
 
 </div>
 
@@ -49,7 +50,7 @@ every time the obfuscator rotates.
 
 ```typescript
 import { rosetta, type RosettaMap } from 'rosetta-frida';
-import sampleMap from './maps/com.example.app/3.4.5.json' with { type: 'json' };
+import sampleMap from './maps/com.example.app/30405.json' with { type: 'json' };
 
 const map = sampleMap as unknown as RosettaMap;
 
@@ -123,19 +124,27 @@ the full motivating story.
 - **PEM-style marker block.** Maps embed into the compiled bundle
   between `-----BEGIN ROSETTA MAP-----` / `-----END ROSETTA MAP-----`
   comments. Swap maps without recompiling via `rosetta patch`.
-- **CLI tooling.** `init`, `validate`, `convert`, `patch`, `extract`,
-  `inspect`.
+- **CLI tooling.** `init`, `pull`, `validate`, `convert`, `patch`,
+  `extract`, `inspect`. `pull` fetches the verified map for an
+  `(app, version_code)` from the community
+  [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo at
+  build time (never on the device).
 - **Sample map and sample hook.** A 15-class anonymized example map
   covering AIDL stubs, callbacks, overloads, fields, enums, anonymous
   inner classes.
-- **611 tests, 100% coverage.** Every line of the runtime exercised.
+- **100% coverage.** Every line of the runtime exercised (see the repository's CI for the current test count).
 
 What is **not** in V1.0:
 
 - Runtime self-healing / discovery (deferred to V2).
-- A public maps repo (deferred to V2; V1 ships example maps in-repo).
-- `rosetta diff`, `merge`, `migrate`, `types`, `verify`, `fetch`,
-  `merge-bundle` CLI commands (deferred to V1.5).
+- A *populated* public maps corpus (the [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps)
+  repo is scaffolded and `rosetta pull` already fetches from it at
+  build time; V1 still ships the example map in-repo as the worked
+  reference).
+- `rosetta diff`, `merge`, `migrate`, `types`, `verify`,
+  `merge-bundle` CLI commands (deferred to V1.5). The build-time
+  community-registry fetch shipped in V1.0 as
+  [`rosetta pull`](cli/pull.md).
 - Native (JNI / ELF symbol) mapping (deferred to V2+).
 
 See [Changelog](changelog.md) for the full V1.0 changelog and the

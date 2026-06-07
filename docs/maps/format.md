@@ -16,7 +16,7 @@ the field-by-field reference. For the authoring workflow, see
     canonical schema. This page documents the same format as consumed by
     the Frida client. `rosetta-xposed` (Kotlin) is the other client.
 
-The canonical example lives at `maps/com.example.app/3.4.5.json`
+The canonical example lives at `maps/com.example.app/30405.json`
 in the repo. It exercises every feature documented here at least
 once — 15 classes covering AIDL stubs, callback proxies, value
 objects, an enum, a synthetic Companion, an anonymous inner class.
@@ -45,7 +45,7 @@ interface RosettaMap {
 | `schema_version` | `2` | The schema version. Must be `2`. Bumped on breaking schema changes; old maps will fail to load against newer libraries until in-tree migrators are added. (`2` added the required `version_code` and optional `signer_sha256`, and dropped `apk_sha256`.) |
 | `app` | string | Android package name (`com.example.app`). Cross-checked against the auto-detected app at session start. |
 | `version` | string | App version *label* (`PackageInfo.versionName`, e.g. `3.4.5`). A human display label only — NOT authoritative for selection (labels can repeat across builds). Used as the fuzzy-match fallback key. |
-| `version_code` | integer | **The authoritative app-identity key** — Android `PackageInfo.versionCode` (or the low 32 bits of `longVersionCode`). The runtime selects maps by this first (O(1), monotonic per build); the `version` label is only a fallback. |
+| `version_code` | integer | **The authoritative app-identity key** — the full Android `longVersionCode` (`(versionCodeMajor << 32) | versionCode`), never masked. The runtime selects maps by this first (O(1), monotonic per build); the `version` label is only a fallback. Capped at Number.MAX_SAFE_INTEGER (2^53 − 1) so the Frida JS client can represent it exactly. |
 | `classes` | object | Real-FQN → `ClassEntry`. The whole point of the file. |
 
 ### Optional fields
@@ -334,7 +334,7 @@ for the full workflow.
 ```typescript
 import { loadMap } from 'rosetta-frida';
 
-const map = await loadMap('./maps/com.example.app/3.4.5.json');
+const map = await loadMap('./maps/com.example.app/30405.json');
 ```
 
 `loadMap` accepts:
@@ -360,7 +360,7 @@ Every map flows through a Zod schema. Authoring tools (the CLI,
 surface uniformly:
 
 ```text
-FAIL: maps/com.example.app/3.4.5.json — invalid map
+FAIL: maps/com.example.app/30405.json — invalid map
   at classes.com.example.app.IRemoteService$Stub.obfuscated: required
   at classes.com.example.app.Foo.methods.bar.signature: must match /\(.*\)[^()]+/
 ```
@@ -401,7 +401,7 @@ validation up front rather than at attach time.
 | method overloads (array)    | 200 (min 1)                                      |
 | `anchors` per class         | 1 000                                            |
 | `sources`                   | 100                                              |
-| `version_code`              | 2 147 483 647 (low 32 bits of Android `longVersionCode`) |
+| `version_code`              | 9 007 199 254 740 991 (Number.MAX_SAFE_INTEGER, 2^53 − 1 — the full longVersionCode) |
 | obfuscated / short names    | 512 chars                                        |
 | `extends`                   | 4 096 chars (free-form / possibly-FQN type name) |
 | `signature` / field `type`  | 4 096 chars                                      |

@@ -11,7 +11,7 @@ you will have:
 
 The example uses the canonical anonymized sample app
 `com.example.app` whose map ships in this repo at
-`maps/com.example.app/3.4.5.json` (a 15-class example covering
+`maps/com.example.app/30405.json` (a 15-class example covering
 every feature of the schema).
 
 ## 1. Scaffold or import the map
@@ -19,12 +19,12 @@ every feature of the schema).
 For real work, start with `rosetta init` and fill in entries:
 
 ```sh
-npx rosetta init com.example.app 3.4.5
-# wrote maps/com.example.app/3.4.5.json
+npx rosetta init com.example.app 3.4.5 --version-code 30405
+# wrote maps/com.example.app/30405.json
 ```
 
 For this tutorial, use the ready-made sample map at
-`maps/com.example.app/3.4.5.json`. It contains:
+`maps/com.example.app/30405.json`. It contains:
 
 ```json
 {
@@ -59,7 +59,7 @@ See [Maps — format reference](../maps/format.md) for the full schema.
 Create `hook.ts`:
 
 ```typescript
-import sampleMap from './maps/com.example.app/3.4.5.json' with { type: 'json' };
+import sampleMap from './maps/com.example.app/30405.json' with { type: 'json' };
 import { rosetta, type RosettaMap } from 'rosetta-frida';
 
 const map = sampleMap as unknown as RosettaMap;
