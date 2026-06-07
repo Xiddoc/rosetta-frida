@@ -33,6 +33,7 @@ import { runPatch } from './commands/patch.js';
 import { runInit } from './commands/init.js';
 import { runValidate } from './commands/validate.js';
 import { runConvert } from './commands/convert.js';
+import { runPull, defaultPullConfig } from './commands/pull.js';
 import { formatErrorLines, successLine, type CommandIo } from './commands/io.js';
 
 /** A command's run function: argv tail + io → its success message. */
@@ -54,6 +55,12 @@ const COMMANDS = {
     init: {
         run: runInit,
         usage: 'init <app> <version> --version-code <n>  Scaffold a new map skeleton',
+    },
+    pull: {
+        // runPull takes a third `config` arg; bind the production default so
+        // the router table stays uniform (all entries are CommandRun).
+        run: (args, io) => runPull(args, io, defaultPullConfig()),
+        usage: 'pull <app>@<version_code>             Fetch + validate map from rosetta-maps repo',
     },
     validate: {
         run: runValidate,
