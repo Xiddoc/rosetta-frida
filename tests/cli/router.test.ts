@@ -106,7 +106,7 @@ describe('route — dispatch happy paths', () => {
         const fs = makeFakeFs();
         const captured = makeCaptured();
         const code = await route(
-            ['init', 'com.example.app', '1.2.3', '-o', 'm.json'],
+            ['init', 'com.example.app', '1.2.3', '--version-code', '30405', '-o', 'm.json'],
             makeIo(fs, captured),
         );
         expect(code).toBe(EXIT_OK);
@@ -163,7 +163,7 @@ describe('route — unified failure formatting', () => {
         const fs = makeFakeFs({ 'm.json': 'existing' });
         const captured = makeCaptured();
         const code = await route(
-            ['init', 'com.example.app', '1.2.3', '-o', 'm.json'],
+            ['init', 'com.example.app', '1.2.3', '--version-code', '100', '-o', 'm.json'],
             makeIo(fs, captured),
         );
         expect(code).toBe(EXIT_FAILURE);

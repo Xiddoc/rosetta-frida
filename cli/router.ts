@@ -53,7 +53,7 @@ interface CommandEntry {
 const COMMANDS = {
     init: {
         run: runInit,
-        usage: 'init <app> <version>                 Scaffold a new map skeleton',
+        usage: 'init <app> <version> --version-code <n>  Scaffold a new map skeleton',
     },
     validate: {
         run: runValidate,

@@ -3,7 +3,7 @@
  *
  * This is the canonical "what does a real hook look like" example.
  * It targets the synthetic app `com.example.app` whose map ships at
- * `maps/com.example.app/3.4.5.json` (15 classes covering AIDL stubs,
+ * `maps/com.example.app/30405.json` (15 classes covering AIDL stubs,
  * callback proxies, value objects, etc.).
  *
  * The same source compiles unchanged for any app version that has a
@@ -29,7 +29,7 @@
 // frida-compile / modern bundlers consume.
 // @ts-expect-error — import attributes require a newer `module` target than
 // the library's ES2022 build setting; bundlers honour it at compile time.
-import sampleMap from '../../maps/com.example.app/3.4.5.json' with { type: 'json' };
+import sampleMap from '../../maps/com.example.app/30405.json' with { type: 'json' };
 import { rosetta, type RosettaMap } from '../../src/index.js';
 
 // Cast the imported JSON to RosettaMap (TypeScript's JSON import yields

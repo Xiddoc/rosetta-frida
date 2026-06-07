@@ -25,7 +25,7 @@ import { _resetCurrentSession } from '../../src/api/rosetta.js';
 import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/index.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SAMPLE_MAP_PATH = join(HERE, '..', '..', 'maps', 'com.example.app', '3.4.5.json');
+const SAMPLE_MAP_PATH = join(HERE, '..', '..', 'maps', 'com.example.app', '30405.json');
 
 function loadSampleMap(): RosettaMap {
     // The on-disk artifact is strict JSON — parse it directly.
