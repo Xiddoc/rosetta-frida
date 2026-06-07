@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import path from 'node:path';
+import { readFileSync } from 'node:fs';
+import { loadMap } from '../parse/load.js';
 import {
     APP_PATTERN,
     MAX_ANCHORS,
@@ -447,6 +450,46 @@ describe('rosettaMapSchema', () => {
     });
 });
 
+describe('client_hints', () => {
+    it('accepts a nested client_hints sub-object', () => {
+        const m = {
+            ...baseMap(),
+            client_hints: { frida_min_version: '16.0.0', frida_max_version: '17.99.99' },
+        };
+        expect(rosettaMapSchema.parse(m)).toEqual(m);
+    });
+
+    it('accepts a partial / empty client_hints', () => {
+        expect(() => rosettaMapSchema.parse({ ...baseMap(), client_hints: {} })).not.toThrow();
+        expect(() =>
+            rosettaMapSchema.parse({
+                ...baseMap(),
+                client_hints: { frida_min_version: '16.0.0' },
+            }),
+        ).not.toThrow();
+    });
+
+    it('rejects an unknown key inside client_hints (strict)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                ...baseMap(),
+                client_hints: { frida_min_version: '16.0.0', xposed_min_version: '1' },
+            }),
+        ).toThrow();
+    });
+
+    it('rejects the legacy TOP-LEVEL frida_min_version (migrated to client_hints)', () => {
+        // Top level is strict: the pre-migration spelling must now fail so a
+        // stale map is caught rather than silently dropping the hint.
+        expect(() =>
+            rosettaMapSchema.parse({ ...baseMap(), frida_min_version: '16.0.0' }),
+        ).toThrow();
+        expect(() =>
+            rosettaMapSchema.parse({ ...baseMap(), frida_max_version: '17.99.99' }),
+        ).toThrow();
+    });
+});
+
 describe('validateMap', () => {
     it('returns the validated (normalised) map on success', () => {
         const data = {
@@ -838,5 +881,26 @@ describe('reserved-key rejection', () => {
             },
         };
         expect(() => validateMap(m)).not.toThrow();
+    });
+});
+
+describe('published example map (canonical-example invariant)', () => {
+    // The map a new contributor copies MUST always validate through the
+    // production validator/loader. Reading the real file (no fs mock) guards
+    // both the validator and the sample itself against drift — e.g. the
+    // client_hints migration.
+    const examplePath = path.resolve(import.meta.dirname, '../../maps/com.example.app/30405.json');
+
+    it('validates through validateMap', () => {
+        const parsed = JSON.parse(readFileSync(examplePath, 'utf8')) as unknown;
+        expect(() => validateMap(parsed)).not.toThrow();
+        expect(validateMap(parsed).client_hints?.frida_min_version).toBe('16.0.0');
+    });
+
+    it('validates through the production loadMap (JSON source)', async () => {
+        const source = readFileSync(examplePath, 'utf8');
+        const map = await loadMap(source);
+        expect(map.app).toBe('com.example.app');
+        expect(map.version_code).toBe(30405);
     });
 });
