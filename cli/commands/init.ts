@@ -17,7 +17,6 @@
  * Refuses to overwrite an existing file unless `--force` is passed.
  */
 
-import * as path from 'node:path';
 import { RosettaError } from '../../src/errors.js';
 import { CURRENT_SCHEMA_VERSION } from '../../src/types/map.js';
 import type { RosettaMapInput } from '../../src/types/map.js';
@@ -27,6 +26,7 @@ import {
     assertValidVersion,
     assertContained,
     assertNoNul,
+    defaultMapPath,
 } from '../../src/parse/index.js';
 import type { CommandIo, FsLike } from './io.js';
 import { writeNew } from './io.js';
@@ -137,12 +137,11 @@ export function renderSkeleton(app: string, version: string, version_code: numbe
 /**
  * Resolve the default output path: `maps/<app>/<version_code>.json`.
  *
- * The filename is the version_code (not the versionName) to obey the
- * canonical rosetta-maps invariant: `basename == version_code`.
+ * Thin alias over the shared {@link defaultMapPath} helper so `init` and
+ * `pull` derive the canonical filename (`basename == version_code`) from
+ * one place. Re-exported under the historical name for callers/tests.
  */
-export function defaultOutputPath(app: string, version_code: number): string {
-    return path.join('maps', app, `${version_code}.json`);
-}
+export const defaultOutputPath = defaultMapPath;
 
 /**
  * Core of `rosetta init`: scaffold the skeleton map and return the

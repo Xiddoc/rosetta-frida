@@ -20,11 +20,13 @@
  * calls `route`, and exits with the returned code. All routing logic
  * lives here so it is unit-testable with an in-memory `CommandIo`.
  *
- * The six commands are described by ONE table ({@link COMMANDS}): each
- * entry carries the command's `run` function and its one-line `usage`
- * text. The command-name union, the usage block, and dispatch are all
- * derived from that table, so adding a command means editing one place
- * and the help text can never go stale.
+ * The seven commands are described by ONE table ({@link COMMANDS}): each
+ * entry carries the command's `run` function and a structured `usage`
+ * (an `invocation` column + a `summary` column). The command-name union,
+ * the usage block, and dispatch are all derived from that table, so
+ * adding a command means editing one place and the help text can never go
+ * stale. {@link printUsage} pads the invocation column so the summaries
+ * stay aligned regardless of invocation length.
  */
 
 import { runExtract } from './commands/extract.js';
@@ -42,45 +44,59 @@ type CommandRun = (args: readonly string[], io: CommandIo) => Promise<string>;
 /** One command's behaviour and help text — the single source of truth. */
 interface CommandEntry {
     run: CommandRun;
-    /** One-line usage row shown under `Commands:` in the help block. */
-    usage: string;
+    /**
+     * The command + its arguments, e.g. `init <app> <version> [options]`.
+     * {@link printUsage} pads this column so all summaries line up.
+     */
+    invocation: string;
+    /** One-line description shown in the right-hand column of the help block. */
+    summary: string;
 }
 
 /**
  * The command table. The key order is the help-listing order. Every
  * command appears exactly once; the usage row lives next to the function
- * it documents so the two can't drift.
+ * it documents so the two can't drift. Options are folded into an
+ * `[options]` placeholder so the invocation column stays short and the
+ * summaries stay aligned (full option grammar lives in `docs/cli/`).
  */
 const COMMANDS = {
     init: {
         run: runInit,
-        usage: 'init <app> <version> --version-code <n>  Scaffold a new map skeleton',
+        invocation: 'init <app> <version> [options]',
+        summary: 'Scaffold a new map skeleton (--version-code required)',
     },
     pull: {
         // runPull takes a third `config` arg; bind the production default so
         // the router table stays uniform (all entries are CommandRun).
         run: (args, io) => runPull(args, io, defaultPullConfig()),
-        usage: 'pull <app>@<version_code>             Fetch + validate map from rosetta-maps repo',
+        invocation: 'pull <app>@<version_code>',
+        summary: 'Fetch + validate map from rosetta-maps repo',
     },
     validate: {
         run: runValidate,
-        usage: 'validate <map>                       Schema + sanity check (auto-detect format)',
+        invocation: 'validate <map>',
+        summary: 'Schema + sanity check (auto-detect format)',
     },
     convert: {
         run: runConvert,
-        usage: 'convert <in> -o <out>                Convert YAML map to canonical JSON',
+        invocation: 'convert <in> -o <out>',
+        summary: 'Convert YAML map to canonical JSON',
     },
     patch: {
         run: runPatch,
-        usage: 'patch <bundle.js> --map <new.json>   Replace embedded map in bundle',
+        invocation: 'patch <bundle.js> --map <new.json>',
+        summary: 'Replace embedded map in bundle',
     },
     extract: {
         run: runExtract,
-        usage: 'extract <bundle.js> -o <out.json>    Pull embedded map out of bundle',
+        invocation: 'extract <bundle.js> -o <out.json>',
+        summary: 'Pull embedded map out of bundle',
     },
     inspect: {
         run: runInspect,
-        usage: 'inspect <bundle.js>                  One-line summary of embedded map',
+        invocation: 'inspect <bundle.js>',
+        summary: 'One-line summary of embedded map',
     },
 } satisfies Record<string, CommandEntry>;
 
@@ -100,8 +116,11 @@ export function printUsage(write: (line: string) => void): void {
     write('Usage: rosetta <command> [options]');
     write('');
     write('Commands:');
+    // Pad every invocation to the widest one so the summary column aligns,
+    // regardless of how long any single command's invocation is.
+    const width = Math.max(...Object.values(COMMANDS).map((e) => e.invocation.length));
     for (const entry of Object.values(COMMANDS)) {
-        write(`  ${entry.usage}`);
+        write(`  ${entry.invocation.padEnd(width)}  ${entry.summary}`);
     }
 }
 

@@ -21,7 +21,6 @@ import { makeCaptured, makeFakeFs, makeFsLike, makeIo, type FakeFs } from './hel
 import * as path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
 /**
  * Build a fully-typed `FsLike` (no casts) backed by the shared in-memory
@@ -299,8 +298,8 @@ describe('filename == version_code invariant', () => {
     it('shipped sample map has basename == version_code', () => {
         // The canonical invariant enforced by rosetta-maps CI:
         // basename(file) == `${version_code}.json`
-        const here = dirname(fileURLToPath(import.meta.url));
-        const samplePath = join(here, '..', '..', 'maps', 'com.example.app', '30405.json');
+        const here = path.dirname(fileURLToPath(import.meta.url));
+        const samplePath = path.join(here, '..', '..', 'maps', 'com.example.app', '30405.json');
         const raw = readFileSync(samplePath, 'utf8');
         const parsed = JSON.parse(raw) as { version_code: number };
         // basename without extension must equal version_code as a string

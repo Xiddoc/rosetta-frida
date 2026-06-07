@@ -4,7 +4,13 @@
 
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
-import { assertValidApp, assertValidVersion, assertNoNul, assertContained } from './paths.js';
+import {
+    assertValidApp,
+    assertValidVersion,
+    assertNoNul,
+    assertContained,
+    defaultMapPath,
+} from './paths.js';
 import { RosettaError } from '../errors.js';
 
 describe('assertValidApp', () => {
@@ -106,5 +112,17 @@ describe('assertContained', () => {
     it('accepts an absolute path that is inside the tree', () => {
         const inside = path.join(base, 'maps', 'x.json');
         expect(assertContained(inside)).toBe(inside);
+    });
+});
+
+describe('defaultMapPath', () => {
+    it('builds maps/<app>/<version_code>.json', () => {
+        expect(defaultMapPath('com.example.app', 30405)).toBe(
+            path.join('maps', 'com.example.app', '30405.json'),
+        );
+    });
+
+    it('uses the version_code (not a versionName) as the basename', () => {
+        expect(defaultMapPath('com.example.app', 1)).toMatch(/[\\/]1\.json$/);
     });
 });
