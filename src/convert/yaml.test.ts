@@ -118,6 +118,17 @@ classes:
         expect(() => yamlToMap(bad)).toThrow(MapValidationError);
     });
 
+    it('does not choke on a non-object top-level document (array)', () => {
+        // The signer-canonicalization step early-returns on a non-object
+        // document; the subsequent structural validation rejects it. This
+        // pins the early-return branch (maps#11 canonicalize guard).
+        expect(() => yamlToMap('- a\n- b')).toThrow(MapValidationError);
+    });
+
+    it('does not choke on a scalar top-level document', () => {
+        expect(() => yamlToMap('42')).toThrow(MapValidationError);
+    });
+
     it('canonicalizes a colon-separated, uppercase signer_sha256 at the emit boundary (maps#11)', () => {
         // apksigner / keytool emit `AB:CD:…` uppercase digests. The canonical
         // on-disk form is lowercase, no colons — the strict schema enforces

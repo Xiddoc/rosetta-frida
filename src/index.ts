@@ -8,6 +8,16 @@
 export * from './errors.js';
 export * from './types/index.js';
 
+// Typed configuration (parse-limit hardening, future knobs).
+export {
+    resolveConfig,
+    configSchema,
+    DEFAULT_CONFIG,
+    DEFAULT_MAX_INPUT_BYTES,
+    DEFAULT_MAX_NESTING_DEPTH,
+} from './config.js';
+export type { RosettaConfig, RosettaConfigInput, ParseLimits } from './config.js';
+
 // Java bridge — the single seam onto Frida's global `Java`.
 export {
     defaultJavaBridge,
