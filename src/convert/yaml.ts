@@ -42,6 +42,13 @@ import { normalizeSignerHash } from '../session/signer-detect.js';
  * Mutates only this authoring/emit path; the runtime load path
  * (`loadMap` → `validateMap`) never normalizes the artifact, so an already
  * on-disk map is validated verbatim.
+ *
+ * Coverage note (review): YAML is the ONLY authoring/emit path that ingests
+ * a map body, so this is the only place signer canonicalization is needed.
+ * The TS/JS-module convert path (`src/convert/ts-module.ts`) no longer
+ * accepts a map at all — it was removed for build-time-RCE safety and now
+ * only refuses module inputs (`refuseModuleInput`) — so there is no
+ * signer_sha256 to canonicalize there.
  */
 function canonicalizeSignerSha256(parsed: unknown): void {
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return;
