@@ -130,4 +130,22 @@ describe('convertToJson', () => {
             /unsupported convert format/,
         );
     });
+
+    it('emits a canonical lowercase-no-colon signer_sha256 end-to-end (maps#11)', async () => {
+        const upperColon = Array.from({ length: 32 }, () => 'AB').join(':');
+        const yaml = `
+schema_version: 2
+app: com.example.app
+version: "1.0.0"
+version_code: 100
+signer_sha256: "${upperColon}"
+classes: {}
+`;
+        const out = await convertToJson(yaml, 'yaml');
+        expect(out).toContain(`"signer_sha256": "${'ab'.repeat(32)}"`);
+        expect(out).not.toContain(':AB');
+        // The emitted artifact round-trips through the strict validator.
+        const reparsed = JSON.parse(out) as { signer_sha256?: string };
+        expect(reparsed.signer_sha256).toMatch(/^[0-9a-f]{64}$/);
+    });
 });
