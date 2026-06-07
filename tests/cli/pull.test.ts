@@ -15,6 +15,9 @@ import {
     writePulledMap,
     runPull,
     defaultMapPath,
+    isPinnedRef,
+    assertValidPullConfig,
+    MAX_MAP_BYTES,
     type PullConfig,
 } from '../../cli/commands/pull.js';
 import { RosettaError } from '../../src/errors.js';
@@ -37,7 +40,7 @@ const VALID_MAP_JSON = JSON.stringify({
 });
 
 /** Build a mock PullConfig that returns the given JSON payload. */
-function mockConfig(payload: string, status = 200): PullConfig {
+function mockConfig(payload: string, status = 200, headers?: Record<string, string>): PullConfig {
     return {
         mapsRepoBaseUrl: 'https://raw.example.com/rosetta-maps',
         mapsRepoRef: 'abc123',
@@ -46,6 +49,9 @@ function mockConfig(payload: string, status = 200): PullConfig {
                 ok: status >= 200 && status < 300,
                 status,
                 text: () => Promise.resolve(payload),
+                headers: headers
+                    ? { get: (name: string) => headers[name.toLowerCase()] ?? null }
+                    : undefined,
             }),
     };
 }
@@ -106,6 +112,22 @@ describe('parsePullTarget', () => {
 
     it('errors when version_code is empty after @', () => {
         expect(() => parsePullTarget('com.example.app@')).toThrow(/positive integer/);
+    });
+
+    it('rejects scientific notation (@1e3) — digits only', () => {
+        expect(() => parsePullTarget('com.example.app@1e3')).toThrow(/decimal digits only/);
+    });
+
+    it('rejects a target with more than one @', () => {
+        expect(() => parsePullTarget('com.example.app@30405@extra')).toThrow(/exactly one/);
+    });
+
+    it('rejects a leading-+ version_code', () => {
+        expect(() => parsePullTarget('com.example.app@+5')).toThrow(/decimal digits only/);
+    });
+
+    it('rejects whitespace-padded version_code', () => {
+        expect(() => parsePullTarget('com.example.app@ 5')).toThrow(/decimal digits only/);
     });
 });
 
@@ -241,6 +263,98 @@ describe('fetchMapJson', () => {
             /connection refused/,
         );
     });
+
+    it('rejects an oversize body by Content-Length pre-check', async () => {
+        const cfg = mockConfig('{}', 200, { 'content-length': String(MAX_MAP_BYTES + 1) });
+        await expect(fetchMapJson('com.example.app', 30405, cfg)).rejects.toThrow(
+            /too large: Content-Length/,
+        );
+    });
+
+    it('ignores a non-numeric Content-Length and falls through to the body check', async () => {
+        // Header lies/garbled → pre-check is skipped; small body passes.
+        const cfg = mockConfig(VALID_MAP_JSON, 200, { 'content-length': 'not-a-number' });
+        await expect(fetchMapJson('com.example.app', 30405, cfg)).resolves.toBe(VALID_MAP_JSON);
+    });
+
+    it('rejects an oversize body by decoded length even when no header is present', async () => {
+        const huge = 'x'.repeat(MAX_MAP_BYTES + 1);
+        await expect(fetchMapJson('com.example.app', 30405, mockConfig(huge))).rejects.toThrow(
+            /too large: \d+ bytes/,
+        );
+    });
+
+    it('accepts a body exactly at the limit', async () => {
+        // No header; body length == MAX is allowed (only strictly over rejects).
+        const atLimit = 'y'.repeat(MAX_MAP_BYTES);
+        await expect(fetchMapJson('com.example.app', 30405, mockConfig(atLimit))).resolves.toBe(
+            atLimit,
+        );
+    });
+});
+
+// ---------------------------------------------------------------------------
+// isPinnedRef / assertValidPullConfig
+// ---------------------------------------------------------------------------
+
+describe('isPinnedRef', () => {
+    it('treats a full 40-hex SHA as pinned', () => {
+        expect(isPinnedRef('a'.repeat(40))).toBe(true);
+        expect(isPinnedRef('0123456789abcdef0123456789abcdef01234567')).toBe(true);
+    });
+
+    it('treats a vX.Y.Z tag as pinned', () => {
+        expect(isPinnedRef('v1.2.3')).toBe(true);
+        expect(isPinnedRef('v10.0.0-rc1')).toBe(true);
+    });
+
+    it('treats a branch name like main as unpinned', () => {
+        expect(isPinnedRef('main')).toBe(false);
+        expect(isPinnedRef('develop')).toBe(false);
+    });
+
+    it('treats a short SHA as unpinned (not 40 hex)', () => {
+        expect(isPinnedRef('abc1234')).toBe(false);
+    });
+});
+
+describe('assertValidPullConfig', () => {
+    function cfg(over: Partial<PullConfig>): PullConfig {
+        return { ...mockConfig(''), ...over };
+    }
+
+    it('throws on a malformed base URL', () => {
+        expect(() => assertValidPullConfig(cfg({ mapsRepoBaseUrl: 'not a url' }))).toThrow(
+            /valid URL/,
+        );
+    });
+
+    it('throws on a base URL with a trailing slash', () => {
+        expect(() =>
+            assertValidPullConfig(cfg({ mapsRepoBaseUrl: 'https://x.example.com/' })),
+        ).toThrow(/trailing slash/);
+    });
+
+    it('throws on an empty ref', () => {
+        expect(() => assertValidPullConfig(cfg({ mapsRepoRef: '' }))).toThrow(/non-empty git ref/);
+    });
+
+    it('warns when the ref is the moving branch main', () => {
+        const warnings: string[] = [];
+        assertValidPullConfig(cfg({ mapsRepoRef: 'main' }), (l) => warnings.push(l));
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toMatch(/not pinned/);
+    });
+
+    it('does NOT warn when the ref is a pinned SHA', () => {
+        const warnings: string[] = [];
+        assertValidPullConfig(cfg({ mapsRepoRef: 'a'.repeat(40) }), (l) => warnings.push(l));
+        expect(warnings).toHaveLength(0);
+    });
+
+    it('does not throw when no warn writer is given (warning is suppressed silently)', () => {
+        expect(() => assertValidPullConfig(cfg({ mapsRepoRef: 'main' }))).not.toThrow();
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -357,6 +471,55 @@ describe('writePulledMap', () => {
         expect(written.endsWith('}\n')).toBe(true);
         expect(written).toContain('\n    "app"'); // 4-space indent
     });
+
+    it('accepts a map whose identity matches the request', async () => {
+        const { fs, files } = makeFs();
+        const out = await writePulledMap(['com.example.app@30405'], fs, mockConfig(VALID_MAP_JSON));
+        expect(files.has(out)).toBe(true);
+    });
+
+    it('rejects a map whose app field does not match the request', async () => {
+        // Requested com.other.app but the upstream file declares com.example.app.
+        const { fs } = makeFs();
+        await expect(
+            writePulledMap(['com.other.app@30405'], fs, mockConfig(VALID_MAP_JSON)),
+        ).rejects.toThrow(
+            /identity does not match.*com\.other\.app@30405.*com\.example\.app@30405/s,
+        );
+    });
+
+    it('rejects a map whose version_code does not match the request', async () => {
+        // The upstream file at this name declares 30405, not the requested 99.
+        const mismatched = JSON.stringify({
+            schema_version: 2,
+            app: 'com.example.app',
+            version: '9.9',
+            version_code: 30405,
+            classes: { 'com.example.app.X': { obfuscated: 'aaaa' } },
+        });
+        const { fs } = makeFs();
+        await expect(
+            writePulledMap(['com.example.app@99'], fs, mockConfig(mismatched)),
+        ).rejects.toThrow(
+            /identity does not match.*com\.example\.app@99.*com\.example\.app@30405/s,
+        );
+    });
+
+    it('rejects an oversize fetched body (DoS guard)', async () => {
+        const huge = 'z'.repeat(MAX_MAP_BYTES + 1);
+        const { fs } = makeFs();
+        await expect(
+            writePulledMap(['com.example.app@30405'], fs, mockConfig(huge)),
+        ).rejects.toThrow(/too large/);
+    });
+
+    it('rejects a malformed config before any fetch', async () => {
+        const { fs } = makeFs();
+        const bad: PullConfig = { ...mockConfig(VALID_MAP_JSON), mapsRepoBaseUrl: 'not a url' };
+        await expect(writePulledMap(['com.example.app@30405'], fs, bad)).rejects.toThrow(
+            /invalid pull config/,
+        );
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -386,5 +549,26 @@ describe('runPull', () => {
                 mockConfig(VALID_MAP_JSON),
             ),
         ).rejects.toThrow(RosettaError);
+    });
+
+    it('emits the unpinned-ref warning to stderr (not stdout)', async () => {
+        const fakeFs = makeFakeFs();
+        const captured = makeCaptured();
+        const unpinned: PullConfig = { ...mockConfig(VALID_MAP_JSON), mapsRepoRef: 'main' };
+        await runPull(
+            ['com.example.app@30405', '-o', 'm.json'],
+            makeIo(fakeFs, captured),
+            unpinned,
+        );
+        expect(captured.stderr.some((l) => /not pinned/.test(l))).toBe(true);
+        expect(captured.stdout).toEqual([]);
+    });
+
+    it('does not warn for a pinned ref', async () => {
+        const fakeFs = makeFakeFs();
+        const captured = makeCaptured();
+        const pinned: PullConfig = { ...mockConfig(VALID_MAP_JSON), mapsRepoRef: 'v1.0.0' };
+        await runPull(['com.example.app@30405', '-o', 'm.json'], makeIo(fakeFs, captured), pinned);
+        expect(captured.stderr).toEqual([]);
     });
 });
