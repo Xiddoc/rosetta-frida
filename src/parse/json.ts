@@ -61,7 +61,7 @@ export function parseJson(
  * @throws MapInputTooLargeError if either limit is exceeded.
  */
 export function guardInput(source: string, limits: ParseLimits): void {
-    const bytes = utf8ByteLength(source);
+    const bytes = utf8ByteLength(source, limits.maxInputBytes);
     if (bytes > limits.maxInputBytes) {
         throw new MapInputTooLargeError(
             `Map input is ${bytes} bytes, over the ${limits.maxInputBytes}-byte limit`,
@@ -86,8 +86,15 @@ export function guardInput(source: string, limits: ParseLimits): void {
  * library may run inside a Frida JS host with no Node `Buffer`). Surrogate
  * pairs are handled: a high surrogate is consumed together with its low
  * surrogate as a single 4-byte code point.
+ *
+ * `limit` short-circuits the count: once the running total EXCEEDS `limit`
+ * there is nothing more to learn (the caller only tests `bytes > limit`), so
+ * we bail out early rather than walk a multi-megabyte hostile blob to the
+ * end. Mirrors the Kotlin twin's `if (bytes > MAX_INPUT_BYTES) return bytes`.
+ * The returned value on early-exit is a lower bound that is still strictly
+ * greater than `limit`, so the comparison and the over-size rejection hold.
  */
-function utf8ByteLength(source: string): number {
+function utf8ByteLength(source: string, limit: number): number {
     let bytes = 0;
     for (let i = 0; i < source.length; i += 1) {
         const code = source.charCodeAt(i);
@@ -108,6 +115,8 @@ function utf8ByteLength(source: string): number {
         } else {
             bytes += 3;
         }
+        // Early-exit: the caller only needs to know we are over the limit.
+        if (bytes > limit) return bytes;
     }
     return bytes;
 }

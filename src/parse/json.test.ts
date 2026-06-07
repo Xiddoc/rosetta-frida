@@ -192,6 +192,19 @@ describe('parseJson — pre-parse input-hardening guard (L9)', () => {
         expect(() => parseJson('{"aaaa":1}', tiny)).toThrow(MapInputTooLargeError);
     });
 
+    it('accepts input exactly at the byte limit (boundary is >, not >=)', () => {
+        // `{"a":1}` is 7 ASCII bytes. At a 7-byte cap it must be ACCEPTED —
+        // the guard rejects only when bytes strictly exceed the limit. The
+        // early-exit in utf8ByteLength must not fire on the boundary value.
+        const src = '{"a":1}';
+        expect(src.length).toBe(7);
+        expect(parseJson(src, { maxInputBytes: 7, maxNestingDepth: 64 })).toEqual({ a: 1 });
+        // One byte tighter and the same input is rejected.
+        expect(() => parseJson(src, { maxInputBytes: 6, maxNestingDepth: 64 })).toThrow(
+            MapInputTooLargeError,
+        );
+    });
+
     it('carries structured context on a byte-limit rejection', () => {
         const tiny = { maxInputBytes: 4, maxNestingDepth: 64 };
         try {
@@ -284,9 +297,17 @@ describe('parseJson — pre-parse input-hardening guard (L9)', () => {
 
     it('handles escaped quotes/backslashes while scanning depth', () => {
         // An escaped quote inside the string must NOT end the string early
-        // (which would expose the trailing `]` as structural). Real depth 1.
-        const src = '{"s":"he said \\"[\\\\\\"\\""}';
-        expect(() => parseJson(src, { maxInputBytes: 1024, maxNestingDepth: 1 })).not.toThrow();
+        // (which would expose the trailing `]` as structural). We build the
+        // JSON value from a readable JS string so the escaping is legible:
+        // the string value is  he said "][}  — it embeds a quote, then the
+        // closers `]`, `}` that would inflate depth if the scanner mistook
+        // the escaped quote for the string's end. JSON.stringify produces the
+        // correctly-escaped on-disk form.
+        const value = 'he said "][}';
+        const src = JSON.stringify({ s: value });
+        // The outer object is the only real nesting → depth 1.
+        expect(maxNestingDepth(src, 64)).toBe(1);
+        expect(parseJson(src, { maxInputBytes: 1024, maxNestingDepth: 1 })).toEqual({ s: value });
     });
 });
 
@@ -302,6 +323,20 @@ describe('maxNestingDepth', () => {
     it('does not underflow on unbalanced closers', () => {
         // Extra `]` with depth already 0 must not push depth negative.
         expect(maxNestingDepth(']]]{}', 64)).toBe(1);
+    });
+
+    it('ignores closers `]` and `}` inside a string literal', () => {
+        // The string value contains closers that, if counted, would make the
+        // scanner under/over-count depth. Real depth is 1 (the outer object).
+        // Without the in-string skip the trailing `]]]}}}` would be read as
+        // structural and corrupt the count.
+        const src = '{"k":"a]b}c]]]}}}"}';
+        expect(maxNestingDepth(src, 64)).toBe(1);
+        // And openers inside the string are likewise ignored: depth stays 2
+        // (outer object + the real inner array), not inflated by the `[`/`{`
+        // characters embedded in the string value.
+        const withInner = '{"k":["[{[{"]}';
+        expect(maxNestingDepth(withInner, 64)).toBe(2);
     });
 
     it('stops early once the cap is exceeded', () => {
