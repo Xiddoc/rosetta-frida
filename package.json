@@ -1,19 +1,20 @@
 {
     "name": "rosetta-frida",
-    "version": "0.0.0-dev",
+    "version": "0.1.0",
     "description": "Translate real (unobfuscated) Java class/method/field names to per-version obfuscated names at Frida-attach time.",
     "type": "module",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
+    "main": "./dist/src/index.js",
+    "types": "./dist/src/index.d.ts",
     "exports": {
         ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js"
+            "types": "./dist/src/index.d.ts",
+            "import": "./dist/src/index.js"
         },
         "./types": {
-            "types": "./dist/types/index.d.ts",
-            "import": "./dist/types/index.js"
-        }
+            "types": "./dist/src/types/index.d.ts",
+            "import": "./dist/src/types/index.js"
+        },
+        "./package.json": "./package.json"
     },
     "bin": {
         "rosetta": "./dist/cli/index.js"
@@ -21,10 +22,25 @@
     "files": [
         "dist",
         "maps",
-        "README.md"
+        "README.md",
+        "LICENSE"
     ],
+    "sideEffects": false,
     "engines": {
         "node": ">=24.0.0"
+    },
+    "license": "MIT",
+    "author": "Xiddoc",
+    "homepage": "https://xiddoc.github.io/rosetta-frida/",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Xiddoc/rosetta-frida.git"
+    },
+    "bugs": {
+        "url": "https://github.com/Xiddoc/rosetta-frida/issues"
+    },
+    "publishConfig": {
+        "access": "public"
     },
     "scripts": {
         "build": "tsc -p tsconfig.json",
@@ -44,6 +60,7 @@
         "verify": "npm run typecheck && npm run lint && npm run format:check && npm run schema-version:check && npm run aidl:lint && npm run conformance:fixtures:check && npm run test:coverage",
         "verify:fast": "npm run typecheck && npm run lint && npm run format:check && npm run schema-version:check && npm run aidl:lint && npm run conformance:fixtures:check",
         "cli": "tsx cli/index.ts",
+        "prepublishOnly": "npm run build && npm run verify",
         "prepare": "husky"
     },
     "dependencies": {
@@ -72,7 +89,6 @@
         "reverse-engineering",
         "instrumentation"
     ],
-    "license": "MIT",
     "lint-staged": {
         "*.{ts,js,mjs,cjs}": [
             "eslint --fix --max-warnings 0 --no-warn-ignored",

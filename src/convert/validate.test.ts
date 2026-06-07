@@ -27,8 +27,10 @@ describe('validateStructure', () => {
             ...MINIMAL,
             captured_at: '2026-05-13',
             signer_sha256: 'a'.repeat(64),
-            frida_min_version: '16.0.0',
-            frida_max_version: '17.99.99',
+            client_hints: {
+                frida_min_version: '16.0.0',
+                frida_max_version: '17.99.99',
+            },
             sources: [
                 {
                     tool: 'sigmatcher',

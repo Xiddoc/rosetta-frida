@@ -118,13 +118,31 @@ describe('pickMapForVersion — version_code (authoritative)', () => {
         expect(b.registryKey).toBe('2.0.0');
     });
 
-    it('keeps the first key when two maps share a version_code', () => {
+    it('FIRST-WINS on a version_code collision (cross-client canonical policy)', () => {
+        // When two maps share a version_code, the FIRST key in iteration
+        // order claims it and the second NEVER overwrites it. This is the
+        // canonical collision policy shared with the Kotlin rosetta-xposed
+        // loader (putIfAbsent) so a duplicate-laden bundle resolves to the
+        // same map on both clients.
         const dupRegistry: RosettaMapRegistry = {
             '1.0.0': buildMap('1.0.0', 'com.example.app', 500),
             '1.0.1': buildMap('1.0.1', 'com.example.app', 500),
         };
         const picked = pickMapForVersion(dupRegistry, { version: 'z', versionCode: 500 });
         expect(picked.registryKey).toBe('1.0.0');
+        expect(picked.map.version).toBe('1.0.0');
+    });
+
+    it('FIRST-WINS is insertion-order, not label-sorted', () => {
+        // The winner is the first inserted key, even when its label sorts
+        // AFTER the colliding one — proving the policy is "first in iteration
+        // order", not "lowest label".
+        const dupRegistry: RosettaMapRegistry = {
+            zzz: buildMap('9.9.9', 'com.example.app', 700),
+            aaa: buildMap('1.0.0', 'com.example.app', 700),
+        };
+        const picked = pickMapForVersion(dupRegistry, { version: 'q', versionCode: 700 });
+        expect(picked.registryKey).toBe('zzz');
     });
 });
 

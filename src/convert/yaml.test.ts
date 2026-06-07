@@ -118,6 +118,65 @@ classes:
         expect(() => yamlToMap(bad)).toThrow(MapValidationError);
     });
 
+    it('does not choke on a non-object top-level document (array)', () => {
+        // The signer-canonicalization step early-returns on a non-object
+        // document; the subsequent structural validation rejects it. This
+        // pins the early-return branch (maps#11 canonicalize guard).
+        expect(() => yamlToMap('- a\n- b')).toThrow(MapValidationError);
+    });
+
+    it('does not choke on a scalar top-level document', () => {
+        expect(() => yamlToMap('42')).toThrow(MapValidationError);
+    });
+
+    it('canonicalizes a colon-separated, uppercase signer_sha256 at the emit boundary (maps#11)', () => {
+        // apksigner / keytool emit `AB:CD:…` uppercase digests. The canonical
+        // on-disk form is lowercase, no colons — the strict schema enforces
+        // `^[0-9a-f]{64}$`, so the converter must canonicalize before emit.
+        const upperColon = Array.from({ length: 32 }, () => 'AB').join(':'); // 32 * "AB"
+        const yaml = `
+schema_version: 2
+app: com.example.app
+version: "1.0.0"
+version_code: 100
+signer_sha256: "${upperColon}"
+classes: {}
+`;
+        const map = yamlToMap(yaml);
+        expect(map.signer_sha256).toBe('ab'.repeat(32));
+        // The emitted value passes the canonical schema's lowercase-hex shape.
+        expect(map.signer_sha256).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('canonicalizes a mixed-case, no-colon signer_sha256', () => {
+        const mixed = 'AbCdEf0123456789'.repeat(4); // 64 mixed-case hex chars
+        const yaml = `
+schema_version: 2
+app: com.example.app
+version: "1.0.0"
+version_code: 100
+signer_sha256: "${mixed}"
+classes: {}
+`;
+        const map = yamlToMap(yaml);
+        expect(map.signer_sha256).toBe(mixed.toLowerCase());
+        expect(map.signer_sha256).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('still rejects a signer_sha256 that is malformed after canonicalization', () => {
+        // Wrong length even after stripping colons / lowercasing — canonicalize
+        // does not launder garbage; the strict schema still rejects it.
+        const yaml = `
+schema_version: 2
+app: com.example.app
+version: "1.0.0"
+version_code: 100
+signer_sha256: "AB:CD:EF"
+classes: {}
+`;
+        expect(() => yamlToMap(yaml)).toThrow(MapValidationError);
+    });
+
     it('issues array contains paths for nested errors', () => {
         const bad = `
 schema_version: 2

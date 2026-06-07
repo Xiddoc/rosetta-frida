@@ -120,6 +120,31 @@ export class MapValidationError extends RosettaError {
     }
 }
 
+/**
+ * Thrown by the pre-parse input-hardening guard when a map's raw text
+ * exceeds the configured byte size or structural nesting depth (L9).
+ *
+ * This is a cheap denial-of-service guard applied BEFORE `JSON.parse`: an
+ * oversized blob (memory / pathological-parse pressure) or a deeply-nested
+ * document (recursive-consumer stack-overflow vector) is rejected fail-fast
+ * rather than parsed. The limits flow from the typed config
+ * (`parseLimits.maxInputBytes` / `parseLimits.maxNestingDepth`, both with
+ * Kotlin-matched defaults). Mirrors the Kotlin `MapInputTooLargeException`.
+ */
+export class MapInputTooLargeError extends RosettaError {
+    constructor(
+        message: string,
+        /** Which limit was exceeded. */
+        public readonly kind: 'bytes' | 'depth',
+        /** The observed value (byte count or depth). */
+        public readonly observed: number,
+        /** The configured limit that was exceeded. */
+        public readonly limit: number,
+    ) {
+        super(message);
+    }
+}
+
 /** Thrown when the JSON source can't be parsed. */
 export class JsonParseError extends RosettaError {
     constructor(

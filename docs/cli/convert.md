@@ -86,8 +86,7 @@ error: unsupported input format: .toml (path: maps/com.example.app/3.4.5.toml)
 
 `renderJson` writes canonical 4-space-indented JSON. Top-level keys
 are in a stable order (`schema_version`, then `app`, `version`,
-`version_code`, `captured_at`, `signer_sha256`, `frida_min_version`,
-`frida_max_version`,
+`version_code`, `captured_at`, `signer_sha256`, `client_hints`,
 `sources`, `classes`). Class ordering follows the input's insertion
 order.
 

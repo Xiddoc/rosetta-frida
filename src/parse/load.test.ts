@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { loadMap, looksLikeJsonSource } from './load.js';
-import { JsonParseError, MapValidationError } from '../errors.js';
+import { JsonParseError, MapValidationError, MapInputTooLargeError } from '../errors.js';
+import { resolveConfig } from '../config.js';
 import type { RosettaMap } from '../types/map.js';
 
 // Mock node:fs/promises at module-load time so loadMap routes
@@ -116,6 +117,39 @@ describe('loadMap — JSON source input', () => {
     it('throws MapValidationError on schema-invalid valid JSON', async () => {
         const src = '{ "schema_version": 99, "app": "a", "version": "v", "classes": {} }';
         await expect(loadMap(src)).rejects.toBeInstanceOf(MapValidationError);
+    });
+});
+
+describe('loadMap — config parse limits (L9)', () => {
+    it('rejects an over-size JSON source via a tightened config', async () => {
+        const src = JSON.stringify(validMap);
+        const config = resolveConfig({ parseLimits: { maxInputBytes: 8 } });
+        await expect(loadMap(src, config)).rejects.toBeInstanceOf(MapInputTooLargeError);
+    });
+
+    it('rejects an over-deep JSON source via a tightened config', async () => {
+        const config = resolveConfig({ parseLimits: { maxNestingDepth: 1 } });
+        // validMap nests classes → IFoo → methods (depth > 1).
+        const src = JSON.stringify(validMap);
+        await expect(loadMap(src, config)).rejects.toBeInstanceOf(MapInputTooLargeError);
+    });
+
+    it('applies the guard to file-path input too', async () => {
+        readFileMock.mockResolvedValueOnce(JSON.stringify(validMap));
+        const config = resolveConfig({ parseLimits: { maxInputBytes: 8 } });
+        await expect(loadMap('maps/x.json', config)).rejects.toBeInstanceOf(MapInputTooLargeError);
+    });
+
+    it('does NOT guard an already-constructed object input (no text path)', async () => {
+        // An object never went through JSON.parse, so the byte/depth guard
+        // does not apply — it validates and returns even under tiny limits.
+        const config = resolveConfig({ parseLimits: { maxInputBytes: 1, maxNestingDepth: 1 } });
+        await expect(loadMap(validMap, config)).resolves.toEqual(validMap);
+    });
+
+    it('uses the default config when none is passed (generous limits)', async () => {
+        const src = JSON.stringify(validMap);
+        await expect(loadMap(src)).resolves.toEqual(validMap);
     });
 });
 

@@ -283,6 +283,196 @@ describe('rosetta ambient namespace', () => {
     });
 });
 
+describe('rosetta — re-attach / singleton semantics (L12)', () => {
+    beforeEach(() => {
+        installFridaMock();
+        _resetCurrentSession();
+    });
+
+    afterEach(() => {
+        _resetCurrentSession();
+        resetFridaMock();
+    });
+
+    it('a second session() cleanly supersedes the first — does not throw', () => {
+        const s1 = rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        // Re-attach: a second call must REPLACE, not throw or stack.
+        const newMap = { ...makeMap(), version: '3.5.0' };
+        const s2 = rosetta.session({
+            map: newMap,
+            app: 'com.example.app',
+            version: '3.5.0',
+            skipHealthCheck: true,
+        });
+        expect(s2).not.toBe(s1);
+        // Ambient now routes through the new session deterministically.
+        expect(getCurrentSession()).toBe(s2);
+        expect(getCurrentSession().version).toBe('3.5.0');
+    });
+
+    it('swapping sessions clears the superseded session bus (no listener leak)', () => {
+        rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        const firstBus = getCurrentSession().events;
+        const seen: string[] = [];
+        firstBus.on((e) => {
+            if (e.type === 'detect') seen.push(e.app);
+        });
+
+        // Re-attach to a new session.
+        rosetta.session({
+            map: { ...makeMap(), version: '3.5.0' },
+            app: 'com.example.app',
+            version: '3.5.0',
+            skipHealthCheck: true,
+        });
+
+        // The old bus's subscriber must no longer fire — it was cleared on swap.
+        firstBus.emit({
+            type: 'detect',
+            app: 'com.example.app',
+            version: '3.4.5',
+            source: 'auto',
+        });
+        expect(seen).toEqual([]);
+    });
+
+    it('reset() disposes the session; ambient calls then throw as before first session()', () => {
+        rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        expect(() => getCurrentSession()).not.toThrow();
+
+        rosetta.reset();
+
+        // No active session → the same RosettaError as a fresh process.
+        expect(() => getCurrentSession()).toThrow(RosettaError);
+        expect(() => rosetta.use('com.example.app.IFoo$Stub')).toThrow(/no active rosetta session/);
+        expect(() => rosetta.map).toThrow(RosettaError);
+    });
+
+    it('reset() clears the disposed session bus (no stale subscriber)', () => {
+        rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        const bus = getCurrentSession().events;
+        const seen: string[] = [];
+        bus.on((e) => {
+            if (e.type === 'detect') seen.push(e.app);
+        });
+
+        rosetta.reset();
+
+        bus.emit({ type: 'detect', app: 'com.example.app', version: '3.4.5', source: 'auto' });
+        expect(seen).toEqual([]);
+    });
+
+    it('reset() is idempotent — a no-op when no session is active', () => {
+        // No session opened yet.
+        expect(() => rosetta.reset()).not.toThrow();
+        expect(() => rosetta.reset()).not.toThrow();
+        expect(() => getCurrentSession()).toThrow(RosettaError);
+    });
+
+    it('an unsubscribe token obtained before reset() is a safe no-op afterward', () => {
+        rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        // Subscribe via the ambient events surface and capture the token.
+        const unsubscribe = rosetta.events.on(() => {});
+
+        rosetta.reset();
+
+        // Calling the token after the bus was cleared must not throw — it is
+        // an inert `Set.delete` of an already-absent entry.
+        expect(() => unsubscribe()).not.toThrow();
+    });
+
+    it('a subscriber added before a session swap does NOT receive the new session events', () => {
+        // Contract: subscriptions are per-session. The bus is cleared on swap,
+        // and the new session gets a FRESH bus — so a listener attached to the
+        // old session never sees the new session's events. Callers that want to
+        // keep observing after a swap must RE-SUBSCRIBE on the new session.
+        rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        const seen: string[] = [];
+        rosetta.events.on((e) => {
+            if (e.type === 'detect') seen.push(e.version);
+        });
+
+        // Swap to a new session (fresh bus).
+        rosetta.session({
+            map: { ...makeMap(), version: '3.5.0' },
+            app: 'com.example.app',
+            version: '3.5.0',
+            skipHealthCheck: true,
+        });
+
+        // Emit on the NEW session's bus — the old subscriber must not fire.
+        getCurrentSession().events.emit({
+            type: 'detect',
+            app: 'com.example.app',
+            version: '3.5.0',
+            source: 'auto',
+        });
+        expect(seen).toEqual([]);
+
+        // Re-subscribe semantics: a listener attached to the new session does fire.
+        rosetta.events.on((e) => {
+            if (e.type === 'detect') seen.push(e.version);
+        });
+        getCurrentSession().events.emit({
+            type: 'detect',
+            app: 'com.example.app',
+            version: '3.5.0',
+            source: 'auto',
+        });
+        expect(seen).toEqual(['3.5.0']);
+    });
+
+    it('a fresh session() after reset() re-initialises cleanly with no stale state', () => {
+        rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        rosetta.reset();
+
+        // Re-open: the new session is fully usable and carries only its own map.
+        rosetta.session({
+            map: { ...makeMap(), version: '9.9.9' },
+            app: 'com.example.app',
+            version: '9.9.9',
+            skipHealthCheck: true,
+        });
+        expect(getCurrentSession().version).toBe('9.9.9');
+        expect(rosetta.map.extract().version).toBe('9.9.9');
+    });
+});
+
 describe('rosetta — target-namespace guard end-to-end (RFC 0001 C1)', () => {
     beforeEach(() => {
         installFridaMock();

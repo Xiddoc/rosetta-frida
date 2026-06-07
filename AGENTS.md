@@ -161,7 +161,7 @@ sources:
     - tool: hand-authored
       classes: 12
       notes: 'cccc.v signature confirmed via Frida runtime trace, see commit <hash>'
-    - tool: rosetta-frida-runtime-discovered
+    - tool: rosetta-runtime-discovered
       classes: 3
       notes: 'stub_candidate scan emitted these names at attach'
 
@@ -340,3 +340,13 @@ lookups sprinkled around. For a TypeScript library, that's a `Config`
 interface validated against a Zod schema (or a similar
 typed-config schema). Centralizing config keeps the surface area
 easy to audit.
+
+`package.json` declares `"sideEffects": false` **on purpose**: every bit
+of module-level state in this package is lazy and import-order-independent
+(e.g. the ambient session in `src/api/rosetta.ts` is set only when
+`rosetta.session(...)` runs, never at import time), so a bundler may
+safely tree-shake any unused entrypoint without changing behaviour. If you
+ever add import-time side effects — auto-registration, a module-level
+`session(...)`/hook install, a global mutation on load — you MUST
+re-evaluate `sideEffects` (mark the offending files, or drop the flag), or
+tree-shaking will silently drop the registration.

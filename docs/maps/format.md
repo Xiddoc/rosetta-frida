@@ -31,8 +31,10 @@ interface RosettaMap {
     version_code: number;
     captured_at?: string;
     signer_sha256?: string;
-    frida_min_version?: string;
-    frida_max_version?: string;
+    client_hints?: {
+        frida_min_version?: string;
+        frida_max_version?: string;
+    };
     sources?: MapSource[];
     classes: ClassMap;
 }
@@ -54,7 +56,7 @@ interface RosettaMap {
 |---|---|---|
 | `captured_at` | ISO date string | When the map was captured. Useful when reading old maps to know how stale they are. |
 | `signer_sha256` | SHA-256 hex | Authenticity guard — the SHA-256 of the APK *signing certificate* (not the APK bytes). Cheap to verify on-device via PackageManager; guards against loading a map for a repackaged/spoofed app. **Enforced at attach time:** when present, `rosetta.session(...)` reads the live app's signing certificate in-process and fails closed (`SignerMismatchError`) on a mismatch. Opt out with `enforceSigner: false`. See [API · Session](../api/session.md#signer-enforcement). |
-| `frida_min_version`, `frida_max_version` | semver | The Frida runtime range this map is known to work with. Not enforced at runtime in V1; emitted as metadata. |
+| `client_hints` | object | Per-client metadata (its own keys are strict). Frida reads `client_hints.frida_min_version` / `client_hints.frida_max_version` (semver) — the Frida runtime range this map is known to work with. Not enforced at runtime in V1; emitted as metadata. |
 | `sources` | `MapSource[]` | Provenance per tool. See [Provenance](#provenance). |
 
 ## Provenance — `sources` { #provenance }
@@ -94,7 +96,7 @@ cross-references one of these entries — see
 
 | Field | Description |
 |---|---|
-| `tool` | Free-form. Common values: `sigmatcher`, `hand-authored`, `rosetta-frida-runtime-discovered` (V2+), `jadx`. |
+| `tool` | Free-form. Common values: `sigmatcher`, `hand-authored`, `rosetta-runtime-discovered` (V2+), `jadx`. |
 | `config` | The config or config-path the tool was run with. |
 | `classes` | Count of classes attributed to this source. |
 | `notes` | Free-form notes about the capture session. |

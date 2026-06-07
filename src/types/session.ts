@@ -87,6 +87,15 @@ export interface SessionOptions {
      *
      * Single-map: rosetta picks based on the detected version, error if mismatch.
      * Registry: rosetta picks the right per-version map; error if no match.
+     *
+     * NOTE on parse-limit config (L9): the session accepts an ALREADY-LOADED,
+     * already-validated `RosettaMap` / registry — it does no JSON parsing of
+     * its own. The pre-parse byte/depth input-hardening caps (the typed
+     * config's `parseLimits`) are therefore honored ONLY at the
+     * point a map is loaded from text/path via `loadMap(input, config)`;
+     * tighten them there, before constructing the session. There is
+     * deliberately no `parseLimits` knob on `SessionOptions` because it would
+     * be a dead no-op on this object-only input path.
      */
     map: RosettaMap | RosettaMapRegistry;
 

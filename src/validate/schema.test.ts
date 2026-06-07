@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import path from 'node:path';
+import { readFileSync } from 'node:fs';
+import { loadMap } from '../parse/load.js';
 import {
     APP_PATTERN,
     MAX_ANCHORS,
@@ -87,6 +90,10 @@ describe('mapSourceSchema', () => {
     it('rejects a non-integer classes count', () => {
         expect(() => mapSourceSchema.parse({ tool: 't', classes: 1.5 })).toThrow();
     });
+
+    it('rejects an unknown key (strict)', () => {
+        expect(() => mapSourceSchema.parse({ tool: 't', bogus: 1 })).toThrow();
+    });
 });
 
 describe('methodEntrySchema', () => {
@@ -116,6 +123,12 @@ describe('methodEntrySchema', () => {
             methodEntrySchema.parse({ obfuscated: 'c', signature: '()V', aidl_txn: 1.5 }),
         ).toThrow();
     });
+
+    it('rejects a typo key (strict; e.g. signatuer)', () => {
+        expect(() =>
+            methodEntrySchema.parse({ obfuscated: 'c', signature: '()V', signatuer: '()V' }),
+        ).toThrow();
+    });
 });
 
 describe('fieldEntrySchema', () => {
@@ -131,6 +144,10 @@ describe('fieldEntrySchema', () => {
 
     it('rejects missing type', () => {
         expect(() => fieldEntrySchema.parse({ obfuscated: 'a' })).toThrow();
+    });
+
+    it('rejects an unknown key (strict)', () => {
+        expect(() => fieldEntrySchema.parse({ obfuscated: 'a', type: 'I', bogus: true })).toThrow();
     });
 });
 
@@ -227,8 +244,10 @@ describe('rosettaMapSchema', () => {
             version_code: 30405,
             captured_at: '2026-05-11',
             signer_sha256: 'a'.repeat(64),
-            frida_min_version: '16.0.0',
-            frida_max_version: '17.99.99',
+            client_hints: {
+                frida_min_version: '16.0.0',
+                frida_max_version: '17.99.99',
+            },
             sources: [
                 { tool: 'sigmatcher', classes: 12 },
                 { tool: 'hand-authored', notes: 'verified' },
@@ -364,17 +383,56 @@ describe('rosettaMapSchema', () => {
         ).toThrow();
     });
 
-    it('strips unknown sibling keys WITHIN the pinned version (additive tolerance)', () => {
-        // Lenient on unknown keys at the same schema_version...
+    it('rejects an unknown top-level key (strict; mirrors additionalProperties: false)', () => {
+        // The fixed-shape objects are STRICT — a typo'd / unknown sibling key
+        // fails loudly instead of being silently stripped (frida#17 M6).
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                version_code: 1,
+                app: 'com.example.app',
+                version: 'v',
+                classes: {},
+                future_field: 'rejected',
+            }),
+        ).toThrow();
+    });
+
+    it('rejects an unknown key on a class entry (strict)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                version_code: 1,
+                app: 'com.example.app',
+                version: 'v',
+                classes: { IFoo: { obfuscated: 'aaaa', typo_field: 1 } },
+            }),
+        ).toThrow();
+    });
+
+    it('rejects a whitespace-only version (frida#17 M17)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                version_code: 1,
+                app: 'com.example.app',
+                version: '   ',
+                classes: {},
+            }),
+        ).toThrow();
+    });
+
+    it('accepts a version with surrounding whitespace as long as it has a non-space char', () => {
+        // The check is "contains a non-whitespace character", not "is trimmed".
+        // The original string is preserved (not mutated).
         const parsed = rosettaMapSchema.parse({
             schema_version: 2,
             version_code: 1,
             app: 'com.example.app',
-            version: 'v',
+            version: ' 1.2.3 ',
             classes: {},
-            future_field: 'ignored',
         });
-        expect((parsed as Record<string, unknown>).future_field).toBeUndefined();
+        expect(parsed.version).toBe(' 1.2.3 ');
     });
 
     it('hard-rejects a NEWER schema_version (no cross-version forward-compat)', () => {
@@ -388,6 +446,46 @@ describe('rosettaMapSchema', () => {
                 version: 'v',
                 classes: {},
             }),
+        ).toThrow();
+    });
+});
+
+describe('client_hints', () => {
+    it('accepts a nested client_hints sub-object', () => {
+        const m = {
+            ...baseMap(),
+            client_hints: { frida_min_version: '16.0.0', frida_max_version: '17.99.99' },
+        };
+        expect(rosettaMapSchema.parse(m)).toEqual(m);
+    });
+
+    it('accepts a partial / empty client_hints', () => {
+        expect(() => rosettaMapSchema.parse({ ...baseMap(), client_hints: {} })).not.toThrow();
+        expect(() =>
+            rosettaMapSchema.parse({
+                ...baseMap(),
+                client_hints: { frida_min_version: '16.0.0' },
+            }),
+        ).not.toThrow();
+    });
+
+    it('rejects an unknown key inside client_hints (strict)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                ...baseMap(),
+                client_hints: { frida_min_version: '16.0.0', xposed_min_version: '1' },
+            }),
+        ).toThrow();
+    });
+
+    it('rejects the legacy TOP-LEVEL frida_min_version (migrated to client_hints)', () => {
+        // Top level is strict: the pre-migration spelling must now fail so a
+        // stale map is caught rather than silently dropping the hint.
+        expect(() =>
+            rosettaMapSchema.parse({ ...baseMap(), frida_min_version: '16.0.0' }),
+        ).toThrow();
+        expect(() =>
+            rosettaMapSchema.parse({ ...baseMap(), frida_max_version: '17.99.99' }),
         ).toThrow();
     });
 });
@@ -482,6 +580,104 @@ describe('validateMap', () => {
         expect(() => validateMap(null)).toThrow(MapValidationError);
         expect(() => validateMap(42)).toThrow(MapValidationError);
     });
+
+    // L6 — a wrong-but-numeric schema_version gets a dedicated, actionable
+    // message naming found-vs-expected and pointing at `rosetta migrate`.
+    it('gives an older schema_version a migration-hint message', () => {
+        try {
+            validateMap({
+                schema_version: 1,
+                app: 'com.example.app',
+                version: '1.0.0',
+                version_code: 1,
+                classes: {},
+            });
+            throw new Error('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(MapValidationError);
+            const err = e as MapValidationError;
+            // Names the found version, the expected version, and the remedy.
+            expect(err.message).toMatch(/schema_version 1/);
+            expect(err.message).toMatch(/supports schema_version 2/);
+            // An older map is re-emitted at the current version (the
+            // upgrade-the-library remedy is for NEWER maps only).
+            expect(err.message).toMatch(/re-emit the map at version 2/);
+            // `rosetta migrate` is named only as a PLANNED command.
+            expect(err.message).toMatch(/rosetta migrate/);
+            expect(err.message).toMatch(/planned/i);
+            // Single, focused issue scoped to the schema_version field.
+            expect(err.issues).toHaveLength(1);
+            expect(err.issues[0]?.path).toBe('schema_version');
+        }
+    });
+
+    it('tells a newer schema_version to UPGRADE the library (cannot downgrade)', () => {
+        try {
+            validateMap({
+                schema_version: 3,
+                app: 'com.example.app',
+                version: '1.0.0',
+                version_code: 1,
+                classes: {},
+            });
+            throw new Error('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(MapValidationError);
+            const err = e as MapValidationError;
+            // Names the found version and the supported version.
+            expect(err.message).toMatch(/schema_version 3/);
+            expect(err.message).toMatch(/supports schema_version 2/);
+            // A newer map cannot be downgraded — the remedy is to upgrade the
+            // install, NOT to re-emit at the current version.
+            expect(err.message).toMatch(/upgrade rosetta-frida/i);
+            // `rosetta migrate` is named only as a PLANNED command.
+            expect(err.message).toMatch(/rosetta migrate/);
+            expect(err.message).toMatch(/planned/i);
+            // Symmetric with the older-version test: single, focused issue.
+            expect(err.issues).toHaveLength(1);
+            expect(err.issues[0]?.path).toBe('schema_version');
+        }
+    });
+
+    it('does NOT use the migration-hint path for a NaN schema_version', () => {
+        // `NaN` is `typeof 'number'` but names no version: it must fall through
+        // to the normal Zod issue list (the literal gate), not the
+        // migration-hint path.
+        try {
+            validateMap({
+                schema_version: NaN,
+                app: 'com.example.app',
+                version: '1.0.0',
+                version_code: 1,
+                classes: {},
+            });
+            throw new Error('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(MapValidationError);
+            const err = e as MapValidationError;
+            expect(err.message).not.toMatch(/rosetta migrate/);
+        }
+    });
+
+    it('does NOT use the migration-hint path for a missing/non-numeric schema_version', () => {
+        // A missing schema_version is a normal validation failure, not a
+        // version mismatch — it must fall through to the generic issue list
+        // (so the migration hint is not misapplied to maps that never named a
+        // version).
+        try {
+            validateMap({
+                app: 'com.example.app',
+                version: '1.0.0',
+                version_code: 1,
+                classes: {},
+            });
+            throw new Error('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(MapValidationError);
+            const err = e as MapValidationError;
+            expect(err.message).not.toMatch(/rosetta migrate/);
+        }
+    });
 });
 
 describe('zodPathToString', () => {
@@ -547,10 +743,21 @@ describe('app pattern', () => {
 
     it('rejects single-segment / malformed names', () => {
         expect(APP_PATTERN.test('a')).toBe(false);
+        // A single un-dotted token is not a package name.
+        expect(APP_PATTERN.test('myapp')).toBe(false);
         expect(APP_PATTERN.test('com.')).toBe(false);
         expect(APP_PATTERN.test('.com.example')).toBe(false);
         expect(APP_PATTERN.test('1com.example')).toBe(false);
         expect(APP_PATTERN.test('com..example')).toBe(false);
+    });
+
+    it('rejects a segment that does not start with a letter (parity)', () => {
+        // Every dotted segment must begin with a letter — the tightened
+        // canonical pattern. A digit-first interior segment is rejected.
+        expect(APP_PATTERN.test('com.2example.app')).toBe(false);
+        expect(APP_PATTERN.test('com.example.2app')).toBe(false);
+        // ...but a letter-first segment with later digits is fine.
+        expect(APP_PATTERN.test('com.example.app')).toBe(true);
     });
 
     it('rejects a bad app pattern at the map level', () => {
@@ -783,5 +990,26 @@ describe('reserved-key rejection', () => {
             },
         };
         expect(() => validateMap(m)).not.toThrow();
+    });
+});
+
+describe('published example map (canonical-example invariant)', () => {
+    // The map a new contributor copies MUST always validate through the
+    // production validator/loader. Reading the real file (no fs mock) guards
+    // both the validator and the sample itself against drift — e.g. the
+    // client_hints migration.
+    const examplePath = path.resolve(import.meta.dirname, '../../maps/com.example.app/30405.json');
+
+    it('validates through validateMap', () => {
+        const parsed = JSON.parse(readFileSync(examplePath, 'utf8')) as unknown;
+        expect(() => validateMap(parsed)).not.toThrow();
+        expect(validateMap(parsed).client_hints?.frida_min_version).toBe('16.0.0');
+    });
+
+    it('validates through the production loadMap (JSON source)', async () => {
+        const source = readFileSync(examplePath, 'utf8');
+        const map = await loadMap(source);
+        expect(map.app).toBe('com.example.app');
+        expect(map.version_code).toBe(30405);
     });
 });

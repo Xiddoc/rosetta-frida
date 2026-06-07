@@ -34,8 +34,10 @@ function richMap(): RosettaMap {
         version: '3.4.5',
         captured_at: '2026-05-11',
         signer_sha256: 'a'.repeat(64),
-        frida_min_version: '16.0.0',
-        frida_max_version: '17.99.0',
+        client_hints: {
+            frida_min_version: '16.0.0',
+            frida_max_version: '17.99.0',
+        },
         sources: [
             { tool: 'sigmatcher', classes: 2, confidence: 'high' },
             { tool: 'hand-authored', classes: 1, notes: 'verified' },

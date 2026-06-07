@@ -20,15 +20,21 @@
  *     0001 Decision 7 / AGENTS.md §7). Bumping the format means re-emitting
  *     the map at the new version, not best-effort reading the old/new one.
  *
- *   - WITHIN the pinned version, unknown object keys are accepted and
- *     STRIPPED (Zod's default object behaviour). This tolerates additive,
- *     non-breaking annotations a newer minor emitter might attach to a
- *     `schema_version: 2` map (extra provenance, hints, etc.) without
- *     failing validation — they simply don't surface in the typed result.
+ *   - WITHIN the pinned version, the fixed-shape objects (the top-level
+ *     map, each `MapSource`, `MethodEntry`, `FieldEntry`, and `ClassEntry`)
+ *     are STRICT (`.strict()`): an unknown / mistyped sibling key is
+ *     REJECTED, not silently stripped. This mirrors the canonical maps
+ *     schema, which went `additionalProperties: false` on every structured
+ *     object (frida#17 M6 / maps#6), so a typo'd key (`signature` →
+ *     `signatuer`) fails loudly on both clients instead of being dropped and
+ *     producing a subtly wrong map. The user-KEYED records (`classes`,
+ *     `methods`, `fields`) are NOT strict — their keys are real names and
+ *     therefore arbitrary by design (the canonical schema models them with
+ *     `additionalProperties: <ref>`); the bounded-record guard still caps
+ *     their cardinality and rejects prototype-pollution keys.
  *
- * So: strict on the version key, lenient on unknown sibling keys at the
- * same version. The two are not in tension — they operate at different
- * granularities (whole-format vs. individual fields).
+ * So: strict on the version key AND on every fixed-shape object's key set;
+ * arbitrary only where the keys ARE the data (the real-name records).
  */
 
 import { z } from 'zod';
@@ -144,6 +150,24 @@ function boundedRecord<T extends z.ZodTypeAny>(
             }
         }
     });
+    // Why the `as unknown as` double-cast (a deliberate, contained escape
+    // hatch — not laziness):
+    //
+    // `guard.pipe(schema)` is a `ZodPipeline<ZodUnknown, typeof schema>`. Its
+    // OUTPUT type is already exactly `z.output<schema>` (the pipe runs the
+    // record schema second, so the parsed value IS the record). The only lie
+    // is the INPUT type: a pipeline reports its FIRST stage's input, and the
+    // guard is `z.unknown()`, so `z.input<pipeline>` widens to `unknown`
+    // instead of the record's `z.input` (the scalar-or-array authoring shape).
+    //
+    // We can't narrow that input without making the guard itself a typed
+    // schema — but a typed guard would re-run the record's value validation a
+    // second time (the guard exists ONLY to pre-scan raw keys for the
+    // cardinality cap and reserved names; value validation belongs to the
+    // piped record alone). So we keep the cheap `z.unknown()` guard and
+    // re-assert the declared input here. TypeScript needs `as unknown as`
+    // because `unknown` is not assignable to the record input directly; the
+    // surrounding `z.input`/`z.output` lock assertions still police drift.
     return guard.pipe(schema) as unknown as z.ZodType<
         z.output<z.ZodRecord<z.ZodString, T>>,
         z.ZodTypeDef,
@@ -171,28 +195,41 @@ export const classKindSchema: z.ZodType<ClassKind> = z.union([
     z.literal('anonymous'),
 ]);
 
-export const mapSourceSchema: z.ZodType<MapSource> = z.object({
-    tool: z.string().min(1).max(MAX_FREE_STRING_LEN),
-    config: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    classes: z.number().int().optional(),
-    notes: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    confidence: confidenceSchema.optional(),
-});
+// The fixed-shape objects below are all `.strict()`: an unknown / mistyped
+// sibling key is REJECTED, not silently stripped. This is the canonical
+// cross-client strict-keys policy — the canonical rosetta-maps schema went
+// `additionalProperties: false` on every structured object, and the Kotlin
+// rosetta-xposed twin matches it (its model rejects unknown keys too). So a
+// typo'd key fails loudly on both clients rather than producing a subtly
+// wrong map. Keep these in lockstep; do not relax to a passthrough object.
+export const mapSourceSchema: z.ZodType<MapSource> = z
+    .object({
+        tool: z.string().min(1).max(MAX_FREE_STRING_LEN),
+        config: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        classes: z.number().int().optional(),
+        notes: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        confidence: confidenceSchema.optional(),
+    })
+    .strict();
 
-export const methodEntrySchema: z.ZodType<MethodEntry> = z.object({
-    obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
-    signature: z.string().min(1).max(MAX_SIGNATURE_LEN),
-    aidl_txn: z.number().int().optional(),
-    static: z.boolean().optional(),
-    synthetic: z.boolean().optional(),
-    is_constructor: z.boolean().optional(),
-});
+export const methodEntrySchema: z.ZodType<MethodEntry> = z
+    .object({
+        obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
+        signature: z.string().min(1).max(MAX_SIGNATURE_LEN),
+        aidl_txn: z.number().int().optional(),
+        static: z.boolean().optional(),
+        synthetic: z.boolean().optional(),
+        is_constructor: z.boolean().optional(),
+    })
+    .strict();
 
-export const fieldEntrySchema: z.ZodType<FieldEntry> = z.object({
-    obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
-    type: z.string().min(1).max(MAX_SIGNATURE_LEN),
-    static: z.boolean().optional(),
-});
+export const fieldEntrySchema: z.ZodType<FieldEntry> = z
+    .object({
+        obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
+        type: z.string().min(1).max(MAX_SIGNATURE_LEN),
+        static: z.boolean().optional(),
+    })
+    .strict();
 
 /**
  * A method-map value is either a single MethodEntry or an array of them
@@ -222,18 +259,20 @@ export const fieldMapSchema = boundedRecord(
     'fields',
 );
 
-export const classEntrySchema = z.object({
-    obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
-    extends: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    kind: classKindSchema.optional(),
-    dex: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    aidl_descriptor: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    anchors: z.array(z.string().max(MAX_FREE_STRING_LEN)).max(MAX_ANCHORS).optional(),
-    methods: methodMapSchema.optional(),
-    fields: fieldMapSchema.optional(),
-    source: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    confidence: confidenceSchema.optional(),
-});
+export const classEntrySchema = z
+    .object({
+        obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
+        extends: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        kind: classKindSchema.optional(),
+        dex: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        aidl_descriptor: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        anchors: z.array(z.string().max(MAX_FREE_STRING_LEN)).max(MAX_ANCHORS).optional(),
+        methods: methodMapSchema.optional(),
+        fields: fieldMapSchema.optional(),
+        source: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        confidence: confidenceSchema.optional(),
+    })
+    .strict();
 
 export const classMapSchema = boundedRecord(
     z.record(z.string(), classEntrySchema),
@@ -246,11 +285,20 @@ export const classMapSchema = boundedRecord(
 // ---------------------------------------------------------------------------
 
 /**
- * Android package-name shape: a leading identifier segment followed by at
- * least one dotted segment (e.g. `com.example.app`). Mirrors the canonical
- * schema's `app` pattern.
+ * Android package-name shape: at least two dot-separated segments, and EVERY
+ * segment must start with a letter (e.g. `com.example.app`). A digit-first
+ * segment (`com.2example.app`) or a single un-dotted token (`myapp`) is
+ * rejected. Mirrors the tightened canonical schema's `app` pattern.
  */
-export const APP_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
+export const APP_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
+
+/**
+ * The `version` label must contain at least one non-whitespace character —
+ * a whitespace-only label (e.g. `'   '`) is rejected. Mirrors the canonical
+ * maps schema's `"pattern": "\\S"` (maps#13 / frida#17 M17). Non-mutating:
+ * the original string is preserved (the schema does not trim it).
+ */
+export const VERSION_PATTERN = /\S/;
 
 /**
  * Lowercase 64-char hex — the SHA-256 of the signing certificate. The
@@ -269,25 +317,34 @@ export const SIGNER_SHA256_PATTERN = /^[0-9a-f]{64}$/;
  * `z.input`, leaving emitters of the authoring form (the sigmatcher adapter)
  * with nowhere to hand their value but a lying cast.
  */
-export const rosettaMapSchema = z.object({
-    schema_version: z.literal(CURRENT_SCHEMA_VERSION),
-    app: z.string().min(1).max(MAX_APP_LEN).regex(APP_PATTERN, {
-        message: 'app must be a dotted package name (e.g. com.example.app)',
-    }),
-    version: z.string().min(1).max(MAX_VERSION_LEN),
-    version_code: z.number().int().nonnegative().max(MAX_VERSION_CODE),
-    captured_at: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    signer_sha256: z
-        .string()
-        .regex(SIGNER_SHA256_PATTERN, {
-            message: 'signer_sha256 must be 64 lowercase hex characters',
-        })
-        .optional(),
-    frida_min_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    frida_max_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    sources: z.array(mapSourceSchema).max(MAX_SOURCES).optional(),
-    classes: classMapSchema,
-});
+export const rosettaMapSchema = z
+    .object({
+        schema_version: z.literal(CURRENT_SCHEMA_VERSION),
+        app: z.string().min(1).max(MAX_APP_LEN).regex(APP_PATTERN, {
+            message: 'app must be a dotted package name (e.g. com.example.app)',
+        }),
+        version: z.string().min(1).max(MAX_VERSION_LEN).regex(VERSION_PATTERN, {
+            message: 'version must contain a non-whitespace character',
+        }),
+        version_code: z.number().int().nonnegative().max(MAX_VERSION_CODE),
+        captured_at: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        signer_sha256: z
+            .string()
+            .regex(SIGNER_SHA256_PATTERN, {
+                message: 'signer_sha256 must be 64 lowercase hex characters',
+            })
+            .optional(),
+        client_hints: z
+            .object({
+                frida_min_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
+                frida_max_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
+            })
+            .strict()
+            .optional(),
+        sources: z.array(mapSourceSchema).max(MAX_SOURCES).optional(),
+        classes: classMapSchema,
+    })
+    .strict();
 
 /**
  * The authoring/input type the schema accepts. Equal to the hand-written
@@ -323,6 +380,43 @@ export function validateMap(data: unknown): RosettaMap {
     if (result.success) {
         return result.data;
     }
+    // L6 — schema-version mismatch gets a dedicated, actionable message.
+    //
+    // The `schema_version` literal gate (`z.literal(CURRENT_SCHEMA_VERSION)`)
+    // otherwise reports a generic "Invalid literal value, expected 2" Zod
+    // issue, which neither names the version the map carries nor tells the
+    // author what to do about it. When the input is an object that DID supply
+    // a numeric `schema_version` differing from the supported literal, surface
+    // a single, clearer issue that states found-vs-expected and points at the
+    // remedy. The remedy DIFFERS by direction, because there is no
+    // cross-version forward-compat (a wrong-version map must be re-emitted at
+    // the supported version, not best-effort read; see the module header /
+    // RFC 0001 Decision 7):
+    //
+    //   - NEWER map (found > current): this build cannot read it and cannot
+    //     downgrade it — the user must UPGRADE their rosetta-frida install to
+    //     a build that supports that version.
+    //   - OLDER map (found < current): re-emit it at the current version.
+    //
+    // In BOTH directions the remedy tooling (`rosetta migrate`) is only
+    // PLANNED, not shipped, so the message says so honestly rather than
+    // implying a runnable command exists today.
+    const found = foundSchemaVersion(data);
+    if (found !== undefined && found !== CURRENT_SCHEMA_VERSION) {
+        const preamble =
+            `Map has schema_version ${found}, but this build of rosetta-frida only ` +
+            `supports schema_version ${CURRENT_SCHEMA_VERSION}.`;
+        const remedy =
+            found > CURRENT_SCHEMA_VERSION
+                ? `That map is NEWER than this build understands and cannot be downgraded; ` +
+                  `upgrade rosetta-frida to a build that supports schema_version ${found} ` +
+                  `and reload it. (A \`rosetta migrate\` command is planned but not yet shipped.)`
+                : `There is no cross-version auto-upgrade: re-emit the map at version ` +
+                  `${CURRENT_SCHEMA_VERSION} and reload it. (A \`rosetta migrate\` command to ` +
+                  `do this is planned but not yet shipped.)`;
+        const message = `${preamble} ${remedy}`;
+        throw new MapValidationError(message, [{ path: 'schema_version', message }]);
+    }
     const issues = result.error.issues.map((issue) => ({
         path: zodPathToString(issue.path),
         message: issue.message,
@@ -332,13 +426,28 @@ export function validateMap(data: unknown): RosettaMap {
 }
 
 /**
+ * Read a numeric `schema_version` off an unknown input, or `undefined` if the
+ * input is not an object or did not supply a numeric `schema_version`. Used by
+ * {@link validateMap} to give a wrong-but-numeric version a dedicated
+ * migration-hint message (L6); a missing / non-numeric `schema_version` (and
+ * `NaN`, which is technically `typeof 'number'` but names no version) falls
+ * through to the normal Zod issue list instead.
+ */
+function foundSchemaVersion(data: unknown): number | undefined {
+    if (typeof data !== 'object' || data === null) {
+        return undefined;
+    }
+    const value = (data as { schema_version?: unknown }).schema_version;
+    return typeof value === 'number' && !Number.isNaN(value) ? value : undefined;
+}
+
+/**
  * Stringify a Zod issue path. Numeric indices and string keys are
  * joined with `.`; the root path becomes the empty string.
  *
  * Exported for testing.
  */
 export function zodPathToString(path: ReadonlyArray<PropertyKey>): string {
-    return path
-        .map((segment) => (typeof segment === 'number' ? String(segment) : String(segment)))
-        .join('.');
+    // Numeric indices, string keys, and symbols all stringify the same way.
+    return path.map(String).join('.');
 }

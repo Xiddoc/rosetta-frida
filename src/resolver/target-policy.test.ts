@@ -71,28 +71,24 @@ describe('appPrefixOf', () => {
 });
 
 describe('isTargetAllowed — reserved denylist (DENY)', () => {
-    const denied = [
-        'java.lang.Runtime',
-        'javax.crypto.Cipher',
-        'jdk.internal.misc.Unsafe',
-        'sun.misc.Unsafe',
-        'com.sun.proxy.$Proxy0',
-        'dalvik.system.DexClassLoader',
-        'android.app.ActivityThread',
-        'androidx.core.app.NotificationCompat',
-        'com.android.internal.os.Zygote',
-        'kotlin.jvm.internal.Intrinsics',
-        'kotlinx.coroutines.BuildersKt',
-        'dagger.internal.Provider',
-        'com.google.android.gms.common.GoogleApiAvailability',
-        'libcore.io.Memory',
-        'org.apache.harmony.xml.ExpatParser',
-    ];
-    for (const fqn of denied) {
-        it(`rejects ${fqn}`, () => {
+    // Derive one sample FQN per prefix straight from DEFAULT_DENY_PREFIXES,
+    // so this suite covers EVERY reserved prefix with no second hand-kept
+    // copy of the list to drift out of sync (frida#17 L13 — the list has a
+    // single source of truth: the exported constant). Each prefix already
+    // carries its trailing dot, so `${prefix}internal.Foo` is a well-formed
+    // FQN that lands squarely inside the reserved namespace.
+    for (const prefix of DEFAULT_DENY_PREFIXES) {
+        const fqn = `${prefix}internal.Foo`;
+        it(`rejects a class under '${prefix}' (${fqn})`, () => {
             expect(isTargetAllowed(fqn, APP_PREFIX)).toBe(false);
         });
     }
+
+    it('rejects a nested-class target on a reserved prefix (e.g. com.sun proxy)', () => {
+        // The namespace is taken before the first `$`, so a reserved-prefix
+        // outer class denies even when the target names an inner class.
+        expect(isTargetAllowed('com.sun.proxy.$Proxy0', APP_PREFIX)).toBe(false);
+    });
 });
 
 describe('isTargetAllowed — ALLOW cases', () => {
