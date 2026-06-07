@@ -69,9 +69,17 @@ export class EventBus {
         this.traceEnabled = enabled;
     }
 
-    /** Remove all subscribers (test helper). */
+    /**
+     * Remove all subscribers and reset trace mode, leaving the bus fully
+     * inert. Used when a session is disposed / superseded (L12): a cleared
+     * bus must not keep tracing to stderr either, so a stale bus held by an
+     * already-installed hook produces no further output of any kind.
+     * Unsubscribe tokens returned by {@link on} before a `clear()` stay safe
+     * no-ops afterward (`Set.delete` of an absent entry is harmless).
+     */
     clear(): void {
         this.listeners.clear();
+        this.traceEnabled = false;
     }
 }
 

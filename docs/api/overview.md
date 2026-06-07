@@ -35,10 +35,12 @@ flowchart TB
     end
 
     SESS["rosetta.session(opts)"]
+    RST["rosetta.reset()"]
     R[Resolver]
     JAVA[Frida Java bridge]
 
     SESS --> R
+    RST -. disposes .-> SESS
     T1 --> R
     T2 --> R
     T3 --> R
@@ -102,6 +104,12 @@ tier-1/2/3 surfaces before any `rosetta.session(...)` call throws
 ```text
 no active rosetta session — call rosetta.session({ map }) before using rosetta.*
 ```
+
+`rosetta.reset()` disposes the ambient session (clearing its diagnostic
+bus) so subsequent tier-1/2/3 calls throw that same error again; it is
+idempotent. See [`rosetta.reset()` on the Session API
+page](session.md#rosettareset-dispose-the-ambient-session) for when to
+reach for it.
 
 See the [Session API page](session.md) for the full
 `SessionOptions` surface (auto-detect overrides, failure policy,

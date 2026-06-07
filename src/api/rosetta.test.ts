@@ -389,6 +389,69 @@ describe('rosetta — re-attach / singleton semantics (L12)', () => {
         expect(() => getCurrentSession()).toThrow(RosettaError);
     });
 
+    it('an unsubscribe token obtained before reset() is a safe no-op afterward', () => {
+        rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        // Subscribe via the ambient events surface and capture the token.
+        const unsubscribe = rosetta.events.on(() => {});
+
+        rosetta.reset();
+
+        // Calling the token after the bus was cleared must not throw — it is
+        // an inert `Set.delete` of an already-absent entry.
+        expect(() => unsubscribe()).not.toThrow();
+    });
+
+    it('a subscriber added before a session swap does NOT receive the new session events', () => {
+        // Contract: subscriptions are per-session. The bus is cleared on swap,
+        // and the new session gets a FRESH bus — so a listener attached to the
+        // old session never sees the new session's events. Callers that want to
+        // keep observing after a swap must RE-SUBSCRIBE on the new session.
+        rosetta.session({
+            map: makeMap(),
+            app: 'com.example.app',
+            version: '3.4.5',
+            skipHealthCheck: true,
+        });
+        const seen: string[] = [];
+        rosetta.events.on((e) => {
+            if (e.type === 'detect') seen.push(e.version);
+        });
+
+        // Swap to a new session (fresh bus).
+        rosetta.session({
+            map: { ...makeMap(), version: '3.5.0' },
+            app: 'com.example.app',
+            version: '3.5.0',
+            skipHealthCheck: true,
+        });
+
+        // Emit on the NEW session's bus — the old subscriber must not fire.
+        getCurrentSession().events.emit({
+            type: 'detect',
+            app: 'com.example.app',
+            version: '3.5.0',
+            source: 'auto',
+        });
+        expect(seen).toEqual([]);
+
+        // Re-subscribe semantics: a listener attached to the new session does fire.
+        rosetta.events.on((e) => {
+            if (e.type === 'detect') seen.push(e.version);
+        });
+        getCurrentSession().events.emit({
+            type: 'detect',
+            app: 'com.example.app',
+            version: '3.5.0',
+            source: 'auto',
+        });
+        expect(seen).toEqual(['3.5.0']);
+    });
+
     it('a fresh session() after reset() re-initialises cleanly with no stale state', () => {
         rosetta.session({
             map: makeMap(),

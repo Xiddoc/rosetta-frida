@@ -62,8 +62,13 @@ let currentSession: RosettaSession | null = null;
 
 /**
  * Internal — get the current session or throw if none is active.
- * Exported for tier-3 callers that want to bridge to a non-ambient
- * function while still using the ambient session.
+ *
+ * NOT a public surface: it is deliberately absent from the package barrel
+ * (`src/index.ts`) and re-exported nowhere, so it is reachable only from
+ * within this module and its co-located test. The named export exists solely
+ * so the co-located test suite can observe the ambient slot; it is not part
+ * of the supported tier-3 API (callers reach the session through
+ * `rosetta.session(...)`'s return value).
  */
 export function getCurrentSession(): RosettaSession {
     if (currentSession === null) {
@@ -82,6 +87,13 @@ export function getCurrentSession(): RosettaSession {
  * active. Shared by the public {@link rosetta.reset} and by the swap a
  * second `rosetta.session(...)` performs, so both go through one clean
  * teardown path (L12).
+ *
+ * This operates on the module-level slot, which is typed as the INTERNAL
+ * {@link RosettaSession} (not the public {@link Session} view) on purpose:
+ * teardown needs `events.clear()`, which is an internal-only method absent
+ * from the public `Session` surface. The public `session(...)`/`reset()`
+ * methods return / accept the narrowed `Session`; only this internal path
+ * sees the wider type.
  */
 function disposeCurrentSession(): void {
     if (currentSession !== null) {

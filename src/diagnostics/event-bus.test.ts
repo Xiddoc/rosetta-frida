@@ -127,6 +127,25 @@ describe('EventBus subscription management', () => {
         bus.emit({ type: 'resolve', name: 'Y', source: 'map' });
         expect(count).toBe(1);
     });
+
+    it('clear() also turns trace mode off, leaving the bus fully inert', () => {
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const bus = new EventBus();
+        bus.setTrace(true);
+        bus.clear();
+        // No subscribers AND no trace output after clear().
+        bus.emit({ type: 'resolve', name: 'Z', source: 'map' });
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
+    });
+
+    it('an unsubscribe token from before clear() is a safe no-op afterward', () => {
+        const bus = new EventBus();
+        const off = bus.on(() => {});
+        bus.clear();
+        // Deleting an already-absent listener must not throw.
+        expect(() => off()).not.toThrow();
+    });
 });
 
 describe('formatEvent — all variants', () => {
