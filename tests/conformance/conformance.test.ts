@@ -26,11 +26,50 @@ import {
     MapValidationError,
     ResolveError,
     RosettaError,
+    TargetPolicyError,
     UnknownArgTypeError,
 } from '../../src/errors.js';
 import { createResolver, parseSignatureArgs, toJvmDescriptor } from '../../src/resolver/index.js';
 import type { ResolverImpl } from '../../src/resolver/index.js';
-import { validateMap } from '../../src/validate/schema.js';
+import { pickMapForVersion } from '../../src/session/version-match.js';
+import type { RosettaMapRegistry } from '../../src/types/map.js';
+import {
+    MAX_ANCHORS,
+    MAX_APP_LEN,
+    MAX_CLASSES,
+    MAX_FIELDS_PER_CLASS,
+    MAX_FREE_STRING_LEN,
+    MAX_METHOD_OVERLOADS,
+    MAX_METHODS_PER_CLASS,
+    MAX_SHORT_NAME_LEN,
+    MAX_SIGNATURE_LEN,
+    MAX_SOURCES,
+    MAX_VERSION_CODE,
+    MAX_VERSION_LEN,
+    validateMap,
+} from '../../src/validate/schema.js';
+
+/**
+ * The frida side's copy of each shared numeric bound, keyed by the name
+ * the `bounds.json` fixture uses. The conformance runner asserts each
+ * fixture `value` equals the constant READ FROM THE REAL VALIDATOR — so a
+ * one-sided edit to either client's constant (or the canonical schema)
+ * fails this gate. Kotlin's `boundsTable` is the twin.
+ */
+const BOUNDS: Readonly<Record<string, number>> = {
+    MAX_CLASSES,
+    MAX_METHODS_PER_CLASS,
+    MAX_FIELDS_PER_CLASS,
+    MAX_METHOD_OVERLOADS,
+    MAX_ANCHORS,
+    MAX_SOURCES,
+    MAX_SHORT_NAME_LEN,
+    MAX_SIGNATURE_LEN,
+    MAX_APP_LEN,
+    MAX_VERSION_LEN,
+    MAX_FREE_STRING_LEN,
+    MAX_VERSION_CODE,
+};
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
@@ -53,6 +92,10 @@ const FIXTURES: readonly string[] = [
     'introspection.json',
     'errors.json',
     'validation.json',
+    'heuristic.json',
+    'bounds.json',
+    'target-policy.json',
+    'version-select.json',
 ];
 
 /** A single conformance case as it appears on disk (loosely typed). */
@@ -64,7 +107,8 @@ interface ConformanceCase {
         | 'UnknownArgType'
         | 'AmbiguousOverload'
         | 'IllegalArgument'
-        | 'MapValidation';
+        | 'MapValidation'
+        | 'TargetPolicy';
     readonly inputMap?: unknown;
     readonly expectValid?: boolean;
     readonly class?: string;
@@ -84,6 +128,13 @@ interface ConformanceCase {
     readonly expectExtends?: string | null;
     readonly expectResult?: string | boolean | null;
     readonly expectList?: readonly string[];
+    // `bound` cases (bounds.json): a named shared constant and its value.
+    readonly bound?: string;
+    readonly value?: number;
+    // `fuzzySelect` cases (version-select.json): registry-selection parity.
+    readonly versions?: readonly string[];
+    readonly target?: string;
+    readonly expectSelected?: string;
 }
 
 interface ConformanceFixture {
@@ -230,10 +281,59 @@ function assertError(resolver: ResolverImpl | null, c: ConformanceCase): void {
         case 'MapValidation':
             expect(thrown).toBeInstanceOf(MapValidationError);
             return;
+        case 'TargetPolicy':
+            // The target-namespace guard (target-policy.json / xposed#11):
+            // a forbidden obfuscated target is rejected at the resolver
+            // chokepoint before any Java.use. Kotlin twin: TargetPolicyException.
+            expect(thrown).toBeInstanceOf(TargetPolicyError);
+            return;
         /* c8 ignore next 2 -- unreachable: fixture taxonomy is closed */
         default:
             throw new Error(`unknown expectError '${String(c.expectError)}'`);
     }
+}
+
+/**
+ * Run a `bound`-kind case (bounds.json): assert the fixture's `value`
+ * equals the shared numeric constant read from the REAL frida validator
+ * (looked up in {@link BOUNDS}). Any drift between the canonical schema,
+ * the Zod validator, and the Kotlin BoundsChecker fails on both sides.
+ */
+function runBoundCase(c: ConformanceCase): void {
+    const name = c.bound as string;
+    expect(name in BOUNDS, `unknown bound '${name}'`).toBe(true);
+    expect(BOUNDS[name]).toBe(c.value);
+}
+
+/**
+ * Run a `fuzzySelect`-kind case (version-select.json / xposed#13): build a
+ * registry from the case's `versions` (each backed by a throwaway map whose
+ * `version` label IS the key) and assert the opt-in fuzzy selector picks
+ * `expectSelected`. The Kotlin twin runs `VersionMatch.select` with
+ * `allowFuzzyMatch = true`; here it is `pickMapForVersion` with
+ * `versionMatch: 'fuzzy'`.
+ */
+function runFuzzySelectCase(c: ConformanceCase): void {
+    const versions = c.versions as readonly string[];
+    const registry: RosettaMapRegistry = {};
+    versions.forEach((label, i) => {
+        // version_code must be unique per entry so the registry's authoritative
+        // index never collapses two labels; the codes are otherwise irrelevant
+        // (fuzzy selection ranks on the version LABEL, not the code).
+        registry[label] = {
+            schema_version: 2,
+            app: 'com.example.app',
+            version: label,
+            version_code: i + 1,
+            classes: {},
+        };
+    });
+    const picked = pickMapForVersion(registry, {
+        version: c.target as string,
+        versionMatch: 'fuzzy',
+    });
+    expect(picked.fuzzy).toBe(true);
+    expect(picked.registryKey).toBe(c.expectSelected);
 }
 
 /**
@@ -274,6 +374,10 @@ for (const file of FIXTURES) {
             it(c.name, () => {
                 if (c.kind === 'validate') {
                     runValidateCase(c);
+                } else if (c.kind === 'bound') {
+                    runBoundCase(c);
+                } else if (c.kind === 'fuzzySelect') {
+                    runFuzzySelectCase(c);
                 } else if (c.expectError !== undefined) {
                     assertError(resolver, c);
                 } else {
