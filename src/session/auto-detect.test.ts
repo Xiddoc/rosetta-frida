@@ -134,4 +134,27 @@ describe('detectAppAndVersion', () => {
         expect(result.versionCode).toBeUndefined();
         expect(result).toEqual({ app: 'com.example.app', version: '1.2.3' });
     });
+
+    it.each([
+        ['2^31 − 1 (legacy int32 max)', 2_147_483_647],
+        ['2^31 (just past int32)', 2_147_483_648],
+        ['2^32 (versionCodeMajor = 1)', 4_294_967_296],
+        ['2^53 − 1 (Number.MAX_SAFE_INTEGER)', Number.MAX_SAFE_INTEGER],
+    ])('reads a full 64-bit longVersionCode without masking: %s', (_label, code) => {
+        const result = detectAppAndVersion(
+            buildJavaApi('com.example.app', '1.2.3', { longVersionCode: code }),
+        );
+        // No low-32 mask: the full value survives intact.
+        expect(result.versionCode).toBe(code);
+    });
+
+    it('throws loudly when longVersionCode exceeds Number.MAX_SAFE_INTEGER', () => {
+        expect(() =>
+            detectAppAndVersion(
+                buildJavaApi('com.example.app', '1.2.3', {
+                    longVersionCode: Number.MAX_SAFE_INTEGER + 1,
+                }),
+            ),
+        ).toThrow(/exceeds Number\.MAX_SAFE_INTEGER/);
+    });
 });

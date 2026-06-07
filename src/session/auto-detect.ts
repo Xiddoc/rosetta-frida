@@ -124,6 +124,10 @@ function readVersionCode(packageInfo: AutoDetectPackageInfo): number | undefined
     let code: number | undefined;
     if (typeof packageInfo.getLongVersionCode === 'function') {
         try {
+            // Read the FULL 64-bit longVersionCode
+            // (`(versionCodeMajor << 32) | versionCode`) — never masked to its
+            // low 32 bits, because apps that set versionCodeMajor legitimately
+            // exceed 2^31 and masking would alias distinct releases.
             code = Number(packageInfo.getLongVersionCode());
         } catch {
             code = undefined;
@@ -132,5 +136,23 @@ function readVersionCode(packageInfo: AutoDetectPackageInfo): number | undefined
     if (code === undefined && packageInfo.versionCode !== undefined) {
         code = Number(packageInfo.versionCode.value);
     }
-    return code !== undefined && Number.isFinite(code) ? code : undefined;
+    if (code === undefined || !Number.isFinite(code)) {
+        return undefined;
+    }
+    // The value rides through a JS Number, exact only up to
+    // Number.MAX_SAFE_INTEGER (2^53 − 1). A longVersionCode beyond that
+    // cannot be represented without silent truncation — fail loudly rather
+    // than select the wrong (or no) map off a corrupted key.
+    if (code > Number.MAX_SAFE_INTEGER) {
+        throw new Error(
+            `auto-detect: longVersionCode ${String(packageInfo.getLongVersionCode?.())} ` +
+                `exceeds Number.MAX_SAFE_INTEGER (${String(Number.MAX_SAFE_INTEGER)}); ` +
+                'it cannot be represented as an exact JS number for map selection. ' +
+                'Verify that the app reports the correct version_code via PackageManager, ' +
+                'or pass the session map with a pre-validated version_code explicitly. ' +
+                'If the value is genuinely this large, file an issue at ' +
+                'https://github.com/Xiddoc/rosetta-frida/issues.',
+        );
+    }
+    return code;
 }

@@ -140,9 +140,9 @@ time. YAML and TS modules remain _authoring inputs_ converted to JSON
 via `rosetta convert` — the YAML below is shown for authoring
 flavour. Two app-identity changes landed with schema 2:
 
-- **`version_code` is required and authoritative.** It is the Android
-  `PackageInfo.versionCode` (or low 32 bits of `longVersionCode`) and
-  is the primary, O(1) key the runtime selects maps by. The `version`
+- **`version_code` is required and authoritative.** It is the full Android
+  `longVersionCode` (`(versionCodeMajor << 32) | versionCode`), never masked,
+  and is the primary, O(1) key the runtime selects maps by. The `version`
   (versionName) string is a human label / fuzzy fallback only.
 - **`signer_sha256`** (optional) replaced `apk_sha256`: it is the hash
   of the signing certificate, a cheap on-device authenticity guard

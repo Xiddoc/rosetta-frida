@@ -184,6 +184,26 @@ Full APK SHA-256 is not O(1) and is unused on-device. Split identity by role:
   **primary on-device map-selection key. Add it to the schema.** (Selection today
   keys on `versionName` strings, which can be reused or ambiguous — keep
   `versionName` as a human label.)
+    - **Width: full 64-bit `longVersionCode`, capped at 2^53 − 1
+      (`Number.MAX_SAFE_INTEGER`).** Android's `longVersionCode` is
+      `(versionCodeMajor << 32) | versionCode`; apps that set
+      `versionCodeMajor` legitimately exceed the old int32 cap (2^31 − 1),
+      and those high-`versionCodeMajor` apps are exactly the ones this
+      project targets. The value is therefore **never masked to its low 32
+      bits** — masking would alias two distinct releases onto the same key
+      and silently select the wrong map. The upper bound is **2^53 − 1**
+      (not the full 2^63 − 1 of a Java `long`) because the Frida client
+      reads the value through a JS `Number`, which is only exact up to
+      `Number.MAX_SAFE_INTEGER`; every realistic `longVersionCode`
+      (`versionCodeMajor` up to ~millions) fits comfortably inside 2^53.
+      All three clients enforce the identical `[0, 2^53 − 1]` integer range
+      — the canonical rosetta-maps schema (`maximum: 9007199254740991`),
+      rosetta-frida's Zod (`MAX_VERSION_CODE = Number.MAX_SAFE_INTEGER`),
+      and rosetta-xposed's Kotlin (`MAX_VERSION_CODE = 9_007_199_254_740_991L`).
+      The Frida `auto-detect` reads the full `longVersionCode` with no mask
+      and **fails loudly** (rather than truncating) if a bridge ever returns
+      a value above 2^53 − 1. (Resolves rosetta-maps#8: the prior int32 cap
+      silently dropped maps for apps with `versionCodeMajor > 0`.)
 - **`signer_sha256` (optional)** — the signing-certificate SHA-256 via
   `GET_SIGNING_CERTIFICATES` → `signingInfo.apkContentsSigners`. Cheap (the cert is
   pre-parsed by the system, not a hash of the whole file) and meaningful: it pins
