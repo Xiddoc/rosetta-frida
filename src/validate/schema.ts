@@ -380,12 +380,48 @@ export function validateMap(data: unknown): RosettaMap {
     if (result.success) {
         return result.data;
     }
+    // L6 — schema-version mismatch gets a dedicated, actionable message.
+    //
+    // The `schema_version` literal gate (`z.literal(CURRENT_SCHEMA_VERSION)`)
+    // otherwise reports a generic "Invalid literal value, expected 2" Zod
+    // issue, which neither names the version the map carries nor tells the
+    // author what to do about it. When the input is an object that DID supply
+    // a numeric `schema_version` differing from the supported literal, surface
+    // a single, clearer issue that states found-vs-expected and points at the
+    // intended `rosetta migrate` remedy — older OR newer, since there is no
+    // cross-version forward-compat (a wrong-version map must be re-emitted at
+    // the supported version, not best-effort read; see the module header /
+    // RFC 0001 Decision 7).
+    const found = foundSchemaVersion(data);
+    if (found !== undefined && found !== CURRENT_SCHEMA_VERSION) {
+        const message =
+            `Map has schema_version ${found}, but this build of rosetta-frida only ` +
+            `supports schema_version ${CURRENT_SCHEMA_VERSION}. There is no cross-version ` +
+            `auto-upgrade: re-emit the map at version ${CURRENT_SCHEMA_VERSION} ` +
+            `(the planned \`rosetta migrate\` command will do this) and reload it.`;
+        throw new MapValidationError(message, [{ path: 'schema_version', message }]);
+    }
     const issues = result.error.issues.map((issue) => ({
         path: zodPathToString(issue.path),
         message: issue.message,
     }));
     const summary = issues.length === 1 ? '1 issue' : `${issues.length} issues`;
     throw new MapValidationError(`Map failed schema validation (${summary})`, issues);
+}
+
+/**
+ * Read a numeric `schema_version` off an unknown input, or `undefined` if the
+ * input is not an object or did not supply a numeric `schema_version`. Used by
+ * {@link validateMap} to give a wrong-but-numeric version a dedicated
+ * migration-hint message (L6); a missing / non-numeric `schema_version` falls
+ * through to the normal Zod issue list instead.
+ */
+function foundSchemaVersion(data: unknown): number | undefined {
+    if (typeof data !== 'object' || data === null) {
+        return undefined;
+    }
+    const value = (data as { schema_version?: unknown }).schema_version;
+    return typeof value === 'number' ? value : undefined;
 }
 
 /**

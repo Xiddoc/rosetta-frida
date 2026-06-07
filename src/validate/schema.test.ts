@@ -580,6 +580,70 @@ describe('validateMap', () => {
         expect(() => validateMap(null)).toThrow(MapValidationError);
         expect(() => validateMap(42)).toThrow(MapValidationError);
     });
+
+    // L6 — a wrong-but-numeric schema_version gets a dedicated, actionable
+    // message naming found-vs-expected and pointing at `rosetta migrate`.
+    it('gives an older schema_version a migration-hint message', () => {
+        try {
+            validateMap({
+                schema_version: 1,
+                app: 'com.example.app',
+                version: '1.0.0',
+                version_code: 1,
+                classes: {},
+            });
+            throw new Error('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(MapValidationError);
+            const err = e as MapValidationError;
+            // Names the found version, the expected version, and the remedy.
+            expect(err.message).toMatch(/schema_version 1/);
+            expect(err.message).toMatch(/supports schema_version 2/);
+            expect(err.message).toMatch(/rosetta migrate/);
+            // Single, focused issue scoped to the schema_version field.
+            expect(err.issues).toHaveLength(1);
+            expect(err.issues[0]?.path).toBe('schema_version');
+        }
+    });
+
+    it('gives a newer schema_version the same migration-hint message', () => {
+        try {
+            validateMap({
+                schema_version: 3,
+                app: 'com.example.app',
+                version: '1.0.0',
+                version_code: 1,
+                classes: {},
+            });
+            throw new Error('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(MapValidationError);
+            const err = e as MapValidationError;
+            expect(err.message).toMatch(/schema_version 3/);
+            expect(err.message).toMatch(/rosetta migrate/);
+            expect(err.issues).toHaveLength(1);
+        }
+    });
+
+    it('does NOT use the migration-hint path for a missing/non-numeric schema_version', () => {
+        // A missing schema_version is a normal validation failure, not a
+        // version mismatch — it must fall through to the generic issue list
+        // (so the migration hint is not misapplied to maps that never named a
+        // version).
+        try {
+            validateMap({
+                app: 'com.example.app',
+                version: '1.0.0',
+                version_code: 1,
+                classes: {},
+            });
+            throw new Error('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(MapValidationError);
+            const err = e as MapValidationError;
+            expect(err.message).not.toMatch(/rosetta migrate/);
+        }
+    });
 });
 
 describe('zodPathToString', () => {
