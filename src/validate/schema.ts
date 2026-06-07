@@ -77,8 +77,18 @@ export const MAX_APP_LEN = 256;
 export const MAX_VERSION_LEN = 256;
 /** Max length for any other free-form string. */
 export const MAX_FREE_STRING_LEN = 4_096;
-/** Maximum value for `version_code` — the low 32 bits of Android `longVersionCode` (2^31 − 1). */
-export const MAX_VERSION_CODE = 2_147_483_647;
+/**
+ * Maximum value for `version_code` — the full Android `longVersionCode`
+ * (`(versionCodeMajor << 32) | versionCode`), capped at
+ * `Number.MAX_SAFE_INTEGER` (2^53 − 1). Apps that set `versionCodeMajor`
+ * legitimately exceed 2^31, so the value is NOT masked to its low 32 bits
+ * (that would alias distinct releases). The cap is 2^53 − 1 because the
+ * Frida client reads this through a JS `Number`, which is only exact up to
+ * `Number.MAX_SAFE_INTEGER`; all realistic `longVersionCode` values fit
+ * well inside it. Kept in lockstep with the canonical rosetta-maps schema
+ * (`maximum: 9007199254740991`) and rosetta-xposed's `MAX_VERSION_CODE`.
+ */
+export const MAX_VERSION_CODE = Number.MAX_SAFE_INTEGER;
 
 /**
  * Record keys that must never appear in a map's `classes` / `methods` /

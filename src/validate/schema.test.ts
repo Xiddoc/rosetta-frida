@@ -289,7 +289,7 @@ describe('rosettaMapSchema', () => {
         ).toThrow();
     });
 
-    it('rejects version_code above MAX_VERSION_CODE (2147483647)', () => {
+    it('rejects version_code above MAX_VERSION_CODE (2^53)', () => {
         expect(() =>
             rosettaMapSchema.parse({
                 schema_version: 2,
@@ -301,7 +301,7 @@ describe('rosettaMapSchema', () => {
         ).toThrow();
     });
 
-    it('accepts version_code exactly at MAX_VERSION_CODE (2147483647)', () => {
+    it('accepts version_code exactly at MAX_VERSION_CODE (2^53 − 1)', () => {
         expect(() =>
             rosettaMapSchema.parse({
                 schema_version: 2,
@@ -311,6 +311,34 @@ describe('rosettaMapSchema', () => {
                 classes: {},
             }),
         ).not.toThrow();
+    });
+
+    it.each([
+        ['2^31 − 1 (legacy int32 max)', 2_147_483_647],
+        ['2^31 (just past int32)', 2_147_483_648],
+        ['2^32 (versionCodeMajor = 1)', 4_294_967_296],
+    ])('accepts a 64-bit longVersionCode: %s', (_label, code) => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: code,
+                classes: {},
+            }),
+        ).not.toThrow();
+    });
+
+    it('rejects a negative version_code', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: -1,
+                classes: {},
+            }),
+        ).toThrow();
     });
 
     it('rejects missing app', () => {
@@ -505,7 +533,7 @@ describe('exported cap constants', () => {
         expect(MAX_APP_LEN).toBe(256);
         expect(MAX_VERSION_LEN).toBe(256);
         expect(MAX_FREE_STRING_LEN).toBe(4_096);
-        expect(MAX_VERSION_CODE).toBe(2_147_483_647);
+        expect(MAX_VERSION_CODE).toBe(Number.MAX_SAFE_INTEGER);
         expect(RESERVED_RECORD_KEYS).toEqual(['__proto__', 'constructor', 'prototype']);
     });
 });
