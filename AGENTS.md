@@ -161,7 +161,7 @@ sources:
     - tool: hand-authored
       classes: 12
       notes: 'cccc.v signature confirmed via Frida runtime trace, see commit <hash>'
-    - tool: rosetta-frida-runtime-discovered
+    - tool: rosetta-runtime-discovered
       classes: 3
       notes: 'stub_candidate scan emitted these names at attach'
 

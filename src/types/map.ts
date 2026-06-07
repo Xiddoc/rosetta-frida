@@ -11,7 +11,7 @@
 
 /** Provenance source for a map (or subset of entries). */
 export interface MapSource {
-    /** Tool name: 'sigmatcher' | 'hand-authored' | 'rosetta-frida-runtime-discovered' | other. */
+    /** Tool name: 'sigmatcher' | 'hand-authored' | 'rosetta-runtime-discovered' | other. */
     tool: string;
     /** Optional config / config-path that produced these entries. */
     config?: string;

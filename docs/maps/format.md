@@ -94,7 +94,7 @@ cross-references one of these entries — see
 
 | Field | Description |
 |---|---|
-| `tool` | Free-form. Common values: `sigmatcher`, `hand-authored`, `rosetta-frida-runtime-discovered` (V2+), `jadx`. |
+| `tool` | Free-form. Common values: `sigmatcher`, `hand-authored`, `rosetta-runtime-discovered` (V2+), `jadx`. |
 | `config` | The config or config-path the tool was run with. |
 | `classes` | Count of classes attributed to this source. |
 | `notes` | Free-form notes about the capture session. |
