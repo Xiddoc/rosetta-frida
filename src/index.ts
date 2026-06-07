@@ -8,10 +8,12 @@
 export * from './errors.js';
 export * from './types/index.js';
 
-// Typed configuration (parse-limit hardening, future knobs).
+// Typed configuration (parse-limit hardening, future knobs). `configSchema`
+// is intentionally NOT re-exported here — the public surface is the resolver
+// (`resolveConfig`) and the defaults; the raw Zod schema stays internal to
+// `config.ts` (still exported there for its own unit tests).
 export {
     resolveConfig,
-    configSchema,
     DEFAULT_CONFIG,
     DEFAULT_MAX_INPUT_BYTES,
     DEFAULT_MAX_NESTING_DEPTH,
