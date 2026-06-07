@@ -147,7 +147,11 @@ function readVersionCode(packageInfo: AutoDetectPackageInfo): number | undefined
         throw new Error(
             `auto-detect: longVersionCode ${String(packageInfo.getLongVersionCode?.())} ` +
                 `exceeds Number.MAX_SAFE_INTEGER (${String(Number.MAX_SAFE_INTEGER)}); ` +
-                'it cannot be represented as an exact JS number for map selection.',
+                'it cannot be represented as an exact JS number for map selection. ' +
+                'Verify that the app reports the correct version_code via PackageManager, ' +
+                'or pass the session map with a pre-validated version_code explicitly. ' +
+                'If the value is genuinely this large, file an issue at ' +
+                'https://github.com/Xiddoc/rosetta-frida/issues.',
         );
     }
     return code;
