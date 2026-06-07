@@ -24,10 +24,20 @@
 
 - **Map input bounds + key safety** (`src/validate/schema.ts`) — the Zod
   validator now enforces size/cardinality caps, string `maxLength`s, an
-  `app` package-name pattern, a `version_code` int32 ceiling, an `extends`
+  `app` package-name pattern, a `version_code` ceiling, an `extends`
   cap, a `signer_sha256` 64-hex pattern, and rejection of reserved keys
   (`__proto__`/`constructor`/`prototype`) — mirroring the canonical
   rosetta-maps JSON Schema so all clients agree.
+- **`version_code` widened to the full 64-bit `longVersionCode`**
+  (rosetta-maps#8). The cap moved from the int32 max (2^31 − 1) to
+  `Number.MAX_SAFE_INTEGER` (2^53 − 1) across the schema, Zod
+  (`MAX_VERSION_CODE`), and the Kotlin client. Android's `longVersionCode`
+  is `(versionCodeMajor << 32) | versionCode`; apps that set
+  `versionCodeMajor` exceeded the old cap and their maps were silently
+  unselectable. The value is **never masked** to its low 32 bits (that
+  would alias distinct releases). `src/session/auto-detect.ts` now reads
+  the full `longVersionCode` and **fails loudly** instead of truncating if
+  a bridge ever returns a value above 2^53 − 1. See RFC 0001 Decision 3.
 
 ### CLI security hardening
 
