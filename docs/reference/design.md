@@ -223,7 +223,7 @@ What landed in V1.0:
 - CLI scaffold: `init`, `validate`, `convert`, `patch`, `extract`,
   `inspect`.
 - One sample hook demonstrating the workflow.
-- 611 tests, 100% coverage.
+- 100% coverage (see CI badge for current test count).
 
 What is deferred:
 

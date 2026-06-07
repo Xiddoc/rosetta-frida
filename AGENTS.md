@@ -272,8 +272,8 @@ Shipped V1.0 went past the original weekend prototype: a three-tier
 hook API (`rosetta.hook`, `rosetta.use`, `rosetta.map`) over
 `rosetta.session(...)`, in-process auto-detect, attach-time health
 check, a full CLI (`init`, `validate`, `convert`, `patch`, `extract`,
-`inspect`), a 15-class sample map, and a sample hook — at 611 tests /
-100% coverage.
+`inspect`), a 15-class sample map, and a sample hook — at 100%
+coverage (see CI badge for current test count).
 
 ### 5. TypeScript vs plain JS?
 
@@ -317,7 +317,7 @@ function() { ... }`.
 
 ## Orientation for a fresh session
 
-V1.0 is built (Java-only runtime + CLI, 611 tests at 100% coverage).
+V1.0 is built (Java-only runtime + CLI, 100% coverage — see CI badge for current test count).
 The design decisions above are settled; the next frontier is the V1.5 /
 V2 roadmap (`docs/reference/design.md`). When picking up work here:
 
