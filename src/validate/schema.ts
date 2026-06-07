@@ -150,6 +150,24 @@ function boundedRecord<T extends z.ZodTypeAny>(
             }
         }
     });
+    // Why the `as unknown as` double-cast (a deliberate, contained escape
+    // hatch — not laziness):
+    //
+    // `guard.pipe(schema)` is a `ZodPipeline<ZodUnknown, typeof schema>`. Its
+    // OUTPUT type is already exactly `z.output<schema>` (the pipe runs the
+    // record schema second, so the parsed value IS the record). The only lie
+    // is the INPUT type: a pipeline reports its FIRST stage's input, and the
+    // guard is `z.unknown()`, so `z.input<pipeline>` widens to `unknown`
+    // instead of the record's `z.input` (the scalar-or-array authoring shape).
+    //
+    // We can't narrow that input without making the guard itself a typed
+    // schema — but a typed guard would re-run the record's value validation a
+    // second time (the guard exists ONLY to pre-scan raw keys for the
+    // cardinality cap and reserved names; value validation belongs to the
+    // piped record alone). So we keep the cheap `z.unknown()` guard and
+    // re-assert the declared input here. TypeScript needs `as unknown as`
+    // because `unknown` is not assignable to the record input directly; the
+    // surrounding `z.input`/`z.output` lock assertions still police drift.
     return guard.pipe(schema) as unknown as z.ZodType<
         z.output<z.ZodRecord<z.ZodString, T>>,
         z.ZodTypeDef,
@@ -364,7 +382,7 @@ export function validateMap(data: unknown): RosettaMap {
  * Exported for testing.
  */
 export function zodPathToString(path: ReadonlyArray<PropertyKey>): string {
-    return path
-        .map((segment) => (typeof segment === 'number' ? String(segment) : String(segment)))
-        .join('.');
+    // Every segment (numeric array index, string key, or — defensively — a
+    // symbol) stringifies the same way, so there is no branch to make.
+    return path.map((segment) => String(segment)).join('.');
 }
