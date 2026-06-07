@@ -20,15 +20,21 @@
  *     0001 Decision 7 / AGENTS.md §7). Bumping the format means re-emitting
  *     the map at the new version, not best-effort reading the old/new one.
  *
- *   - WITHIN the pinned version, unknown object keys are accepted and
- *     STRIPPED (Zod's default object behaviour). This tolerates additive,
- *     non-breaking annotations a newer minor emitter might attach to a
- *     `schema_version: 2` map (extra provenance, hints, etc.) without
- *     failing validation — they simply don't surface in the typed result.
+ *   - WITHIN the pinned version, the fixed-shape objects (the top-level
+ *     map, each `MapSource`, `MethodEntry`, `FieldEntry`, and `ClassEntry`)
+ *     are STRICT (`.strict()`): an unknown / mistyped sibling key is
+ *     REJECTED, not silently stripped. This mirrors the canonical maps
+ *     schema, which went `additionalProperties: false` on every structured
+ *     object (frida#17 M6 / maps#6), so a typo'd key (`signature` →
+ *     `signatuer`) fails loudly on both clients instead of being dropped and
+ *     producing a subtly wrong map. The user-KEYED records (`classes`,
+ *     `methods`, `fields`) are NOT strict — their keys are real names and
+ *     therefore arbitrary by design (the canonical schema models them with
+ *     `additionalProperties: <ref>`); the bounded-record guard still caps
+ *     their cardinality and rejects prototype-pollution keys.
  *
- * So: strict on the version key, lenient on unknown sibling keys at the
- * same version. The two are not in tension — they operate at different
- * granularities (whole-format vs. individual fields).
+ * So: strict on the version key AND on every fixed-shape object's key set;
+ * arbitrary only where the keys ARE the data (the real-name records).
  */
 
 import { z } from 'zod';
@@ -171,28 +177,34 @@ export const classKindSchema: z.ZodType<ClassKind> = z.union([
     z.literal('anonymous'),
 ]);
 
-export const mapSourceSchema: z.ZodType<MapSource> = z.object({
-    tool: z.string().min(1).max(MAX_FREE_STRING_LEN),
-    config: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    classes: z.number().int().optional(),
-    notes: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    confidence: confidenceSchema.optional(),
-});
+export const mapSourceSchema: z.ZodType<MapSource> = z
+    .object({
+        tool: z.string().min(1).max(MAX_FREE_STRING_LEN),
+        config: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        classes: z.number().int().optional(),
+        notes: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        confidence: confidenceSchema.optional(),
+    })
+    .strict();
 
-export const methodEntrySchema: z.ZodType<MethodEntry> = z.object({
-    obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
-    signature: z.string().min(1).max(MAX_SIGNATURE_LEN),
-    aidl_txn: z.number().int().optional(),
-    static: z.boolean().optional(),
-    synthetic: z.boolean().optional(),
-    is_constructor: z.boolean().optional(),
-});
+export const methodEntrySchema: z.ZodType<MethodEntry> = z
+    .object({
+        obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
+        signature: z.string().min(1).max(MAX_SIGNATURE_LEN),
+        aidl_txn: z.number().int().optional(),
+        static: z.boolean().optional(),
+        synthetic: z.boolean().optional(),
+        is_constructor: z.boolean().optional(),
+    })
+    .strict();
 
-export const fieldEntrySchema: z.ZodType<FieldEntry> = z.object({
-    obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
-    type: z.string().min(1).max(MAX_SIGNATURE_LEN),
-    static: z.boolean().optional(),
-});
+export const fieldEntrySchema: z.ZodType<FieldEntry> = z
+    .object({
+        obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
+        type: z.string().min(1).max(MAX_SIGNATURE_LEN),
+        static: z.boolean().optional(),
+    })
+    .strict();
 
 /**
  * A method-map value is either a single MethodEntry or an array of them
@@ -222,18 +234,20 @@ export const fieldMapSchema = boundedRecord(
     'fields',
 );
 
-export const classEntrySchema = z.object({
-    obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
-    extends: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    kind: classKindSchema.optional(),
-    dex: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    aidl_descriptor: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    anchors: z.array(z.string().max(MAX_FREE_STRING_LEN)).max(MAX_ANCHORS).optional(),
-    methods: methodMapSchema.optional(),
-    fields: fieldMapSchema.optional(),
-    source: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    confidence: confidenceSchema.optional(),
-});
+export const classEntrySchema = z
+    .object({
+        obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
+        extends: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        kind: classKindSchema.optional(),
+        dex: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        aidl_descriptor: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        anchors: z.array(z.string().max(MAX_FREE_STRING_LEN)).max(MAX_ANCHORS).optional(),
+        methods: methodMapSchema.optional(),
+        fields: fieldMapSchema.optional(),
+        source: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        confidence: confidenceSchema.optional(),
+    })
+    .strict();
 
 export const classMapSchema = boundedRecord(
     z.record(z.string(), classEntrySchema),
@@ -253,6 +267,14 @@ export const classMapSchema = boundedRecord(
 export const APP_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
 
 /**
+ * The `version` label must contain at least one non-whitespace character —
+ * a whitespace-only label (e.g. `'   '`) is rejected. Mirrors the canonical
+ * maps schema's `"pattern": "\\S"` (maps#13 / frida#17 M17). Non-mutating:
+ * the original string is preserved (the schema does not trim it).
+ */
+export const VERSION_PATTERN = /\S/;
+
+/**
  * Lowercase 64-char hex — the SHA-256 of the signing certificate. The
  * session layer normalises (lowercases) and re-validates this at runtime;
  * the schema enforces the canonical lowercase-hex shape so a malformed map
@@ -269,25 +291,29 @@ export const SIGNER_SHA256_PATTERN = /^[0-9a-f]{64}$/;
  * `z.input`, leaving emitters of the authoring form (the sigmatcher adapter)
  * with nowhere to hand their value but a lying cast.
  */
-export const rosettaMapSchema = z.object({
-    schema_version: z.literal(CURRENT_SCHEMA_VERSION),
-    app: z.string().min(1).max(MAX_APP_LEN).regex(APP_PATTERN, {
-        message: 'app must be a dotted package name (e.g. com.example.app)',
-    }),
-    version: z.string().min(1).max(MAX_VERSION_LEN),
-    version_code: z.number().int().nonnegative().max(MAX_VERSION_CODE),
-    captured_at: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    signer_sha256: z
-        .string()
-        .regex(SIGNER_SHA256_PATTERN, {
-            message: 'signer_sha256 must be 64 lowercase hex characters',
-        })
-        .optional(),
-    frida_min_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    frida_max_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
-    sources: z.array(mapSourceSchema).max(MAX_SOURCES).optional(),
-    classes: classMapSchema,
-});
+export const rosettaMapSchema = z
+    .object({
+        schema_version: z.literal(CURRENT_SCHEMA_VERSION),
+        app: z.string().min(1).max(MAX_APP_LEN).regex(APP_PATTERN, {
+            message: 'app must be a dotted package name (e.g. com.example.app)',
+        }),
+        version: z.string().min(1).max(MAX_VERSION_LEN).regex(VERSION_PATTERN, {
+            message: 'version must contain a non-whitespace character',
+        }),
+        version_code: z.number().int().nonnegative().max(MAX_VERSION_CODE),
+        captured_at: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        signer_sha256: z
+            .string()
+            .regex(SIGNER_SHA256_PATTERN, {
+                message: 'signer_sha256 must be 64 lowercase hex characters',
+            })
+            .optional(),
+        frida_min_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        frida_max_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
+        sources: z.array(mapSourceSchema).max(MAX_SOURCES).optional(),
+        classes: classMapSchema,
+    })
+    .strict();
 
 /**
  * The authoring/input type the schema accepts. Equal to the hand-written

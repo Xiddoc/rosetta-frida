@@ -87,6 +87,10 @@ describe('mapSourceSchema', () => {
     it('rejects a non-integer classes count', () => {
         expect(() => mapSourceSchema.parse({ tool: 't', classes: 1.5 })).toThrow();
     });
+
+    it('rejects an unknown key (strict)', () => {
+        expect(() => mapSourceSchema.parse({ tool: 't', bogus: 1 })).toThrow();
+    });
 });
 
 describe('methodEntrySchema', () => {
@@ -116,6 +120,12 @@ describe('methodEntrySchema', () => {
             methodEntrySchema.parse({ obfuscated: 'c', signature: '()V', aidl_txn: 1.5 }),
         ).toThrow();
     });
+
+    it('rejects a typo key (strict; e.g. signatuer)', () => {
+        expect(() =>
+            methodEntrySchema.parse({ obfuscated: 'c', signature: '()V', signatuer: '()V' }),
+        ).toThrow();
+    });
 });
 
 describe('fieldEntrySchema', () => {
@@ -131,6 +141,10 @@ describe('fieldEntrySchema', () => {
 
     it('rejects missing type', () => {
         expect(() => fieldEntrySchema.parse({ obfuscated: 'a' })).toThrow();
+    });
+
+    it('rejects an unknown key (strict)', () => {
+        expect(() => fieldEntrySchema.parse({ obfuscated: 'a', type: 'I', bogus: true })).toThrow();
     });
 });
 
@@ -364,17 +378,56 @@ describe('rosettaMapSchema', () => {
         ).toThrow();
     });
 
-    it('strips unknown sibling keys WITHIN the pinned version (additive tolerance)', () => {
-        // Lenient on unknown keys at the same schema_version...
+    it('rejects an unknown top-level key (strict; mirrors additionalProperties: false)', () => {
+        // The fixed-shape objects are STRICT — a typo'd / unknown sibling key
+        // fails loudly instead of being silently stripped (frida#17 M6).
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                version_code: 1,
+                app: 'com.example.app',
+                version: 'v',
+                classes: {},
+                future_field: 'rejected',
+            }),
+        ).toThrow();
+    });
+
+    it('rejects an unknown key on a class entry (strict)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                version_code: 1,
+                app: 'com.example.app',
+                version: 'v',
+                classes: { IFoo: { obfuscated: 'aaaa', typo_field: 1 } },
+            }),
+        ).toThrow();
+    });
+
+    it('rejects a whitespace-only version (frida#17 M17)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 2,
+                version_code: 1,
+                app: 'com.example.app',
+                version: '   ',
+                classes: {},
+            }),
+        ).toThrow();
+    });
+
+    it('accepts a version with surrounding whitespace as long as it has a non-space char', () => {
+        // The check is "contains a non-whitespace character", not "is trimmed".
+        // The original string is preserved (not mutated).
         const parsed = rosettaMapSchema.parse({
             schema_version: 2,
             version_code: 1,
             app: 'com.example.app',
-            version: 'v',
+            version: ' 1.2.3 ',
             classes: {},
-            future_field: 'ignored',
         });
-        expect((parsed as Record<string, unknown>).future_field).toBeUndefined();
+        expect(parsed.version).toBe(' 1.2.3 ');
     });
 
     it('hard-rejects a NEWER schema_version (no cross-version forward-compat)', () => {
