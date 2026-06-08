@@ -1,12 +1,13 @@
 # `rosetta validate`
 
 Load a map, run the schema + sanity check, print pass/fail. Format
-auto-detected from the file extension.
+auto-detected from the file extension. With `--deep` it additionally runs the
+**semantic** consistency checks (the former `verify` verb, folded in here).
 
 ## Synopsis
 
 ```sh
-rosetta validate <map>
+rosetta validate <map> [--deep] [--json]
 ```
 
 ## Arguments
@@ -14,6 +15,8 @@ rosetta validate <map>
 | Argument | Required | Description |
 |---|---|---|
 | `<map>` | Yes | Path to a map file. The format is detected from the extension. |
+| `--deep`, `--semantic` | No | Additionally run the deep semantic checks (see [Deep semantic checks](#deep-semantic-checks-deep)). |
+| `--json` | No | With `--deep`, emit the structured `VerifyIssue[]` (errors **and** warnings) as JSON for CI consumption. |
 
 Supported extensions:
 
@@ -109,12 +112,74 @@ the [attach-time health check](../api/session.md#attach-time-health-check)
 inside the Frida runtime. `rosetta validate` is purely a static
 shape check.
 
+## Deep semantic checks (`--deep`)
+
+The schema proves a map is well-*formed*. `--deep` (alias `--semantic`)
+additionally runs the **cross-entry** checks the schema cannot express. This
+is the former standalone `verify` verb, folded into `validate` because it took
+the same input, the same output shape, and the same exit codes — two verbs
+that differed only by check depth. Findings are classified by severity:
+
+**Hard errors** — fail the build (exit 1):
+
+1. **Duplicate obfuscated class names within a dex.** Two real classes sharing
+   the same `obfuscated` short name **and** the same `dex` shard collide at
+   resolution time. Across different dex shards the same short name is legal
+   (R8 reuses `a`/`b`/… per shard), so the check is scoped per `dex`.
+2. **`aidl_txn` collisions.** Two method overloads on the **same** class
+   sharing an `aidl_txn` transaction code — a binder dispatch ambiguity.
+3. **Unparseable signatures.** A method `signature` the descriptor parser
+   rejects.
+
+**Warnings** — reported but **never** fail the build:
+
+4. **Dangling `extends`.** A class whose `extends` names an app-package real
+   class that is not a key in `classes`.
+5. **Un-translated arg types.** A method `signature` whose argument descriptors
+   reference an app-package real class not in `classes`.
+
+> **Why the cross-reference checks (4, 5) are warnings, not errors.** They rest
+> on a heuristic — "a dotted name under the app's package prefix should have a
+> map entry." That is a guess: a map is routinely *partial* (you map only what
+> you hook), and legitimate vendor/library packages can sit under the app's own
+> prefix. An app `com.google.android.apps.foo` legitimately references
+> `com.google.android.gms.*` / `com.google.android.material.*` classes it never
+> maps. To eliminate those cross-namespace false positives the heuristic
+> matches against the **full** `app` package prefix (not a 2-segment slice),
+> and the findings are downgraded to warnings so a partial-but-correct map
+> never fails on a guess.
+
+```sh
+$ npx rosetta validate maps/com.example.app/30405.json --deep
+rosetta validate: OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=2, consistent
+
+# a heuristic warning is reported but does NOT fail the build (exit 0):
+$ npx rosetta validate maps/com.example.app/partial.json --deep
+rosetta validate: OK: maps/com.example.app/partial.json — com.example.app@3.4.5, 12 class(es), schema_version=2 (1 warning)
+  warning at classes.com.example.app.Child.extends: extends app class 'com.example.app.Base' which is not a key in classes
+
+# a hard error fails (exit 1):
+$ npx rosetta validate maps/com.example.app/broken.json --deep
+rosetta validate: Map failed semantic verification (1 error)
+  at classes.com.example.app.B.obfuscated: obfuscated name 'x' in dex '(no-dex)' collides with class 'com.example.app.A'
+
+# structured output for CI:
+$ npx rosetta validate maps/com.example.app/partial.json --deep --json
+rosetta validate: [
+  { "path": "classes.com.example.app.Child.extends", "message": "...", "severity": "warning" }
+]
+```
+
+`--deep` is static-only — it inspects a map it is handed and never reads an APK
+or *produces* mappings. A future `--device` mode (live health check via
+`frida-server`) is deferred; see the [CLI overview](overview.md).
+
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
-| `0` | Map is valid. |
-| `1` | Schema validation failed, file is missing or unreadable, or extension is not supported. |
+| `0` | Map is valid. (With `--deep`: valid and free of hard semantic errors; warnings may still be reported.) |
+| `1` | Schema validation failed, file is missing or unreadable, extension is not supported, or — with `--deep` — a hard semantic error was found. |
 
 ## CI integration
 
@@ -155,3 +220,15 @@ try {
 
 For YAML, use `yamlToMap`. Both end up running the same validator
 under the hood. (TS/JS-module ingestion was removed for security.)
+
+The deep semantic checks are exported as `verifyMap` (the `--deep` core is a
+thin wrapper over it):
+
+```typescript
+import { loadMap, verifyMap } from 'rosetta-frida';
+
+const map = await loadMap('maps/com.example.app/30405.json');
+const issues = verifyMap(map); // VerifyIssue[] — each has { path, message, severity }
+const hardErrors = issues.filter((i) => i.severity === 'error');
+if (hardErrors.length > 0) process.exit(1);
+```

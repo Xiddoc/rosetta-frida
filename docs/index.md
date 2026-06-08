@@ -39,10 +39,10 @@ every time the obfuscator rotates.
 
     ---
 
-    `rosetta init`, `pull`, `validate`, `convert`, `patch`, `extract`,
-    `inspect`, `diff`, `merge`, `verify`, `types` — scaffold maps, pull
+    `rosetta init`, `pull`, `validate` (+ `--deep`), `convert`, `patch`,
+    `extract`, `inspect`, `diff`, `merge`, `types` — scaffold maps, pull
     verified maps from the community repo at build time, swap them into
-    compiled bundles, diff/merge/verify maps, generate real-name type
+    compiled bundles, diff/merge/deep-validate maps, generate real-name type
     stubs, and audit what every bundle actually targets.
 
 </div>
@@ -125,8 +125,8 @@ the full motivating story.
 - **PEM-style marker block.** Maps embed into the compiled bundle
   between `-----BEGIN ROSETTA MAP-----` / `-----END ROSETTA MAP-----`
   comments. Swap maps without recompiling via `rosetta patch`.
-- **CLI tooling.** `init`, `pull`, `validate`, `convert`, `patch`,
-  `extract`, `inspect`, `diff`, `merge`, `verify`, `types`. `pull`
+- **CLI tooling.** `init`, `pull`, `validate` (+ `--deep`), `convert`,
+  `patch`, `extract`, `inspect`, `diff`, `merge`, `types`. `pull`
   fetches the verified map for an
   `(app, version_code)` from the community
   [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo at
@@ -143,9 +143,9 @@ What is **not** in V1.0:
   repo is scaffolded and `rosetta pull` already fetches from it at
   build time; V1 still ships the example map in-repo as the worked
   reference).
-- `rosetta diff`, `merge`, `migrate`, `types`, `verify`,
-  `merge-bundle` CLI commands (deferred to V1.5). The build-time
-  community-registry fetch shipped in V1.0 as
+- `rosetta diff`, `merge`, `types`, `migrate` CLI commands and the
+  `validate --deep` semantic checks (deferred to V1.5; `migrate` still
+  pending). The build-time community-registry fetch shipped in V1.0 as
   [`rosetta pull`](cli/pull.md).
 - Native (JNI / ELF symbol) mapping (deferred to V2+).
 

@@ -1,13 +1,10 @@
-# `rosetta merge` / `rosetta merge-bundle`
+# `rosetta merge`
 
 Combine several partial maps for the **same** `(app, version_code)` into one
 canonical map. A single version's map is typically assembled from several
 sources — a sigmatcher run, hand-authored entries, and
 rosetta-runtime-discovered names — each emitted as its own partial map.
 `merge` folds them into one artifact.
-
-`merge-bundle` is an alias for `merge` (same implementation), provided for
-discoverability.
 
 ## Synopsis
 
@@ -42,6 +39,14 @@ Put your highest-trust source last. The fold is recursive:
   `methods` and `fields` unioned (last-wins per real name; method overloads
   paired by signature) and its scalar fields last-win.
 
+An *undefined* class-scalar on a later input (an explicit hole, e.g. a class
+re-stated without its `extends`) likewise never erases the base value — the
+same undefined-stripping applied at the top level is applied per class.
+
+In non-strict mode, every last-wins override of an *obfuscated* name — the
+"silent wrong name corrupts hooks" hazard — emits a `note:` line to **stderr**
+so the operator sees exactly what got overridden (the merge still succeeds).
+
 With `--strict`, two inputs that map the same real name (class, method
 overload, or field) to **different** obfuscated names is a hard error
 rather than a silent last-wins pick. Identical values never conflict. This
@@ -59,9 +64,14 @@ overflowed the per-method cap) fails loudly.
 $ npx rosetta merge maps/app/sigmatcher.json maps/app/hand.json -o maps/app/30405.json
 rosetta merge: wrote maps/app/30405.json
 
+# non-strict override surfaces a stderr note (merge still succeeds)
+$ npx rosetta merge sigmatcher.json hand.json -o out.json
+note: class 'com.example.app.Foo' obfuscated name overridden 'aaaa' -> 'bbbb' (last input wins; pass --strict to fail instead)
+rosetta merge: wrote out.json
+
 # fail if two sources disagree on an obfuscated name
 $ npx rosetta merge a.json b.json -o out.json --strict
-rosetta merge: conflicting obfuscated name for class 'com.example.app.Foo': 'aaaa' vs 'bbbb' (pass without --strict to take the last input's value)
+rosetta merge: conflicting obfuscated name for class 'com.example.app.Foo': 'aaaa' vs 'bbbb' (merge without strict mode to take the last input's value)
 ```
 
 ## Exit codes
@@ -70,3 +80,18 @@ rosetta merge: conflicting obfuscated name for class 'com.example.app.Foo': 'aaa
 |---|---|
 | `0` | Merged and written. |
 | `1` | Bad args, an input missing/invalid, identity mismatch, a `--strict` conflict, an invalid fold, or a refused overwrite. |
+
+## Programmatic equivalent
+
+`mergeMaps` is exported from the package root (the CLI verb is a thin
+wrapper). It takes an **options object** (`{ strict, onOverride }`):
+
+```typescript
+import { loadMap, mergeMaps } from 'rosetta-frida';
+
+const maps = await Promise.all(['sigmatcher.json', 'hand.json'].map((p) => loadMap(p)));
+const merged = mergeMaps(maps, {
+    strict: false,
+    onOverride: (o) => console.warn(`overrode ${o.kind} ${o.name}: ${o.from} -> ${o.to}`),
+});
+```

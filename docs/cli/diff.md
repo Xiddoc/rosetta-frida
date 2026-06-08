@@ -9,7 +9,7 @@ absorb.
 ## Synopsis
 
 ```sh
-rosetta diff <from> <to> [--json]
+rosetta diff <from> <to> [--json] [--exit-code]
 ```
 
 ## Arguments
@@ -19,10 +19,14 @@ rosetta diff <from> <to> [--json]
 | `<from>` | Yes | The old / left map (format auto-detected by extension). |
 | `<to>` | Yes | The new / right map. |
 | `--json` | No | Emit a machine-readable JSON object instead of the human report. |
+| `--exit-code` | No | Exit non-zero (1) when the diff is **non-empty** — a CI "fail if the map rotated" gate. Default exit is 0 regardless of diff content. |
 
 Both inputs are loaded through the same path as [`validate`](validate.md),
 so a malformed input fails loudly rather than producing a bogus diff. The
 two maps must be for the same `app` (a cross-app diff is an error).
+
+When both maps carry a `version` (versionName) label, the human header shows
+it alongside each `version_code` (e.g. `100 (1.0.0) -> 101 (1.0.1)`).
 
 ## How it works
 
@@ -64,12 +68,40 @@ rosetta diff: {
 }
 ```
 
+### CI drift gate (`--exit-code`)
+
+```sh
+# Fail the job if the bundled map no longer matches the freshly-pulled one.
+$ npx rosetta diff bundled.json pulled.json --exit-code
+rosetta diff: com.example.app: 30405 -> 30406
+  ~ com.example.app.IRemoteService$Stub (obfuscated aaaa -> zzzz)
+# exit status: 1
+```
+
+The drift report still goes to **stdout** (it is the requested output, not an
+error), so CI can both gate on the exit code and capture the report.
+
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
-| `0` | Diff computed (whether or not there were changes). |
-| `1` | An input was missing/unreadable/invalid, or the two maps are for different apps. |
+| `0` | Diff computed. (With `--exit-code`, only when the diff is empty.) |
+| `1` | An input was missing/unreadable/invalid, the two maps are for different apps, or — with `--exit-code` — the diff was non-empty. |
 
 `diff` is read-only: it never writes a file, and it does not *produce*
 mappings (it is not a deobfuscator) — it only compares maps it is handed.
+
+## Programmatic equivalent
+
+`diffMaps` and `renderHumanDiff` are exported from the package root (the CLI
+verb is a thin wrapper):
+
+```typescript
+import { loadMap, diffMaps, renderHumanDiff } from 'rosetta-frida';
+
+const from = await loadMap('old.json');
+const to = await loadMap('new.json');
+// diffMaps asserts both maps describe the same app; it throws otherwise.
+const diff = diffMaps(from, to);
+console.log(renderHumanDiff(diff));
+```

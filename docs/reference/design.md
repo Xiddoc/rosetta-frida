@@ -222,8 +222,12 @@ What landed in V1.0:
 - Diagnostics: stderr trace + structured events.
 - CLI scaffold: `init`, `validate`, `convert`, `patch`, `extract`,
   `inspect`.
-- V1.5 map-authoring verbs (shipped): `diff`, `merge` /
-  `merge-bundle`, `verify`, `types`.
+- V1.5 map-authoring verbs (shipped): `diff` (with `--exit-code`),
+  `merge`, `types`, and the deep semantic checks under `validate --deep`
+  (the former standalone `verify` verb, folded in). Their pure cores live
+  under `src/` (`diffMaps`, `mergeMaps`, `verifyMap`, `renderTypes`) and are
+  re-exported from `src/index.ts`, so the CLI verbs are thin wrappers —
+  library-first parity with `convert`.
 - One sample hook demonstrating the workflow.
 - 100% coverage (see the repository's CI for the current test count).
 
@@ -231,7 +235,7 @@ What is deferred:
 
 | Feature | Target version |
 |---|---|
-| `rosetta diff`, `merge`, `types`, `verify`, `merge-bundle` CLI commands | **Shipped (V1.5)** |
+| `rosetta diff`, `merge`, `types` CLI commands + `validate --deep` semantic checks (library cores in `src/`, re-exported) | **Shipped (V1.5)** |
 | `rosetta migrate` CLI command (schema migrators) | V1.5 |
 | `frida-compile` plugin for auto-marker-wrapping | V1.5 |
 | Fuzzy version matching expanded (e.g. version ranges, premium hints) | V1.5 |
