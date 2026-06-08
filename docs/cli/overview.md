@@ -13,13 +13,13 @@ $ npx rosetta --help
 Usage: rosetta <command> [options]
 
 Commands:
-  init <app> <version> [options]      Scaffold a new map skeleton (--version-code required)
-  pull <app>@<version_code>           Fetch + validate map from rosetta-maps repo
-  validate <map>                      Schema + sanity check (auto-detect format)
-  convert <in> -o <out>               Convert YAML map to canonical JSON
-  patch <bundle.js> --map <new.json>  Replace embedded map in bundle
-  extract <bundle.js> -o <out.json>   Pull embedded map out of bundle
-  inspect <bundle.js>                 One-line summary of embedded map
+  init <app> <version> [options]       Scaffold a new map skeleton (--version-code required)
+  pull <app>@<version_code> [options]  Fetch + verify map from rosetta-maps repo (--require-sidecar)
+  validate <map>                       Schema + sanity check (auto-detect format)
+  convert <in> -o <out>                Convert YAML map to canonical JSON
+  patch <bundle.js> --map <new.json>   Replace embedded map in bundle
+  extract <bundle.js> -o <out.json>    Pull embedded map out of bundle
+  inspect <bundle.js>                  One-line summary of embedded map
 ```
 
 | Command | What it does | Operates on |
