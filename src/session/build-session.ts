@@ -29,6 +29,7 @@ import {
 } from '../errors.js';
 import { EventBus } from '../diagnostics/event-bus.js';
 import { appPrefixOf, createResolver } from '../resolver/index.js';
+import type { MapSelectionKind } from '../types/events.js';
 import type { RosettaMap } from '../types/map.js';
 import type { Resolver } from '../types/resolver.js';
 import type { FailurePolicy, VersionMatch } from '../types/session.js';
@@ -100,39 +101,54 @@ export function detectStage(options: InternalSessionOptions): ResolvedDetection 
 /**
  * Decide whether a picked map is acceptable for the running build. When a
  * version *code* was detected it is authoritative (RFC 0001 Decision 3);
- * otherwise fall back to version-*label* equality. A fuzzy pick is always
- * accepted (the user opted in).
+ * otherwise fall back to version-*label* equality.
+ *
+ * Any non-`'exact'` `selectionKind` (a `'nearest'` / `'code-range'` /
+ * `'label-range'` pick) is an explicit opt-in fallback and is accepted within
+ * its tier even when its `version_code` / label differs from the detected one
+ * — that is the whole purpose of the opt-in. The distinct kind (rather than a
+ * single `fuzzy` boolean) is what is threaded onward so callers and events can
+ * tell a deliberate far-range pick apart from a nearest guess (issue #22).
  */
 export function isVersionAcceptable(
     mapVersionCode: number,
     detectedVersion: string,
     detectedVersionCode: number | undefined,
     mapVersion: string,
-    fuzzy: boolean,
+    selectionKind: MapSelectionKind,
 ): boolean {
+    const approximate = selectionKind !== 'exact';
     if (detectedVersionCode !== undefined) {
         if (mapVersionCode === detectedVersionCode) return true;
-        return fuzzy;
+        return approximate;
     }
     if (mapVersion === detectedVersion) return true;
-    return fuzzy;
+    return approximate;
+}
+
+/** The select-stage output: the chosen map plus how it was selected. */
+export interface SelectedMap {
+    map: RosettaMap;
+    selectionKind: MapSelectionKind;
 }
 
 /**
  * Pick the map for the detected build and verify its `(app, version)`
- * matches. Returns the chosen map, or a `MapVersionMismatchError` to throw.
+ * matches. Returns the chosen map plus its `selectionKind`, or a
+ * `MapVersionMismatchError` to throw.
  */
 export function selectAndVerifyStage(
     options: InternalSessionOptions,
     detection: ResolvedDetection,
     versionMatch: VersionMatch,
-): StageResult<RosettaMap> {
+): StageResult<SelectedMap> {
     const picked = pickMapForVersion(options.map, {
         version: detection.version,
         versionCode: detection.versionCode,
         versionMatch,
     });
     const map = picked.map;
+    const selectionKind = picked.fuzzyKind;
 
     if (map.app !== detection.app) {
         return {
@@ -153,7 +169,7 @@ export function selectAndVerifyStage(
             detection.version,
             detection.versionCode,
             map.version,
-            picked.fuzzy,
+            selectionKind,
         )
     ) {
         const detectedLabel =
@@ -173,7 +189,7 @@ export function selectAndVerifyStage(
         };
     }
 
-    return { ok: true, value: map };
+    return { ok: true, value: { map, selectionKind } };
 }
 
 // ---------------------------------------------------------------------------
@@ -357,15 +373,18 @@ export function buildSession(options: InternalSessionOptions): SessionState {
     });
 
     // 2. Select + version-verify.
-    const map = unwrap(selectAndVerifyStage(options, detection, versionMatch));
+    const { map, selectionKind } = unwrap(selectAndVerifyStage(options, detection, versionMatch));
 
-    // Emit a structured map-load now that we know what we picked.
+    // Emit a structured map-load now that we know what we picked. The
+    // selectionKind makes the chosen tier visible (a far range pick is
+    // distinguishable from a nearest-label guess, not a single fuzzy bit).
     events.emit({
         type: 'map-load',
         app: map.app,
         version: map.version,
         classCount: Object.keys(map.classes).length,
         schemaVersion: map.schema_version,
+        selectionKind,
     });
 
     // 3. Signer-certificate authenticity guard (runs before the functional

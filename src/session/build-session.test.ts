@@ -117,15 +117,20 @@ describe('detectStage', () => {
 
 describe('isVersionAcceptable', () => {
     it('accepts a matching version code (authoritative)', () => {
-        expect(isVersionAcceptable(5, '1.0.0', 5, '1.0.0', false)).toBe(true);
+        expect(isVersionAcceptable(5, '1.0.0', 5, '1.0.0', 'exact')).toBe(true);
     });
-    it('rejects a mismatched version code unless fuzzy', () => {
-        expect(isVersionAcceptable(5, '1.0.0', 6, '1.0.0', false)).toBe(false);
-        expect(isVersionAcceptable(5, '1.0.0', 6, '1.0.0', true)).toBe(true);
+    it('rejects a mismatched version code unless an approximate tier was used', () => {
+        expect(isVersionAcceptable(5, '1.0.0', 6, '1.0.0', 'exact')).toBe(false);
+        expect(isVersionAcceptable(5, '1.0.0', 6, '1.0.0', 'nearest')).toBe(true);
+        expect(isVersionAcceptable(5, '1.0.0', 6, '1.0.0', 'code-range')).toBe(true);
+        expect(isVersionAcceptable(5, '1.0.0', 6, '1.0.0', 'label-range')).toBe(true);
     });
     it('falls back to label equality when no code was detected', () => {
-        expect(isVersionAcceptable(5, '1.0.0', undefined, '1.0.0', false)).toBe(true);
-        expect(isVersionAcceptable(5, '2.0.0', undefined, '1.0.0', false)).toBe(false);
+        expect(isVersionAcceptable(5, '1.0.0', undefined, '1.0.0', 'exact')).toBe(true);
+        expect(isVersionAcceptable(5, '2.0.0', undefined, '1.0.0', 'exact')).toBe(false);
+    });
+    it('accepts a label mismatch when an approximate tier was used', () => {
+        expect(isVersionAcceptable(5, '2.0.0', undefined, '1.0.0', 'label-range')).toBe(true);
     });
 });
 
@@ -137,10 +142,13 @@ describe('selectAndVerifyStage', () => {
         source: 'auto',
     };
 
-    it('returns the picked map on a match', () => {
+    it('returns the picked map and selectionKind on a match', () => {
         const result = selectAndVerifyStage({ map: buildMap() }, detection, 'exact');
         expect(result.ok).toBe(true);
-        if (result.ok) expect(result.value.version).toBe('1.2.3');
+        if (result.ok) {
+            expect(result.value.map.version).toBe('1.2.3');
+            expect(result.value.selectionKind).toBe('exact');
+        }
     });
 
     it('returns a MapVersionMismatchError on an app mismatch', () => {
@@ -178,7 +186,10 @@ describe('selectAndVerifyStage', () => {
             'fuzzy',
         );
         expect(result.ok).toBe(true);
-        if (result.ok) expect(result.value.version).toBe('1.2.3');
+        if (result.ok) {
+            expect(result.value.map.version).toBe('1.2.3');
+            expect(result.value.selectionKind).toBe('nearest');
+        }
     });
 
     it('selects by version_code from a registry', () => {
@@ -192,7 +203,7 @@ describe('selectAndVerifyStage', () => {
             'exact',
         );
         expect(result.ok).toBe(true);
-        if (result.ok) expect(result.value.version_code).toBe(2);
+        if (result.ok) expect(result.value.map.version_code).toBe(2);
     });
 });
 

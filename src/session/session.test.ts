@@ -167,6 +167,8 @@ describe('createSession — explicit app/version', () => {
         if (mapLoad?.type === 'map-load') {
             expect(mapLoad.classCount).toBe(2);
             expect(mapLoad.schemaVersion).toBe(2);
+            // A single-map input is an exact selection.
+            expect(mapLoad.selectionKind).toBe('exact');
         }
     });
 });
@@ -350,6 +352,93 @@ describe('createSession — registry input', () => {
         });
         // 1.5.0 (Δ=[0,1,0]) is closest to 1.4.0 inside [1.0.0, 2.0.0].
         expect(session.map.version).toBe('1.5.0');
+    });
+
+    it('accepts a code-range pick whose version_code is FAR from the detected code and reports it', () => {
+        // Detected code 100000 is nowhere near any map; the code range
+        // [1, 1000] admits two maps and picks the one closest to 100000 (code
+        // 999). The pick's version_code (999) is FAR from detected (100000) yet
+        // accepted — that is the opt-in's purpose — and the map-load event
+        // reports selectionKind 'code-range' so it is distinguishable from a
+        // nearest guess (issue #22 major gap 2).
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0', 'com.example.app', 1),
+            '2.0.0': buildMap('2.0.0', 'com.example.app', 999),
+        };
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        const session = createSession({
+            map: registry,
+            app: 'com.example.app',
+            version: 'whatever',
+            versionCode: 100000,
+            versionMatch: { versionCodeRange: { min: 1, max: 1000 } },
+            events,
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(session.map.version_code).toBe(999);
+        const mapLoad = captured.find((e) => e.type === 'map-load');
+        if (mapLoad?.type === 'map-load') {
+            expect(mapLoad.selectionKind).toBe('code-range');
+        } else {
+            throw new Error('expected a map-load event');
+        }
+    });
+
+    it('emits selectionKind "label-range" for a label-range pick', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.5.0': buildMap('1.5.0'),
+        };
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        createSession({
+            map: registry,
+            app: 'com.example.app',
+            version: '1.4.0',
+            versionMatch: { versionRange: { min: '1.0.0', max: '2.0.0' } },
+            events,
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        const mapLoad = captured.find((e) => e.type === 'map-load');
+        if (mapLoad?.type === 'map-load') {
+            expect(mapLoad.selectionKind).toBe('label-range');
+        } else {
+            throw new Error('expected a map-load event');
+        }
+    });
+
+    it('accepts a versionRange pick within an opt-in maxDistance ceiling', () => {
+        // Now that the ceiling applies to the label-range tier: range admits
+        // 1.5.0 (Δ=[0,1,0] to 1.4.0, major delta 0 <= 1) → accepted.
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.5.0': buildMap('1.5.0'),
+        };
+        const session = createSession({
+            map: registry,
+            app: 'com.example.app',
+            version: '1.4.0',
+            versionMatch: { versionRange: { min: '1.0.0', max: '2.0.0' }, maxDistance: 1 },
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(session.map.version).toBe('1.5.0');
+    });
+
+    it('rejects a versionRange pick that exceeds the maxDistance ceiling', () => {
+        const registry: RosettaMapRegistry = {
+            '5.0.0': buildMap('5.0.0'),
+            '6.0.0': buildMap('6.0.0'),
+        };
+        expect(() =>
+            createSession({
+                map: registry,
+                app: 'com.example.app',
+                version: '1.0.0',
+                versionMatch: { versionRange: { min: '5.0.0', max: '6.0.0' }, maxDistance: 1 },
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+            }),
+        ).toThrow(/exceeds the configured maxDistance of 1/);
     });
 
     it('honours the typed config versionMatching default when versionMatch is omitted', () => {

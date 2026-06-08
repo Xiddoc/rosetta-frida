@@ -175,15 +175,16 @@ describe('formatEvent — all variants', () => {
                 failedEntries: ['x'],
             }),
         ).toContain('FAIL');
-        expect(
-            formatEvent({
-                type: 'map-load',
-                app: 'a',
-                version: '1',
-                classCount: 3,
-                schemaVersion: 2,
-            }),
-        ).toContain('map-load');
+        const mapLoadLine = formatEvent({
+            type: 'map-load',
+            app: 'a',
+            version: '1',
+            classCount: 3,
+            schemaVersion: 2,
+            selectionKind: 'code-range',
+        });
+        expect(mapLoadLine).toContain('map-load');
+        expect(mapLoadLine).toContain('select=code-range');
         expect(
             formatEvent({
                 type: 'signer-check',
