@@ -36,6 +36,10 @@ import { runInit } from './commands/init.js';
 import { runValidate } from './commands/validate.js';
 import { runConvert } from './commands/convert.js';
 import { runPull, defaultPullConfig } from './commands/pull.js';
+import { runDiff } from './commands/diff.js';
+import { runMerge } from './commands/merge.js';
+import { runVerify } from './commands/verify.js';
+import { runTypes } from './commands/types.js';
 import { formatErrorLines, successLine, type CommandIo } from './commands/io.js';
 
 /** A command's run function: argv tail + io → its success message. */
@@ -97,6 +101,32 @@ const COMMANDS = {
         run: runInspect,
         invocation: 'inspect <bundle.js>',
         summary: 'One-line summary of embedded map',
+    },
+    diff: {
+        run: runDiff,
+        invocation: 'diff <from> <to> [--json]',
+        summary: 'Structural diff between two maps (what rotated)',
+    },
+    merge: {
+        run: runMerge,
+        invocation: 'merge <a> <b> [...] -o <out> [--strict]',
+        summary: 'Combine partial maps for one (app, version_code)',
+    },
+    'merge-bundle': {
+        // Same fold as `merge`, under a second discoverable verb name.
+        run: runMerge,
+        invocation: 'merge-bundle <a> <b> [...] -o <out> [--strict]',
+        summary: 'Alias of merge (combine partial maps)',
+    },
+    verify: {
+        run: runVerify,
+        invocation: 'verify <map>',
+        summary: 'Deeper-than-schema semantic consistency checks',
+    },
+    types: {
+        run: runTypes,
+        invocation: 'types <map> -o <out.d.ts>',
+        summary: 'Emit .d.ts real-name stubs for autocompletion',
     },
 } satisfies Record<string, CommandEntry>;
 
