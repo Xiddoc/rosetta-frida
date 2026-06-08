@@ -136,8 +136,23 @@ match always wins and a miss with everything off still **fails loudly**.
 | `strategy` | `'exact'` | `'fuzzy'` enables the nearest-label fallback |
 | `versionCodeRange: { min?, max? }` | unset | numeric range over `version_code`; the in-range map closest to the detected code wins (ties → lower code, then lower label) |
 | `versionRange: { min?, max? }` | unset | semver-ish range over the label; the in-range map closest by lexicographic distance wins |
-| `maxDistance` | `null` | ceiling on the nearest-label pick — if any of `[Δmajor, Δminor, Δpatch]` exceeds it, selection fails loudly instead of accepting a far map |
+| `maxDistance` | `null` | **label-distance** ceiling on a distance-ranked pick (applies to the nearest-label tier AND the `versionRange` tier; **not** to `versionCodeRange`). Compared by the same major-dominant lexicographic metric as the ranking: a pick is accepted only when its distance `[Δmajor, Δminor, Δpatch]` is `<= [maxDistance, 0, 0]`, else selection fails loudly. So `maxDistance: 1` accepts any zero-major-delta pick and `[1,0,0]`, but rejects `[1,0,1]` and `[2,0,0]`. |
 | `ranked` | `false` | exposes the full ranked candidate list on the internal pick result (closest first) for diagnostics |
+
+> **Ranges are independently opt-in.** Each of `strategy: 'fuzzy'`,
+> `versionCodeRange`, and `versionRange` is on its own an explicit opt-in
+> to approximate selection. A range engages even when `strategy` is
+> `'exact'` (or omitted) — this is **intentional**: setting a range *is*
+> the opt-in, so `{ versionCodeRange: { … } }` or `{ versionRange: { … } }`
+> selects within that range without also setting `strategy: 'fuzzy'`. With
+> *all* of them off, an exact miss still fails loudly. Exact `version_code`,
+> then exact label, always win first regardless.
+
+> **`maxDistance` is a label-distance ceiling only.** Because the
+> `versionCodeRange` tier ranks by a different (numeric-code) metric, the
+> ceiling does not apply to it. Pairing `maxDistance` with *only* a
+> `versionCodeRange` (no `versionRange`, `strategy` not `'fuzzy'`) is
+> rejected at config time so the no-op ceiling can't silently mislead.
 
 Fuzzy fallback is intentionally opt-in. Wrong-version maps silently
 corrupt hooks; the default failure mode is "tell the user to ship a
@@ -171,7 +186,7 @@ as a single readable line:
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15 select=exact
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.IRemoteService$Stub ← aaaa (map)
 [rosetta] com.example.app.IRemoteService$Stub.requestTicket ← c (map) (Landroid/os/Bundle;Lbbbb;)V
@@ -349,9 +364,9 @@ sequenceDiagram
     D-->>S: { app, version, versionCode? }
     Note over S: emit 'detect' event
     S->>P: pick map (version_code first, then label)
-    P-->>S: { map, fuzzy?, registryKey? }
+    P-->>S: { map, fuzzyKind, registryKey? }
     Note over S: cross-check map.app; version_code (or label) acceptable
-    Note over S: emit 'map-load' event
+    Note over S: emit 'map-load' event (carries selectionKind)
     opt map.signer_sha256 set AND enforceSigner!=false
         S->>G: checkSigner(map.signer_sha256)
         G-->>S: { passed, expected, actual, source }

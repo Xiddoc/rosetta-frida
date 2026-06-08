@@ -194,6 +194,11 @@ knobs are all opt-in (and default to the legacy behaviour). Selection
 order is *exact `version_code` → exact label → code range → label range
 → nearest label*, so an exact match always wins.
 
+Each of `strategy: 'fuzzy'`, `versionCodeRange`, and `versionRange` is an
+**independent** opt-in: setting a range engages it even when `strategy`
+is `'exact'` (or omitted) — the examples below pick within a range without
+turning on the nearest-label fallback.
+
 **Constrain by `version_code` range** (the authoritative key):
 
 ```typescript
@@ -213,15 +218,31 @@ rosetta.session({
 });
 ```
 
-**Cap how far a nearest pick may stray** — fail loudly past the ceiling:
+**Cap how far a distance-ranked pick may stray** — fail loudly past the
+ceiling. `maxDistance` is a *label-distance* ceiling: it applies to the
+nearest-label tier (`strategy: 'fuzzy'`) and the `versionRange` tier, and
+is compared by the same major-dominant lexicographic metric used to rank
+candidates (distance `<= [maxDistance, 0, 0]`):
 
 ```typescript
 rosetta.session({
     map: registry,
     versionMatch: { strategy: 'fuzzy', maxDistance: 1 },
 });
-// A closest map at distance [0,2,0] is rejected (throws) rather than used.
+// A closest map at distance [2,0,0] is rejected (throws); [1,0,0] and any
+// zero-major-delta pick (e.g. [0,2,0]) are accepted.
+
+// The ceiling also gates a label range:
+rosetta.session({
+    map: registry,
+    versionMatch: { versionRange: { min: '3.4.0', max: '3.6.0' }, maxDistance: 1 },
+});
 ```
+
+`maxDistance` does **not** apply to a `versionCodeRange` (that tier ranks
+by numeric code, a different metric); pairing `maxDistance` with *only* a
+`versionCodeRange` is rejected at config time. The parser likewise
+rejects an inverted range (`min > max`) and an all-undefined range.
 
 **Set a project-wide default via the typed config** (a per-session
 `versionMatch` still overrides it):

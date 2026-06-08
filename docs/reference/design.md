@@ -185,11 +185,16 @@ Construction order (per `src/session/session.ts`):
    `detect` event.
 3. **Pick the map.** Single-map: use as-is. Registry: select by the
    authoritative `version_code` first, falling back to the version
-   label (exact, then fuzzy). Emit `map-load` event.
+   label (exact, then the opt-in range / nearest tiers). The pick
+   carries a `selectionKind` (`'exact' | 'nearest' | 'code-range' |
+   'label-range'`). Emit `map-load` event (which carries that
+   `selectionKind`, so a far range pick is distinguishable from a
+   nearest guess rather than a single fuzzy bit).
 4. **Cross-check.** `map.app === detectedApp`, and the detected
    `version_code` equals `map.version_code` (authoritative) — or the
-   version label matches when no code was detected, or the pick was
-   fuzzy. Throw `MapVersionMismatchError` on mismatch.
+   version label matches when no code was detected, or the pick used an
+   approximate tier (any non-`'exact'` `selectionKind`, which is an
+   explicit opt-in). Throw `MapVersionMismatchError` on mismatch.
 5. **Run the attach-time health check** (unless skipped). Emit
    `health-check` event. Throw `HealthCheckFailedError` in `strict`
    mode if it fails.
@@ -223,6 +228,24 @@ If none of the enabled tiers produces a match, selection **fails
 loudly** with the same `no map for version '<v>'` error as before —
 the cardinal rule is preserved.
 
+**Ranges are independently opt-in.** Each of `strategy: 'fuzzy'`,
+`versionCodeRange`, and `versionRange` is, on its own, an explicit opt-in
+to approximate selection. A range engages even when `strategy` is
+`'exact'` (or omitted) — this is **intentional and supported**: setting a
+range *is* the opt-in, so a caller can select within a code/label range
+without also turning on the nearest-label fallback. The two exact tiers
+(`version_code`, then label) still win first, and with every range and
+fuzzy knob off an exact miss still fails loudly (RFC 0001 Decision 3).
+
+**`maxDistance` is a label-distance ceiling.** It gates the distance-
+ranked tiers — nearest-label (tier 5) and the label range (tier 4) — by
+the *same* major-dominant lexicographic metric used to rank candidates: a
+pick is accepted only when its distance `[Δmajor, Δminor, Δpatch]` is
+`<= [maxDistance, 0, 0]`. It does **not** apply to the numeric
+`versionCodeRange` tier (tier 3), which ranks by code distance, a
+different metric; pairing `maxDistance` with *only* a `versionCodeRange`
+is rejected at config time as a silent no-op.
+
 ### Configuring it
 
 `versionMatch` accepts two equivalent shapes:
@@ -237,7 +260,7 @@ the cardinal rule is preserved.
   | `strategy` | `'exact' \| 'fuzzy'` | `'exact'` | enables the nearest-label fallback (tier 5) |
   | `versionCodeRange` | `{ min?, max? }` (numbers) | unset | enables tier 3 |
   | `versionRange` | `{ min?, max? }` (labels) | unset | enables tier 4 |
-  | `maxDistance` | `number \| null` | `null` (no ceiling) | rejects a nearest-label pick whose `[Δmajor, Δminor, Δpatch]` exceeds it (fails loudly) |
+  | `maxDistance` | `number \| null` | `null` (no ceiling) | label-distance ceiling on the nearest-label AND label-range tiers (not `versionCodeRange`); rejects a pick whose distance `[Δmajor, Δminor, Δpatch]` exceeds `[maxDistance, 0, 0]` lexicographically (fails loudly) |
   | `ranked` | `boolean` | `false` | exposes the full ranked candidate list (`PickedMap.ranked`) for diagnostics |
 
 The same shape is also the typed-config default
