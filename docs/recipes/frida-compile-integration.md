@@ -23,6 +23,29 @@ JSON map. `frida-compile` resolves the `import map from
 './x.json'` and inlines the value. The compiled bundle is a single
 `.js` file that Frida loads unchanged.
 
+## Getting the map: `pull` → bundle
+
+The JSON map normally comes from the community
+[`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo via
+[`rosetta pull`](../cli/pull.md), which runs once at build time on your
+machine:
+
+```sh
+npx rosetta pull com.example.app@30405 --require-sidecar
+# → maps/com.example.app/30405.json
+npx frida-compile hook.ts -o hook.bundle.js
+```
+
+`pull` verifies a detached `.json.sha256` **transport-integrity sidecar**
+against the exact fetched bytes before writing the map — so the bytes you
+bundle are the bytes the maps repo published. Pass `--require-sidecar` in CI
+/ release builds to fail closed if a map ships without a sidecar (the
+default warns and proceeds during the rollout). This same sidecar contract
+is honoured by the rosetta-xposed Gradle "bake a pulled map" step, so a map
+baked into an LSPosed APK is verified identically. See
+[`rosetta pull`](../cli/pull.md#sidecar-transport-integrity-verification)
+for the full policy table.
+
 ## The simplest pipeline
 
 ```sh

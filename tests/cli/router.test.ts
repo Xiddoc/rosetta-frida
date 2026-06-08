@@ -149,8 +149,17 @@ describe('route — dispatch happy paths (pull)', () => {
         const config = {
             mapsRepoBaseUrl: 'https://raw.example.com',
             mapsRepoRef: 'main',
-            fetch: (_url: string) =>
-                Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(VALID_MAP) }),
+            requireSidecar: false,
+            // Sidecar absent (404) → non-strict warn-and-proceed; the map fetch
+            // returns the valid map. Keeps this a happy-path dispatch test.
+            fetch: (url: string) =>
+                url.endsWith('.sha256')
+                    ? Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve('') })
+                    : Promise.resolve({
+                          ok: true,
+                          status: 200,
+                          text: () => Promise.resolve(VALID_MAP),
+                      }),
         };
         const fs = makeFakeFs();
         const captured = makeCaptured();

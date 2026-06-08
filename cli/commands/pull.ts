@@ -24,9 +24,25 @@
  * fails loudly with an actionable message — a wrong map is worse than no
  * map, so silent fall-backs are explicitly rejected.
  *
+ * **Sidecar transport-integrity verification.** Alongside each map the
+ * rosetta-maps repo publishes a detached `<version_code>.json.sha256`
+ * sidecar (coreutils `sha256sum` format). When present it is fetched and
+ * the SHA-256 of the EXACT raw fetched map bytes is checked against it
+ * BEFORE the body is parsed or trusted — a transport-integrity tier (not
+ * publisher authenticity; that is the separate `signer_sha256` guard). The
+ * parse rule is byte-for-byte the rosetta-maps owner contract (single source
+ * of truth: rosetta-maps `docs/reference/integrity.md`): one line only (a
+ * multi-line / multi-entry sidecar FAILS CLOSED), first whitespace token =
+ * digest, optional second token = the map basename which (when present) MUST
+ * equal `<version_code>.json` else FAILS CLOSED. A digest mismatch, malformed
+ * sidecar, or basename mismatch all FAIL CLOSED. A missing sidecar (HTTP 404)
+ * warns and proceeds during rollout, unless `--require-sidecar` (or
+ * {@link PullConfig.requireSidecar}) opts into strict fail-closed mode.
+ *
  * Refuses to overwrite an existing map unless `--force` is passed.
  */
 
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { RosettaError } from '../../src/errors.js';
 import { validateStructure } from '../../src/convert/index.js';
@@ -58,6 +74,17 @@ import { parseArgs, type ArgSpec } from './args.js';
  * advisory and may be absent or lie).
  */
 export const MAX_MAP_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Hard upper bound on a fetched `.sha256` sidecar body, in bytes. A
+ * well-formed sidecar is a single short line — a 64-hex digest, two spaces,
+ * and a bare filename — well under 256 bytes. The cap is the same
+ * denial-of-service guard as {@link MAX_MAP_BYTES}, sized tightly because a
+ * sidecar can never legitimately be large; a hostile endpoint must not be
+ * able to stream an unbounded body in place of a one-line digest. 4 KiB
+ * leaves head-room for a generous filename while bounding the worst case.
+ */
+export const MAX_SIDECAR_BYTES = 4 * 1024;
 
 /** The HTTP response shape the fetch seam must provide. */
 export interface PullResponse {
@@ -110,6 +137,19 @@ export interface PullConfig {
      * global. The fetched body is bounded to {@link MAX_MAP_BYTES}.
      */
     fetch: (url: string) => Promise<PullResponse>;
+    /**
+     * Strict sidecar policy. When `true`, a map whose detached
+     * `.json.sha256` sidecar is ABSENT (HTTP 404) is rejected fail-closed
+     * instead of the default warn-and-proceed. A sidecar that is PRESENT is
+     * always verified and a mismatch/malformed sidecar always fails closed,
+     * regardless of this flag.
+     *
+     * Default `false` during the rollout (an unmigrated map without a
+     * sidecar still pulls, with a warning). Exposed on the CLI as
+     * `--require-sidecar`. Kept on the typed config (never a `process.env`
+     * lookup) per the project's typed-config rule.
+     */
+    requireSidecar: boolean;
 }
 
 /**
@@ -161,6 +201,7 @@ export function defaultPullConfig(): PullConfig {
         mapsRepoBaseUrl: 'https://raw.githubusercontent.com/Xiddoc/rosetta-maps',
         mapsRepoRef: 'main',
         fetch: globalThis.fetch.bind(globalThis),
+        requireSidecar: false,
     };
 }
 
@@ -177,13 +218,24 @@ export interface PullOptions {
     output?: string;
     /** Overwrite an existing file at the output path. */
     force?: boolean;
+    /**
+     * Strict sidecar mode: when `true`, an ABSENT `.json.sha256` sidecar is
+     * a hard error instead of a warn-and-proceed. Set by `--require-sidecar`
+     * and OR-ed with {@link PullConfig.requireSidecar}. Always populated by
+     * {@link parsePullArgs} (default `false`).
+     */
+    requireSidecar: boolean;
 }
 
-/** Option grammar for `pull`: `-o/--output <path>` and `--force/-f`. */
+/**
+ * Option grammar for `pull`: `-o/--output <path>`, `--force/-f`, and
+ * `--require-sidecar` (strict sidecar mode).
+ */
 const PULL_SPEC: ArgSpec = {
     options: [
         { name: 'output', aliases: ['-o', '--output'], takesValue: true },
         { name: 'force', aliases: ['--force', '-f'], takesValue: false },
+        { name: 'requireSidecar', aliases: ['--require-sidecar'], takesValue: false },
     ],
 };
 
@@ -240,6 +292,7 @@ export function parsePullArgs(argv: readonly string[]): PullOptions {
         version_code,
         output: values.output,
         force: flags.force ?? false,
+        requireSidecar: flags.requireSidecar ?? false,
     };
 }
 
@@ -259,6 +312,11 @@ export function buildMapUrl(app: string, version_code: number, config: PullConfi
 /**
  * Fetch the map JSON for `(app, version_code)` from the remote repo.
  *
+ * Returns BOTH the fetched body AND the exact URL it was fetched from, so the
+ * caller derives the sidecar URL from the EXACT fetched URL rather than
+ * re-deriving it with a second {@link buildMapUrl} call (one logical URL, one
+ * derivation).
+ *
  * Throws a loud {@link RosettaError} on:
  *   - HTTP 404 (exact miss — unknown app or unknown version_code)
  *   - Any non-200 response
@@ -268,7 +326,7 @@ export async function fetchMapJson(
     app: string,
     version_code: number,
     config: PullConfig,
-): Promise<string> {
+): Promise<{ url: string; body: string }> {
     const url = buildMapUrl(app, version_code, config);
     let response: Awaited<ReturnType<PullConfig['fetch']>>;
     try {
@@ -314,7 +372,219 @@ export async function fetchMapJson(
                 `${MAX_MAP_BYTES}-byte limit`,
         );
     }
+    return { url, body };
+}
+
+// ---------------------------------------------------------------------------
+// Sidecar (transport-integrity) verification
+// ---------------------------------------------------------------------------
+
+/** A lowercase 64-hex SHA-256 digest, as it appears in a sidecar's first token. */
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+
+/**
+ * Verify a detached `.json.sha256` sidecar against the EXACT raw map bytes.
+ *
+ * The sidecar is coreutils `sha256sum` format — one line, `<digest>␠␠<name>`
+ * — so the first whitespace-delimited token is the expected digest and an
+ * optional second token is the map basename. This is a TRANSPORT-INTEGRITY
+ * check (did the bytes arrive intact / un-tampered), NOT a
+ * publisher-authenticity one (that is the separate `signer_sha256` guard
+ * inside the map).
+ *
+ * Algorithm — the authoritative cross-client contract, byte-for-byte
+ * identical to the rosetta-maps owner-side `verify_sidecar` and the
+ * rosetta-xposed Gradle client (the single source of truth is the
+ * rosetta-maps `docs/reference/integrity.md`):
+ *   1. Split the text on `\n` and take the first line; a single optional
+ *      trailing `\n` is allowed and a trailing `\r` (CRLF) is tolerated as
+ *      whitespace. Any SUBSEQUENT non-empty line FAILS CLOSED — a sidecar is
+ *      exactly one line (multi-entry coreutils files are out of scope).
+ *   2. Split that first line on ASCII whitespace (tolerating leading/trailing
+ *      whitespace and single-space / multiple-space / tab separators). The
+ *      first token is the expected digest; lowercase it. No tokens → FAIL.
+ *   3. Reject unless the digest matches `^[0-9a-f]{64}$`.
+ *   4. If a SECOND token (the basename) is present it MUST equal the map
+ *      file's basename (`<version_code>.json`), else FAIL CLOSED (catches a
+ *      misfiled / copy-pasted sidecar). An absent basename token is allowed.
+ *   5. Hash the EXACT raw fetched map bytes (the body received over the wire,
+ *      BEFORE any re-render/canonicalization). Plain lowercase-hex equality;
+ *      mismatch FAILS CLOSED.
+ *
+ * @param rawMapBytes the exact map body as fetched (pre-canonicalization).
+ * @param sidecarText the sidecar file's UTF-8 text.
+ * @param mapBasename the map file's bare basename (`<version_code>.json`); a
+ *   present basename token must equal it.
+ * @returns `{ ok: true }` on a match.
+ * @throws RosettaError on a malformed/multi-line sidecar, a basename
+ *   mismatch, or a digest mismatch.
+ */
+export function verifySidecar(
+    rawMapBytes: string,
+    sidecarText: string,
+    mapBasename: string,
+): { ok: true } {
+    // Only the first line is significant; a single optional trailing newline is
+    // allowed. Any further NON-EMPTY line makes the sidecar malformed (a
+    // single-map sidecar is exactly one line; multi-entry coreutils files are
+    // out of scope). `String.split('\n')` always yields a non-empty array, so
+    // `[0]` is always present (the `!` reflects that under
+    // `noUncheckedIndexedAccess`).
+    const lines = sidecarText.split('\n');
+    if (lines.slice(1).some((rest) => rest.trim() !== '')) {
+        throw new RosettaError(
+            `malformed .sha256 sidecar: expected exactly one line but found extra ` +
+                `non-empty content. A single-map sidecar is one line; multi-entry ` +
+                `coreutils files are out of scope. Refusing to trust the fetched bytes.`,
+        );
+    }
+    // Tokenize the first line on ASCII whitespace (a trailing `\r` from a CRLF
+    // ending is whitespace and is dropped). `.trim()` first so leading
+    // whitespace doesn't yield an empty leading token.
+    const tokens = lines[0]!
+        .trim()
+        .split(/\s+/)
+        .filter((t) => t !== '');
+    if (tokens.length === 0) {
+        throw new RosettaError(
+            `malformed .sha256 sidecar: expected a 64-hex SHA-256 digest as the ` +
+                `first token but the sidecar is empty. Refusing to trust the fetched ` +
+                `bytes (transport-integrity check failed).`,
+        );
+    }
+    const expected = tokens[0]!.toLowerCase();
+    if (!SHA256_HEX_RE.test(expected)) {
+        throw new RosettaError(
+            `malformed .sha256 sidecar: expected a 64-hex SHA-256 digest as the ` +
+                `first token but got '${expected}'. Refusing to trust the fetched ` +
+                `bytes (transport-integrity check failed).`,
+        );
+    }
+    // A present basename token must equal the map's basename (fail closed on a
+    // misfiled / copy-pasted sidecar). An absent token is allowed.
+    const basename = tokens[1];
+    if (basename !== undefined && basename !== mapBasename) {
+        throw new RosettaError(
+            `.sha256 sidecar basename mismatch: the sidecar names '${basename}' but ` +
+                `it sits beside '${mapBasename}'. Refusing to trust a misfiled or ` +
+                `copy-pasted sidecar (fail-closed transport integrity).`,
+        );
+    }
+    const actual = createHash('sha256').update(rawMapBytes, 'utf8').digest('hex');
+    if (actual !== expected) {
+        throw new RosettaError(
+            `.sha256 sidecar mismatch: the fetched map bytes do not match the ` +
+                `published digest. Expected ${expected} but computed ${actual}. ` +
+                `Refusing to write tampered or corrupted bytes (fail-closed transport ` +
+                `integrity).`,
+        );
+    }
+    return { ok: true };
+}
+
+/**
+ * Fetch the detached `.json.sha256` sidecar for a map URL.
+ *
+ * The sidecar path is the map URL plus the `.sha256` suffix. Returns the
+ * sidecar's text when present, or `null` on HTTP 404 (absent — the caller
+ * decides warn-vs-fail per the rollout policy). Any other non-200 status,
+ * an oversize body, or a network error is a hard error.
+ *
+ * @throws RosettaError on a non-200/non-404 status, an oversize body, or a
+ *   network failure.
+ */
+export async function fetchSidecar(mapUrl: string, config: PullConfig): Promise<string | null> {
+    const url = `${mapUrl}.sha256`;
+    let response: Awaited<ReturnType<PullConfig['fetch']>>;
+    try {
+        response = await config.fetch(url);
+    } catch (err) {
+        throw new RosettaError(
+            `network error fetching sidecar ${url}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+    }
+    // Absent sidecar — let the caller apply the rollout (warn vs. require) policy.
+    if (response.status === 404) {
+        return null;
+    }
+    if (!response.ok) {
+        throw new RosettaError(`unexpected HTTP ${response.status} fetching sidecar ${url}`);
+    }
+
+    // Cheap pre-check against the advertised length, then the authoritative
+    // decoded-length bound — same two-tier guard as the map body.
+    const declared = response.headers?.get('content-length');
+    if (declared !== null && declared !== undefined) {
+        const declaredBytes = Number(declared);
+        if (Number.isFinite(declaredBytes) && declaredBytes > MAX_SIDECAR_BYTES) {
+            throw new RosettaError(
+                `sidecar at ${url} is too large: Content-Length ${declaredBytes} bytes ` +
+                    `exceeds the ${MAX_SIDECAR_BYTES}-byte limit`,
+            );
+        }
+    }
+    const body = await response.text();
+    if (body.length > MAX_SIDECAR_BYTES) {
+        throw new RosettaError(
+            `sidecar at ${url} is too large: ${body.length} bytes exceeds the ` +
+                `${MAX_SIDECAR_BYTES}-byte limit`,
+        );
+    }
     return body;
+}
+
+/**
+ * Apply the sidecar transport-integrity ROLLOUT POLICY to the raw fetched map
+ * bytes. This is the POLICY layer (it fetches the sidecar and may proceed
+ * WITHOUT verifying when one is absent in non-strict mode) — the pure check is
+ * {@link verifySidecar}.
+ *
+ * Rollout policy (mirrors the rosetta-maps "optional during rollout"
+ * stance):
+ *   - sidecar PRESENT + MATCHES → proceed.
+ *   - sidecar PRESENT + MISMATCH/MALFORMED/BASENAME-MISMATCH → FAIL CLOSED
+ *     (via {@link verifySidecar}).
+ *   - sidecar ABSENT (404) + non-strict → emit one WARNING, proceed.
+ *   - sidecar ABSENT (404) + strict (`requireSidecar`) → FAIL CLOSED.
+ *
+ * @param mapUrl the EXACT URL the map was fetched from; the sidecar URL is
+ *   this plus `.sha256`.
+ * @param mapBasename the map's bare basename (`<version_code>.json`), threaded
+ *   to {@link verifySidecar} for the basename-token check.
+ * @param requireSidecar strict toggle: when `true`, an absent sidecar fails
+ *   closed instead of warn-and-proceed (computed once at the call site as the
+ *   OR of the CLI flag and the config field).
+ * @throws RosettaError on a verification failure or a missing sidecar in
+ *   strict mode.
+ */
+async function applySidecarPolicy(
+    mapUrl: string,
+    mapBasename: string,
+    rawMapBytes: string,
+    requireSidecar: boolean,
+    config: PullConfig,
+    warn?: Writer,
+): Promise<void> {
+    const sidecar = await fetchSidecar(mapUrl, config);
+    if (sidecar === null) {
+        if (requireSidecar) {
+            throw new RosettaError(
+                `no .sha256 sidecar found for ${mapUrl} (HTTP 404) and --require-sidecar ` +
+                    `is set: refusing to write unverified bytes. Either drop --require-sidecar ` +
+                    `to proceed without transport-integrity verification, or contribute the ` +
+                    `missing sidecar to the rosetta-maps repo.`,
+            );
+        }
+        warn?.(
+            `warning: no .sha256 sidecar found for ${mapUrl} (HTTP 404) — proceeding ` +
+                `WITHOUT transport-integrity verification. Pass --require-sidecar to fail ` +
+                `closed on a missing sidecar.`,
+        );
+        return;
+    }
+    // Present: verify against the EXACT raw bytes (mismatch/malformed/basename
+    // mismatch throws).
+    verifySidecar(rawMapBytes, sidecar, mapBasename);
 }
 
 /**
@@ -345,8 +615,26 @@ export async function writePulledMap(
         assertContained(outPath);
     }
 
-    // Fetch the raw JSON from the remote repo.
-    const raw = await fetchMapJson(opts.app, opts.version_code, config);
+    // Fetch the raw JSON from the remote repo. `fetchMapJson` returns the exact
+    // URL it fetched from so the sidecar URL is derived from that one URL (not
+    // re-derived with a second `buildMapUrl` call).
+    const { url: mapUrl, body: raw } = await fetchMapJson(opts.app, opts.version_code, config);
+
+    // Transport-integrity gate: verify the detached `.sha256` sidecar against
+    // the EXACT raw fetched bytes BEFORE they are parsed/trusted/written, so
+    // tampered or corrupted bytes are rejected as early as possible. The strict
+    // toggle is the OR of the CLI flag and the typed config field, computed
+    // once here. The basename token (when the sidecar carries one) must equal
+    // the map's `<version_code>.json` filename.
+    const requireSidecar = config.requireSidecar || opts.requireSidecar;
+    await applySidecarPolicy(
+        mapUrl,
+        `${opts.version_code}.json`,
+        raw,
+        requireSidecar,
+        config,
+        warn,
+    );
 
     // Parse and validate against the schema — fail loudly on a bad map.
     let parsed: unknown;

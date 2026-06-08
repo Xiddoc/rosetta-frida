@@ -6,19 +6,24 @@
  * shared in-memory FakeFs so no real disk is touched.
  */
 
+import { createHash } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import {
     parsePullArgs,
     parsePullTarget,
     buildMapUrl,
     fetchMapJson,
+    fetchSidecar,
+    verifySidecar,
     writePulledMap,
     runPull,
     defaultMapPath,
     isPinnedRef,
     assertValidPullConfig,
     MAX_MAP_BYTES,
+    MAX_SIDECAR_BYTES,
     type PullConfig,
+    type PullResponse,
 } from '../../cli/commands/pull.js';
 import { RosettaError } from '../../src/errors.js';
 import type { FsLike } from '../../cli/commands/io.js';
@@ -39,28 +44,77 @@ const VALID_MAP_JSON = JSON.stringify({
     },
 });
 
-/** Build a mock PullConfig that returns the given JSON payload. */
-function mockConfig(payload: string, status = 200, headers?: Record<string, string>): PullConfig {
+/** Lowercase-hex SHA-256 of a payload, as it appears in a `sha256sum` sidecar. */
+function sha256Hex(payload: string): string {
+    return createHash('sha256').update(payload, 'utf8').digest('hex');
+}
+
+/** A coreutils `sha256sum`-format sidecar line for `payload`. */
+function sidecarFor(payload: string, filename = '30405.json'): string {
+    return `${sha256Hex(payload)}  ${filename}\n`;
+}
+
+/** One canned HTTP response for the mock fetch seam. */
+function makeResponse(
+    payload: string,
+    status = 200,
+    headers?: Record<string, string>,
+): PullResponse {
     return {
-        mapsRepoBaseUrl: 'https://raw.example.com/rosetta-maps',
-        mapsRepoRef: 'abc123',
-        fetch: (_url: string) =>
-            Promise.resolve({
-                ok: status >= 200 && status < 300,
-                status,
-                text: () => Promise.resolve(payload),
-                headers: headers
-                    ? { get: (name: string) => headers[name.toLowerCase()] ?? null }
-                    : undefined,
-            }),
+        ok: status >= 200 && status < 300,
+        status,
+        text: () => Promise.resolve(payload),
+        headers: headers ? { get: (name) => headers[name.toLowerCase()] ?? null } : undefined,
     };
 }
 
-/** Mock config that throws a network error. */
+/**
+ * Options for {@link mockConfig}'s sidecar behaviour. By default the sidecar
+ * carries a correctly-computed digest of the map payload (happy path). Set
+ * `sidecarStatus: 404` to simulate an absent sidecar, or `sidecarText` to
+ * inject a malformed/mismatching body.
+ */
+interface MockOpts {
+    status?: number;
+    headers?: Record<string, string>;
+    /** Sidecar HTTP status (default 200). */
+    sidecarStatus?: number;
+    /** Sidecar body (default: a valid sidecar line for the map payload). */
+    sidecarText?: string;
+    /** Sidecar response headers (e.g. an oversize Content-Length). */
+    sidecarHeaders?: Record<string, string>;
+    /** Strict sidecar policy on the config (default false). */
+    requireSidecar?: boolean;
+}
+
+/**
+ * Build a mock PullConfig that routes by URL: the `.sha256` sidecar request
+ * gets the sidecar response, everything else gets the map payload. The
+ * sidecar defaults to a valid matching digest so map-focused tests need no
+ * extra wiring.
+ */
+function mockConfig(payload: string, opts: MockOpts = {}): PullConfig {
+    return {
+        mapsRepoBaseUrl: 'https://raw.example.com/rosetta-maps',
+        mapsRepoRef: 'abc123',
+        requireSidecar: opts.requireSidecar ?? false,
+        fetch: (url: string) => {
+            if (url.endsWith('.sha256')) {
+                const status = opts.sidecarStatus ?? 200;
+                const text = opts.sidecarText ?? sidecarFor(payload);
+                return Promise.resolve(makeResponse(text, status, opts.sidecarHeaders));
+            }
+            return Promise.resolve(makeResponse(payload, opts.status ?? 200, opts.headers));
+        },
+    };
+}
+
+/** Mock config that throws a network error (for both map and sidecar). */
 function networkErrorConfig(): PullConfig {
     return {
         mapsRepoBaseUrl: 'https://raw.example.com/rosetta-maps',
         mapsRepoRef: 'abc123',
+        requireSidecar: false,
         fetch: (_url: string) => Promise.reject(new Error('Network unreachable')),
     };
 }
@@ -156,6 +210,13 @@ describe('parsePullArgs', () => {
         expect(parsePullArgs(['com.example.app@30405', '-f']).force).toBe(true);
     });
 
+    it('accepts --require-sidecar (default false)', () => {
+        expect(parsePullArgs(['com.example.app@30405']).requireSidecar).toBe(false);
+        expect(parsePullArgs(['com.example.app@30405', '--require-sidecar']).requireSidecar).toBe(
+            true,
+        );
+    });
+
     it('errors when -o has no value', () => {
         expect(() => parsePullArgs(['com.example.app@30405', '-o'])).toThrow(/requires a value/);
     });
@@ -222,26 +283,29 @@ describe('buildMapUrl', () => {
 // ---------------------------------------------------------------------------
 
 describe('fetchMapJson', () => {
-    it('returns the body text on HTTP 200', async () => {
-        const json = await fetchMapJson('com.example.app', 30405, mockConfig(VALID_MAP_JSON));
-        expect(json).toBe(VALID_MAP_JSON);
+    it('returns the body text and fetched URL on HTTP 200', async () => {
+        const result = await fetchMapJson('com.example.app', 30405, mockConfig(VALID_MAP_JSON));
+        expect(result.body).toBe(VALID_MAP_JSON);
+        expect(result.url).toBe(
+            'https://raw.example.com/rosetta-maps/abc123/maps/com.example.app/30405.json',
+        );
     });
 
     it('throws a loud error on HTTP 404 (exact miss)', async () => {
         await expect(
-            fetchMapJson('com.example.app', 99999, mockConfig('Not Found', 404)),
+            fetchMapJson('com.example.app', 99999, mockConfig('Not Found', { status: 404 })),
         ).rejects.toThrow(/no map found for com\.example\.app@99999/);
     });
 
     it('error on 404 includes actionable guidance (GitHub URL)', async () => {
-        await expect(fetchMapJson('com.example.app', 99999, mockConfig('', 404))).rejects.toThrow(
-            /https:\/\/github\.com\/Xiddoc\/rosetta-maps/,
-        );
+        await expect(
+            fetchMapJson('com.example.app', 99999, mockConfig('', { status: 404 })),
+        ).rejects.toThrow(/https:\/\/github\.com\/Xiddoc\/rosetta-maps/);
     });
 
     it('throws on non-200 non-404 HTTP status', async () => {
         await expect(
-            fetchMapJson('com.example.app', 30405, mockConfig('Server Error', 500)),
+            fetchMapJson('com.example.app', 30405, mockConfig('Server Error', { status: 500 })),
         ).rejects.toThrow(/HTTP 500/);
     });
 
@@ -265,7 +329,7 @@ describe('fetchMapJson', () => {
     });
 
     it('rejects an oversize body by Content-Length pre-check', async () => {
-        const cfg = mockConfig('{}', 200, { 'content-length': String(MAX_MAP_BYTES + 1) });
+        const cfg = mockConfig('{}', { headers: { 'content-length': String(MAX_MAP_BYTES + 1) } });
         await expect(fetchMapJson('com.example.app', 30405, cfg)).rejects.toThrow(
             /too large: Content-Length/,
         );
@@ -273,8 +337,10 @@ describe('fetchMapJson', () => {
 
     it('ignores a non-numeric Content-Length and falls through to the body check', async () => {
         // Header lies/garbled → pre-check is skipped; small body passes.
-        const cfg = mockConfig(VALID_MAP_JSON, 200, { 'content-length': 'not-a-number' });
-        await expect(fetchMapJson('com.example.app', 30405, cfg)).resolves.toBe(VALID_MAP_JSON);
+        const cfg = mockConfig(VALID_MAP_JSON, { headers: { 'content-length': 'not-a-number' } });
+        await expect(fetchMapJson('com.example.app', 30405, cfg)).resolves.toMatchObject({
+            body: VALID_MAP_JSON,
+        });
     });
 
     it('rejects an oversize body by decoded length even when no header is present', async () => {
@@ -287,9 +353,9 @@ describe('fetchMapJson', () => {
     it('accepts a body exactly at the limit', async () => {
         // No header; body length == MAX is allowed (only strictly over rejects).
         const atLimit = 'y'.repeat(MAX_MAP_BYTES);
-        await expect(fetchMapJson('com.example.app', 30405, mockConfig(atLimit))).resolves.toBe(
-            atLimit,
-        );
+        await expect(
+            fetchMapJson('com.example.app', 30405, mockConfig(atLimit)),
+        ).resolves.toMatchObject({ body: atLimit });
     });
 });
 
@@ -358,6 +424,169 @@ describe('assertValidPullConfig', () => {
 });
 
 // ---------------------------------------------------------------------------
+// verifySidecar (pure function)
+// ---------------------------------------------------------------------------
+
+describe('verifySidecar', () => {
+    const MAP = VALID_MAP_JSON;
+    const BN = '30405.json';
+
+    it('accepts a sidecar whose digest matches the raw bytes', () => {
+        expect(verifySidecar(MAP, sidecarFor(MAP), BN)).toEqual({ ok: true });
+    });
+
+    it('accepts a bare digest line (no two-spaces-and-filename)', () => {
+        // Only the first whitespace token matters; an absent basename is allowed.
+        expect(verifySidecar(MAP, sha256Hex(MAP), BN)).toEqual({ ok: true });
+    });
+
+    it('tolerates leading/trailing whitespace around the line', () => {
+        expect(verifySidecar(MAP, `  ${sidecarFor(MAP).trimEnd()}  `, BN)).toEqual({ ok: true });
+    });
+
+    it('tolerates a tab separator between digest and basename', () => {
+        expect(verifySidecar(MAP, `${sha256Hex(MAP)}\t${BN}\n`, BN)).toEqual({ ok: true });
+    });
+
+    it('lowercases an upper-case hex digest before comparing', () => {
+        const upper = sha256Hex(MAP).toUpperCase();
+        expect(verifySidecar(MAP, `${upper}  ${BN}`, BN)).toEqual({ ok: true });
+    });
+
+    // --- Basename token (rule #4): present+correct → pass, present+wrong →
+    //     fail closed, absent → pass. ---
+
+    it('accepts a present basename token that matches the map basename', () => {
+        expect(verifySidecar(MAP, `${sha256Hex(MAP)}  ${BN}`, BN)).toEqual({ ok: true });
+    });
+
+    it('accepts an absent basename token (digest-only)', () => {
+        expect(verifySidecar(MAP, `${sha256Hex(MAP)}\n`, BN)).toEqual({ ok: true });
+    });
+
+    it('throws (fail closed) on a present basename token that does NOT match', () => {
+        expect(() => verifySidecar(MAP, `${sha256Hex(MAP)}  99999.json`, BN)).toThrow(
+            /basename mismatch/,
+        );
+    });
+
+    // --- Single-line rule (rule #1): a second non-empty line fails closed. ---
+
+    it('throws (fail closed) on a multi-line sidecar (extra non-empty line)', () => {
+        const text = `${sha256Hex(MAP)}  ${BN}\n${sha256Hex(MAP)}  other.json\n`;
+        expect(() => verifySidecar(MAP, text, BN)).toThrow(/malformed .sha256/);
+    });
+
+    it('tolerates a CRLF line ending with a basename token', () => {
+        // The trailing `\r` is whitespace and is dropped during tokenization.
+        expect(verifySidecar(MAP, `${sha256Hex(MAP)}  ${BN}\r\n`, BN)).toEqual({ ok: true });
+    });
+
+    it('throws (fail closed) on a digest mismatch, naming expected vs actual', () => {
+        const wrong = 'a'.repeat(64);
+        expect(() => verifySidecar(MAP, `${wrong}  ${BN}`, BN)).toThrow(/sidecar mismatch/);
+        expect(() => verifySidecar(MAP, `${wrong}  ${BN}`, BN)).toThrow(
+            new RegExp(`Expected ${wrong}.*computed ${sha256Hex(MAP)}`, 's'),
+        );
+    });
+
+    it('throws (fail closed) on a too-short hex token', () => {
+        expect(() => verifySidecar(MAP, 'deadbeef  30405.json', BN)).toThrow(/malformed .sha256/);
+    });
+
+    it('throws (fail closed) on a non-hex token', () => {
+        // 64 chars but contains non-hex 'z'.
+        const bad = 'z'.repeat(64);
+        expect(() => verifySidecar(MAP, `${bad}  ${BN}`, BN)).toThrow(/malformed .sha256/);
+    });
+
+    it('throws (fail closed) on an empty sidecar', () => {
+        expect(() => verifySidecar(MAP, '', BN)).toThrow(/malformed .sha256/);
+        expect(() => verifySidecar(MAP, '   \n', BN)).toThrow(/malformed .sha256/);
+    });
+
+    it('is a RosettaError on failure', () => {
+        expect(() => verifySidecar(MAP, 'nope', BN)).toThrow(RosettaError);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// fetchSidecar
+// ---------------------------------------------------------------------------
+
+describe('fetchSidecar', () => {
+    const MAP_URL = 'https://raw.example.com/rosetta-maps/abc123/maps/com.example.app/30405.json';
+
+    it('appends .sha256 and returns the sidecar text on 200', async () => {
+        let seen = '';
+        const cfg: PullConfig = {
+            ...mockConfig(VALID_MAP_JSON),
+            fetch: (url) => {
+                seen = url;
+                return Promise.resolve(makeResponse('digest  30405.json'));
+            },
+        };
+        const text = await fetchSidecar(MAP_URL, cfg);
+        expect(seen).toBe(`${MAP_URL}.sha256`);
+        expect(text).toBe('digest  30405.json');
+    });
+
+    it('returns null on a 404 (absent sidecar)', async () => {
+        const cfg = mockConfig(VALID_MAP_JSON, { sidecarStatus: 404 });
+        await expect(fetchSidecar(MAP_URL, cfg)).resolves.toBeNull();
+    });
+
+    it('throws on a non-200/non-404 status', async () => {
+        const cfg = mockConfig(VALID_MAP_JSON, { sidecarStatus: 500 });
+        await expect(fetchSidecar(MAP_URL, cfg)).rejects.toThrow(/HTTP 500 fetching sidecar/);
+    });
+
+    it('wraps a network error with a useful message', async () => {
+        await expect(fetchSidecar(MAP_URL, networkErrorConfig())).rejects.toThrow(
+            /network error fetching sidecar/,
+        );
+    });
+
+    it('wraps a non-Error thrown object (string) via String(err)', async () => {
+        const cfg: PullConfig = {
+            ...mockConfig(VALID_MAP_JSON),
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+            fetch: (_url) => Promise.reject('refused'),
+        };
+        await expect(fetchSidecar(MAP_URL, cfg)).rejects.toThrow(/refused/);
+    });
+
+    it('rejects an oversize sidecar by Content-Length pre-check', async () => {
+        const cfg = mockConfig(VALID_MAP_JSON, {
+            sidecarHeaders: { 'content-length': String(MAX_SIDECAR_BYTES + 1) },
+        });
+        await expect(fetchSidecar(MAP_URL, cfg)).rejects.toThrow(
+            /sidecar.*too large: Content-Length/,
+        );
+    });
+
+    it('ignores a non-numeric sidecar Content-Length and falls through', async () => {
+        const cfg = mockConfig(VALID_MAP_JSON, {
+            sidecarText: 'abc  30405.json',
+            sidecarHeaders: { 'content-length': 'garbage' },
+        });
+        await expect(fetchSidecar(MAP_URL, cfg)).resolves.toBe('abc  30405.json');
+    });
+
+    it('rejects an oversize sidecar by decoded length when no header is present', async () => {
+        const big = 'x'.repeat(MAX_SIDECAR_BYTES + 1);
+        const cfg = mockConfig(VALID_MAP_JSON, { sidecarText: big });
+        await expect(fetchSidecar(MAP_URL, cfg)).rejects.toThrow(/sidecar.*too large: \d+ bytes/);
+    });
+
+    it('accepts a sidecar exactly at the size limit', async () => {
+        const atLimit = 'y'.repeat(MAX_SIDECAR_BYTES);
+        const cfg = mockConfig(VALID_MAP_JSON, { sidecarText: atLimit });
+        await expect(fetchSidecar(MAP_URL, cfg)).resolves.toBe(atLimit);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // writePulledMap
 // ---------------------------------------------------------------------------
 
@@ -417,7 +646,7 @@ describe('writePulledMap', () => {
     it('fails loudly on a 404 (exact miss)', async () => {
         const { fs } = makeFs();
         await expect(
-            writePulledMap(['com.example.app@99999'], fs, mockConfig('Not Found', 404)),
+            writePulledMap(['com.example.app@99999'], fs, mockConfig('Not Found', { status: 404 })),
         ).rejects.toThrow(/no map found for com\.example\.app@99999/);
     });
 
@@ -498,9 +727,11 @@ describe('writePulledMap', () => {
             classes: { 'com.example.app.X': { obfuscated: 'aaaa' } },
         });
         const { fs } = makeFs();
-        await expect(
-            writePulledMap(['com.example.app@99'], fs, mockConfig(mismatched)),
-        ).rejects.toThrow(
+        // The map is requested as @99, so its basename is `99.json`; the
+        // sidecar must name that (or be digest-only) to pass the basename check
+        // and reach the identity cross-check under test.
+        const cfg = mockConfig(mismatched, { sidecarText: sidecarFor(mismatched, '99.json') });
+        await expect(writePulledMap(['com.example.app@99'], fs, cfg)).rejects.toThrow(
             /identity does not match.*com\.example\.app@99.*com\.example\.app@30405/s,
         );
     });
@@ -518,6 +749,123 @@ describe('writePulledMap', () => {
         const bad: PullConfig = { ...mockConfig(VALID_MAP_JSON), mapsRepoBaseUrl: 'not a url' };
         await expect(writePulledMap(['com.example.app@30405'], fs, bad)).rejects.toThrow(
             /invalid pull config/,
+        );
+    });
+
+    // --- Sidecar transport-integrity policy ---
+
+    it('writes when a present sidecar matches the fetched bytes', async () => {
+        const { fs, files } = makeFs();
+        const out = await writePulledMap(['com.example.app@30405'], fs, mockConfig(VALID_MAP_JSON));
+        expect(files.has(out)).toBe(true);
+    });
+
+    it('fails closed when a present sidecar mismatches the fetched bytes', async () => {
+        const { fs, files } = makeFs();
+        const cfg = mockConfig(VALID_MAP_JSON, {
+            sidecarText: `${'a'.repeat(64)}  30405.json`,
+        });
+        await expect(writePulledMap(['com.example.app@30405'], fs, cfg)).rejects.toThrow(
+            /sidecar mismatch/,
+        );
+        // Tampered bytes are rejected BEFORE any write.
+        expect(files.size).toBe(0);
+    });
+
+    it('fails closed on a malformed sidecar', async () => {
+        const { fs } = makeFs();
+        const cfg = mockConfig(VALID_MAP_JSON, { sidecarText: 'not-a-digest  30405.json' });
+        await expect(writePulledMap(['com.example.app@30405'], fs, cfg)).rejects.toThrow(
+            /malformed .sha256/,
+        );
+    });
+
+    it('fails closed when a present sidecar names the WRONG basename', async () => {
+        // Digest is correct, but the basename token is misfiled — the threaded
+        // `<version_code>.json` basename catches it.
+        const { fs, files } = makeFs();
+        const cfg = mockConfig(VALID_MAP_JSON, {
+            sidecarText: `${sha256Hex(VALID_MAP_JSON)}  99999.json\n`,
+        });
+        await expect(writePulledMap(['com.example.app@30405'], fs, cfg)).rejects.toThrow(
+            /basename mismatch/,
+        );
+        expect(files.size).toBe(0);
+    });
+
+    it('writes when a present sidecar carries the CORRECT basename token', async () => {
+        const { fs, files } = makeFs();
+        const cfg = mockConfig(VALID_MAP_JSON, {
+            sidecarText: `${sha256Hex(VALID_MAP_JSON)}  30405.json\n`,
+        });
+        const out = await writePulledMap(['com.example.app@30405'], fs, cfg);
+        expect(files.has(out)).toBe(true);
+    });
+
+    it('verifies the sidecar against the RAW fetched bytes, not the canonical re-render', async () => {
+        // Compact (no indentation) raw bytes; the sidecar digests the COMPACT
+        // form. The written artifact is re-rendered canonical (indented), so a
+        // digest over the canonical form would NOT match — proving we hash what
+        // we received, before canonicalization.
+        const compact = JSON.stringify(JSON.parse(VALID_MAP_JSON));
+        const { fs, files } = makeFs();
+        const out = await writePulledMap(['com.example.app@30405'], fs, mockConfig(compact));
+        const written = files.get(out)!;
+        expect(written).toContain('\n    "app"'); // canonical (indented) on disk
+        expect(written).not.toBe(compact); // differs from the hashed raw bytes
+    });
+
+    it('warns and proceeds when the sidecar is absent (non-strict default)', async () => {
+        const { fs, files } = makeFs();
+        const warnings: string[] = [];
+        const cfg = mockConfig(VALID_MAP_JSON, { sidecarStatus: 404 });
+        const out = await writePulledMap(['com.example.app@30405'], fs, cfg, (l) =>
+            warnings.push(l),
+        );
+        expect(files.has(out)).toBe(true);
+        expect(warnings.some((l) => /no \.sha256 sidecar/.test(l))).toBe(true);
+    });
+
+    it('proceeds silently on an absent sidecar when no warn writer is given', async () => {
+        const { fs, files } = makeFs();
+        const cfg = mockConfig(VALID_MAP_JSON, { sidecarStatus: 404 });
+        const out = await writePulledMap(['com.example.app@30405'], fs, cfg);
+        expect(files.has(out)).toBe(true);
+    });
+
+    it('fails closed on an absent sidecar in strict mode (config.requireSidecar)', async () => {
+        const { fs, files } = makeFs();
+        const cfg = mockConfig(VALID_MAP_JSON, { sidecarStatus: 404, requireSidecar: true });
+        await expect(writePulledMap(['com.example.app@30405'], fs, cfg)).rejects.toThrow(
+            /no \.sha256 sidecar found.*--require-sidecar/s,
+        );
+        expect(files.size).toBe(0);
+    });
+
+    it('fails closed on an absent sidecar via the --require-sidecar CLI flag', async () => {
+        const { fs } = makeFs();
+        // Config default is non-strict; the CLI flag opts in.
+        const cfg = mockConfig(VALID_MAP_JSON, { sidecarStatus: 404 });
+        await expect(
+            writePulledMap(['com.example.app@30405', '--require-sidecar'], fs, cfg),
+        ).rejects.toThrow(/no \.sha256 sidecar found/);
+    });
+
+    it('still verifies a PRESENT mismatching sidecar even without --require-sidecar', async () => {
+        const { fs } = makeFs();
+        const cfg = mockConfig(VALID_MAP_JSON, { sidecarText: `${'b'.repeat(64)}  30405.json` });
+        await expect(writePulledMap(['com.example.app@30405'], fs, cfg)).rejects.toThrow(
+            /sidecar mismatch/,
+        );
+    });
+
+    it('rejects an oversize sidecar body (DoS guard)', async () => {
+        const { fs } = makeFs();
+        const cfg = mockConfig(VALID_MAP_JSON, {
+            sidecarText: 'x'.repeat(MAX_SIDECAR_BYTES + 1),
+        });
+        await expect(writePulledMap(['com.example.app@30405'], fs, cfg)).rejects.toThrow(
+            /sidecar.*too large/,
         );
     });
 });
@@ -570,5 +918,22 @@ describe('runPull', () => {
         const pinned: PullConfig = { ...mockConfig(VALID_MAP_JSON), mapsRepoRef: 'v1.0.0' };
         await runPull(['com.example.app@30405', '-o', 'm.json'], makeIo(fakeFs, captured), pinned);
         expect(captured.stderr).toEqual([]);
+    });
+
+    it('emits the missing-sidecar warning to stderr (not stdout)', async () => {
+        const fakeFs = makeFakeFs();
+        const captured = makeCaptured();
+        const cfg: PullConfig = {
+            ...mockConfig(VALID_MAP_JSON, { sidecarStatus: 404 }),
+            mapsRepoRef: 'v1.0.0', // pinned so the only warning is the sidecar one
+        };
+        const msg = await runPull(
+            ['com.example.app@30405', '-o', 'm.json'],
+            makeIo(fakeFs, captured),
+            cfg,
+        );
+        expect(msg).toBe('wrote m.json');
+        expect(captured.stderr.some((l) => /no \.sha256 sidecar/.test(l))).toBe(true);
+        expect(captured.stdout).toEqual([]);
     });
 });

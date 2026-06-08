@@ -70,8 +70,8 @@ const COMMANDS = {
         // runPull takes a third `config` arg; bind the production default so
         // the router table stays uniform (all entries are CommandRun).
         run: (args, io) => runPull(args, io, defaultPullConfig()),
-        invocation: 'pull <app>@<version_code>',
-        summary: 'Fetch + validate map from rosetta-maps repo',
+        invocation: 'pull <app>@<version_code> [options]',
+        summary: 'Fetch + verify map from rosetta-maps repo (--require-sidecar)',
     },
     validate: {
         run: runValidate,
