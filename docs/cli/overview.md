@@ -20,6 +20,11 @@ Commands:
   patch <bundle.js> --map <new.json>   Replace embedded map in bundle
   extract <bundle.js> -o <out.json>    Pull embedded map out of bundle
   inspect <bundle.js>                  One-line summary of embedded map
+  diff <from> <to> [--json]            Structural diff between two maps (what rotated)
+  merge <a> <b> [...] -o <out>         Combine partial maps for one (app, version_code)
+  merge-bundle <a> <b> [...] -o <out>  Alias of merge (combine partial maps)
+  verify <map>                         Deeper-than-schema semantic consistency checks
+  types <map> -o <out.d.ts>            Emit .d.ts real-name stubs for autocompletion
 ```
 
 | Command | What it does | Operates on |
@@ -31,6 +36,10 @@ Commands:
 | [`patch`](patch.md) | Replace the embedded map in a compiled bundle with a fresh one. In-place by default. | A compiled bundle + a new map. |
 | [`extract`](extract.md) | Pull the embedded map back out of a compiled bundle into a standalone JSON file. | A compiled bundle. |
 | [`inspect`](inspect.md) | Print a one-line summary of the map embedded in a compiled bundle. | A compiled bundle. |
+| [`diff`](diff.md) | Report what rotated (classes/methods/fields/signatures) between two maps. Human report + `--json`. | Two map files. |
+| [`merge`](merge.md) | Combine several partial maps for one `(app, version_code)` into one (sources unioned, entries merged; `--strict` errors on conflicting obfuscated names). `merge-bundle` is an alias. | Two or more map files. |
+| [`verify`](verify.md) | Run semantic consistency checks beyond the schema (dangling `extends`, duplicate obfuscated names per dex, un-translated arg types, `aidl_txn` collisions). | One map file. |
+| [`types`](types.md) | Emit a `.d.ts` of the map's real names so hook authors get autocompletion. | One map file. |
 
 ## Two command shapes
 
@@ -118,25 +127,24 @@ npx rosetta patch hook.bundle.js --map maps/com.example.app/${VERSION}.json -o h
 This is the CI flow the marker block was designed for. See
 [Marker block](../maps/marker-block.md) for the full mechanism.
 
-## What's not in V1
+## Shipped in V1.5
 
-The following commands are planned for V1.5 but not in V1.0:
+The map-authoring verbs once listed here as deferred have landed:
+[`diff`](diff.md), [`merge`](merge.md) (+ the `merge-bundle` alias),
+[`verify`](verify.md), and [`types`](types.md). See their pages for the
+full grammar.
 
-- `rosetta diff <a.json> <b.json>` — show rotation deltas between
-  versions (the canonical "what changed in this release" report).
-- `rosetta merge <a.json> <b.json> [...]` — merge partial maps,
-  preferring higher-confidence entries.
-- `rosetta merge-bundle <bundle.js> <map1.json> [...]` — convert a
-  single-map bundle to a registry bundle.
-- `rosetta types <map.json> -o <out.d.ts>` — generate per-map
-  TypeScript declarations.
-- `rosetta migrate <map.json>` — run schema migrators on old maps.
-- `rosetta verify --device <id>` — live health check via
-  `frida-server`.
+## Still deferred
+
+- `rosetta migrate <map.json>` — run schema migrators on old maps
+  (tracked with the rosetta-maps schema-evolution work; the schema owner
+  defines the migration contract).
+- `rosetta verify --device <id>` — a *live* health check via
+  `frida-server`. Today's [`verify`](verify.md) is static-only (semantic
+  checks on a map it is handed); a device-backed mode is future work.
+- A `frida-compile` plugin for automatic marker-block wrapping.
 
 > The build-time community-registry fetch (once sketched as
 > `rosetta fetch`) **shipped in V1.0 as [`rosetta pull`](pull.md)**. It
 > pulls the single verified map for an `(app, version_code)` from the
 > rosetta-maps repo on the developer's machine.
-
-Stay tuned for V1.5.

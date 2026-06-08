@@ -146,6 +146,10 @@ nav:
       - rosetta patch: cli/patch.md
       - rosetta extract: cli/extract.md
       - rosetta inspect: cli/inspect.md
+      - rosetta diff: cli/diff.md
+      - rosetta merge: cli/merge.md
+      - rosetta verify: cli/verify.md
+      - rosetta types: cli/types.md
   - Recipes:
       - AIDL stub hooks: recipes/aidl-stub-hook.md
       - Overloaded methods: recipes/overloaded-methods.md

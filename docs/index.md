@@ -40,9 +40,10 @@ every time the obfuscator rotates.
     ---
 
     `rosetta init`, `pull`, `validate`, `convert`, `patch`, `extract`,
-    `inspect` — scaffold maps, pull verified maps from the community
-    repo at build time, swap them into compiled bundles, and audit what
-    every bundle actually targets.
+    `inspect`, `diff`, `merge`, `verify`, `types` — scaffold maps, pull
+    verified maps from the community repo at build time, swap them into
+    compiled bundles, diff/merge/verify maps, generate real-name type
+    stubs, and audit what every bundle actually targets.
 
 </div>
 
@@ -125,7 +126,8 @@ the full motivating story.
   between `-----BEGIN ROSETTA MAP-----` / `-----END ROSETTA MAP-----`
   comments. Swap maps without recompiling via `rosetta patch`.
 - **CLI tooling.** `init`, `pull`, `validate`, `convert`, `patch`,
-  `extract`, `inspect`. `pull` fetches the verified map for an
+  `extract`, `inspect`, `diff`, `merge`, `verify`, `types`. `pull`
+  fetches the verified map for an
   `(app, version_code)` from the community
   [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo at
   build time (never on the device).
