@@ -1,50 +1,37 @@
 /**
- * `rosetta merge <a> <b> [...] -o <out.json>` — combine several partial
- * maps for the SAME `(app, version_code)` into one canonical map.
+ * `rosetta merge <a> <b> [...] -o <out.json>` — combine several partial maps
+ * for the SAME `(app, version_code)` into one canonical map.
  *
- * The motivating workflow (AGENTS.md "Form factor"): a single version's
- * map is assembled from several sources — a sigmatcher run, hand-authored
- * entries, and rosetta-runtime-discovered names — each emitted as its own
- * partial map. `merge` folds them into one artifact, unioning the
- * `sources[]` provenance and the per-class method/field entries.
+ * Thin CLI wrapper: arg-parse + IO + call. The pure fold engine lives in
+ * `src/merge/` ({@link mergeMaps}, an options-object signature) and is
+ * re-exported from the package root for programmatic use (library-first
+ * parity with `convert`). This file loads the inputs, folds them, re-validates
+ * the result through the canonical schema, and writes the JSON.
  *
- * ## Conflict policy (deterministic)
- *
- * Inputs are merged LEFT-TO-RIGHT; for any key that appears in more than
- * one input, **last-wins** — a later input on the command line overrides an
- * earlier one. This makes the order an explicit, documented precedence
- * (put your highest-trust source last). The fold is recursive:
- *   - top-level scalar identity (`app`, `version`, `version_code`, ...) —
- *     last-wins;
- *   - `sources[]` — concatenated in order (provenance is additive, never
- *     dropped);
- *   - `classes[realName]` — merged entry-by-entry: a class present in both
- *     has its `methods` / `fields` unioned (last-wins per real name) and
- *     its scalar fields (`obfuscated`, `extends`, ...) last-wins.
- *
- * `--strict` turns a *conflicting* obfuscated name into a hard error: if
- * two inputs map the same real name to DIFFERENT obfuscated names (a class,
- * method overload, or field), merge fails closed rather than silently
- * picking the last. Identical values never conflict. This is the
- * "fail hard by default" posture (Decision 3) made opt-in for merges,
- * where overlaying a refined source on a coarse one is a legitimate
- * override.
- *
- * The merged result is validated through the canonical schema before it is
- * written, so a fold that produced an invalid shape fails loudly.
- *
- * `merge-bundle` is the same fold reachable under a second verb name for
- * discoverability; it shares this implementation.
+ * Inputs are merged LEFT-TO-RIGHT (last-wins). `--strict` turns a conflicting
+ * obfuscated name into a hard error. In non-strict mode each last-wins
+ * override of an obfuscated name — the "silent wrong name corrupts hooks"
+ * hazard — emits an `io.stderr` notice so the operator sees what got
+ * overridden. See `src/merge/merge.ts` for the full conflict policy.
  */
 
 import { RosettaError } from '../../src/errors.js';
 import { validateStructure } from '../../src/convert/index.js';
 import { renderJson } from '../../src/convert/json.js';
-import type { ClassEntry, FieldEntry, MethodEntry, RosettaMap } from '../../src/types/map.js';
-import type { CommandIo, FsLike } from './io.js';
+import { mergeMaps, type ObfOverride } from '../../src/merge/merge.js';
+import type { RosettaMap } from '../../src/types/map.js';
+import type { CommandIo, FsLike, Writer } from './io.js';
 import { writeNew } from './io.js';
 import { loadMap } from './validate.js';
 import { parseArgs, type ArgSpec } from './args.js';
+
+// Re-export the merge core through the command module too, so existing callers
+// and tests that import from here keep working. (The merge fold's options type
+// is `MergeOptions` from `src/merge`; this module's own `MergeOptions` below is
+// the distinct CLI arg shape, so only the fold function + override type are
+// re-exported here — import the fold options type from the package root.)
+export { mergeMaps } from '../../src/merge/merge.js';
+export type { ObfOverride } from '../../src/merge/merge.js';
 
 /** Parsed argument shape for `merge`. */
 export interface MergeOptions {
@@ -86,152 +73,35 @@ export function parseMergeArgs(argv: readonly string[]): MergeOptions {
     };
 }
 
-/** Raised when `--strict` finds two inputs disagreeing on an obfuscated name. */
-function conflict(kind: string, realName: string, a: string, b: string): RosettaError {
-    return new RosettaError(
-        `conflicting obfuscated name for ${kind} '${realName}': '${a}' vs '${b}' ` +
-            `(pass without --strict to take the last input's value)`,
+/** Format one non-strict obfuscated-name override as a stderr notice line. */
+function overrideNotice(o: ObfOverride): string {
+    return (
+        `note: ${o.kind} '${o.name}' obfuscated name overridden ` +
+        `'${o.from}' -> '${o.to}' (last input wins; pass --strict to fail instead)`
     );
 }
 
-/** Merge two method-overload arrays for one real name (last-wins by signature). */
-function mergeOverloads(
-    realName: string,
-    base: readonly MethodEntry[],
-    next: readonly MethodEntry[],
-    strict: boolean,
-): MethodEntry[] {
-    const out = [...base];
-    for (const entry of next) {
-        const idx = out.findIndex((e) => e.signature === entry.signature);
-        if (idx < 0) {
-            out.push(entry);
-            continue;
-        }
-        const existing = out[idx] as MethodEntry;
-        if (strict && existing.obfuscated !== entry.obfuscated) {
-            throw conflict('method', realName, existing.obfuscated, entry.obfuscated);
-        }
-        out[idx] = entry; // last-wins
-    }
-    return out;
-}
-
-/** Merge two method maps (keyed by real name). */
-function mergeMethods(
-    base: ClassEntry['methods'],
-    next: ClassEntry['methods'],
-    strict: boolean,
-): ClassEntry['methods'] {
-    if (!next) return base;
-    if (!base) return next;
-    const out: NonNullable<ClassEntry['methods']> = { ...base };
-    for (const [name, overloads] of Object.entries(next)) {
-        const existing = out[name];
-        out[name] = existing ? mergeOverloads(name, existing, overloads, strict) : overloads;
-    }
-    return out;
-}
-
-/** Merge two field maps (keyed by real name, last-wins). */
-function mergeFields(
-    base: ClassEntry['fields'],
-    next: ClassEntry['fields'],
-    strict: boolean,
-): ClassEntry['fields'] {
-    if (!next) return base;
-    if (!base) return next;
-    const out: Record<string, FieldEntry> = { ...base };
-    for (const [name, entry] of Object.entries(next)) {
-        const existing = out[name];
-        if (existing && strict && existing.obfuscated !== entry.obfuscated) {
-            throw conflict('field', name, existing.obfuscated, entry.obfuscated);
-        }
-        out[name] = entry;
-    }
-    return out;
-}
-
-/** Merge two class entries for the same real name. */
-function mergeClassEntry(
-    realName: string,
-    base: ClassEntry,
-    next: ClassEntry,
-    strict: boolean,
-): ClassEntry {
-    if (strict && base.obfuscated !== next.obfuscated) {
-        throw conflict('class', realName, base.obfuscated, next.obfuscated);
-    }
-    return {
-        ...base,
-        ...next, // scalar fields last-wins; methods/fields re-merged below
-        methods: mergeMethods(base.methods, next.methods, strict),
-        fields: mergeFields(base.fields, next.fields, strict),
-    };
-}
-
-/** Fold `next` onto `base`, returning the combined map. */
-function mergeOne(base: RosettaMap, next: RosettaMap, strict: boolean): RosettaMap {
-    const classes: Record<string, ClassEntry> = { ...base.classes };
-    for (const [name, entry] of Object.entries(next.classes)) {
-        const existing = classes[name];
-        classes[name] = existing ? mergeClassEntry(name, existing, entry, strict) : entry;
-    }
-    const sources = [...(base.sources ?? []), ...(next.sources ?? [])];
-    return {
-        ...base,
-        ...scalarIdentity(next),
-        sources: sources.length > 0 ? sources : undefined,
-        classes,
-    };
-}
-
 /**
- * The last-wins top-level scalar identity carried from a later input
- * (everything except `sources` and `classes`, which are merged specially).
- * Pulled out so `mergeOne`'s spread reads cleanly and undefined optionals
- * on `next` don't clobber a value the base set.
+ * Core of `rosetta merge`: load all inputs, fold them (emitting a stderr
+ * notice on each non-strict override), re-validate the result, and write the
+ * canonical JSON. Returns the output path. Separated from the printing
+ * wrapper so it stays unit-testable by return value; the optional `stderr`
+ * sink defaults to a no-op so a direct caller need not supply one.
  */
-function scalarIdentity(next: RosettaMap): Partial<RosettaMap> {
-    const { sources: _sources, classes: _classes, ...identity } = next;
-    void _sources;
-    void _classes;
-    // Drop undefined optionals so `next` never erases a base value with a hole.
-    return Object.fromEntries(Object.entries(identity).filter(([, v]) => v !== undefined));
-}
-
-/** Fold an ordered list of maps left-to-right (last-wins). */
-export function mergeMaps(maps: readonly RosettaMap[], strict: boolean): RosettaMap {
-    // Callers guarantee at least two; the reduce seed is the first input.
-    const [first, ...rest] = maps;
-    let acc = first as RosettaMap;
-    for (const m of rest) {
-        if (m.app !== acc.app) {
-            throw new RosettaError(`cannot merge maps for different apps: ${acc.app} vs ${m.app}`);
-        }
-        if (m.version_code !== acc.version_code) {
-            throw new RosettaError(
-                `cannot merge maps for different version_code: ` +
-                    `${acc.version_code} vs ${m.version_code}`,
-            );
-        }
-        acc = mergeOne(acc, m, strict);
-    }
-    return acc;
-}
-
-/**
- * Core of `rosetta merge`: load all inputs, fold them, re-validate the
- * result, and write the canonical JSON. Returns the output path. Separated
- * from the printing wrapper so it stays unit-testable by return value.
- */
-export async function mergeFiles(argv: readonly string[], fs: FsLike): Promise<string> {
+export async function mergeFiles(
+    argv: readonly string[],
+    fs: FsLike,
+    stderr: Writer = () => {},
+): Promise<string> {
     const opts = parseMergeArgs(argv);
     const maps: RosettaMap[] = [];
     for (const p of opts.inputPaths) {
         maps.push(await loadMap(p, fs));
     }
-    const merged = mergeMaps(maps, opts.strict);
+    const merged = mergeMaps(maps, {
+        strict: opts.strict,
+        onOverride: (o) => stderr(overrideNotice(o)),
+    });
     // Re-validate the fold result so a merge that produced an invalid shape
     // (e.g. an overload set that overflowed MAX_METHOD_OVERLOADS) fails loudly
     // before it is written. `validateStructure` throws a `MapValidationError`
@@ -242,10 +112,10 @@ export async function mergeFiles(argv: readonly string[], fs: FsLike): Promise<s
 }
 
 /**
- * Execute `rosetta merge` (and the `merge-bundle` alias) under the shared
- * command contract: fold the inputs and return the success message.
+ * Execute `rosetta merge` under the shared command contract: fold the inputs
+ * and return the success message. Override notices go to `io.stderr`.
  */
 export async function runMerge(argv: readonly string[], io: CommandIo): Promise<string> {
-    const out = await mergeFiles(argv, io.fs);
+    const out = await mergeFiles(argv, io.fs, io.stderr);
     return `wrote ${out}`;
 }
