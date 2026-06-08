@@ -15,6 +15,8 @@
 
 import { z } from 'zod';
 
+import { compareTuple, parseVersion } from './session/version-tuple.js';
+
 // ---------------------------------------------------------------------------
 // Pre-parse input-hardening limits (L9)
 //
@@ -68,12 +70,25 @@ export interface ParseLimits {
 // ---------------------------------------------------------------------------
 
 /**
- * Default ceiling, in component-wise lexicographic distance space, on how far
- * a fuzzy nearest-match pick may be from the target. `null` (the default)
- * means "no ceiling" — preserve the legacy fuzzy behaviour of always picking
- * the closest registered label however far it is. A number gates the pick:
- * the closest candidate is only accepted if each of `[|Δmajor|, |Δminor|,
- * |Δpatch|]` is `<= maxDistance`, otherwise selection fails loudly.
+ * Default LABEL-distance ceiling on how far a distance-ranked pick may be from
+ * the target. `null` (the default) means "no ceiling" — preserve the legacy
+ * fuzzy behaviour of always picking the closest registered label however far
+ * it is.
+ *
+ * A number gates the pick by the SAME major-dominant lexicographic metric used
+ * to RANK candidates: the winning distance tuple `[|Δmajor|, |Δminor|,
+ * |Δpatch|]` is compared lexicographically against `[maxDistance, 0, 0]`, and
+ * the pick is accepted only when it is `<=`. So `maxDistance: 1` accepts any
+ * distance whose major delta is 0 (any minor/patch), plus `[1, 0, 0]`, but
+ * rejects `[1, 0, 1]` and `[2, 0, 0]` — consistent with the ranking, where a
+ * smaller major delta always wins. (The old per-component check was
+ * inconsistent: it rejected `[0, 0, 5]` yet accepted `[1, 0, 0]` at
+ * `maxDistance: 1`.)
+ *
+ * It is a LABEL-distance ceiling: it applies to the nearest-label tier
+ * (`strategy: 'fuzzy'`) AND the label-range tier (`versionRange`), but NOT to
+ * the numeric `versionCodeRange` tier (a different metric). Pairing
+ * `maxDistance` with ONLY a `versionCodeRange` is rejected at parse time.
  */
 export const DEFAULT_FUZZY_MAX_DISTANCE: number | null = null;
 
@@ -127,9 +142,11 @@ export interface VersionMatchConfig {
      */
     versionRange?: VersionLabelRange;
     /**
-     * Opt-in ceiling on nearest-match distance (see
-     * {@link DEFAULT_FUZZY_MAX_DISTANCE}). Only meaningful with
-     * `strategy: 'fuzzy'`.
+     * Opt-in LABEL-distance ceiling on the distance-ranked pick (see
+     * {@link DEFAULT_FUZZY_MAX_DISTANCE}). Applies to the nearest-label tier
+     * (`strategy: 'fuzzy'`) and the label-range tier (`versionRange`); does NOT
+     * apply to `versionCodeRange`. Compared by the same major-dominant
+     * lexicographic metric as the ranking (`<= [maxDistance, 0, 0]`).
      */
     maxDistance?: number | null;
     /**
@@ -176,6 +193,13 @@ const versionCodeRangeSchema = z
         max: z.number().int().nonnegative().optional(),
     })
     .strict()
+    // An all-undefined range matches EVERY map — a no-op-looking config that
+    // silently becomes a full fuzzy fallback. Reject it at parse time so the
+    // opt-in is always meaningful (issue #22 minor gap 3).
+    .refine((r) => r.min !== undefined || r.max !== undefined, {
+        message:
+            'versionCodeRange must set at least one of min / max (an empty range matches every map)',
+    })
     .refine((r) => r.min === undefined || r.max === undefined || r.min <= r.max, {
         message: 'versionCodeRange.min must be <= versionCodeRange.max',
     });
@@ -185,7 +209,25 @@ const versionLabelRangeSchema = z
         min: z.string().optional(),
         max: z.string().optional(),
     })
-    .strict();
+    .strict()
+    // Same all-undefined guard as the code range (issue #22 minor gap 3).
+    .refine((r) => r.min !== undefined || r.max !== undefined, {
+        message:
+            'versionRange must set at least one of min / max (an empty range matches every map)',
+    })
+    // Reject an INVERTED label range (min > max) at config time with a clear
+    // message, mirroring the numeric code-range refinement above — otherwise an
+    // inverted range silently matches nothing and surfaces as a misleading
+    // "no map" error far from the cause (issue #22 major bug 1). Bounds are
+    // compared via the SAME parseVersion / compareTuple the runtime pick uses,
+    // so config-time validation and runtime selection agree exactly.
+    .refine(
+        (r) =>
+            r.min === undefined ||
+            r.max === undefined ||
+            compareTuple(parseVersion(r.min), parseVersion(r.max)) <= 0,
+        { message: 'versionRange.min must be <= versionRange.max' },
+    );
 
 /**
  * Zod schema for the richer version-matching object form. Reused by both the
@@ -208,6 +250,27 @@ export const versionMatchSchema: z.ZodType<
         ranked: z.boolean().default(DEFAULT_FUZZY_RANKED),
     })
     .strict()
+    // `maxDistance` is a LABEL-distance ceiling: it gates the nearest-label
+    // tier (`strategy: 'fuzzy'`) and the label-range tier (`versionRange`). It
+    // is NOT applicable to the numeric `versionCodeRange` tier (a different
+    // metric). Reject a config where a numeric `maxDistance` is set but NO
+    // label-distance pick is possible — i.e. neither the nearest tier nor a
+    // label range is engaged — so the no-op ceiling can't silently mislead a
+    // caller who pairs it with only a `versionCodeRange` (issue #22 design
+    // ruling). `null` (no ceiling) is always fine.
+    .refine(
+        (c) =>
+            c.maxDistance === null ||
+            c.maxDistance === undefined ||
+            c.strategy === 'fuzzy' ||
+            c.versionRange !== undefined,
+        {
+            message:
+                'maxDistance is a label-distance ceiling and does not apply to a versionCodeRange; ' +
+                "set strategy: 'fuzzy' or a versionRange, or drop maxDistance",
+            path: ['maxDistance'],
+        },
+    )
     .default({});
 
 /**

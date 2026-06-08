@@ -108,6 +108,95 @@ describe('resolveConfig', () => {
         ).toThrow(ZodError);
     });
 
+    it('rejects an inverted versionRange label bound (min > max)', () => {
+        // Major bug 1: previously the label range had no min<=max refinement, so
+        // this was silently accepted and surfaced later as a misleading "no map".
+        expect(() =>
+            resolveConfig({ versionMatching: { versionRange: { min: '2.0.0', max: '1.0.0' } } }),
+        ).toThrow(ZodError);
+    });
+
+    it('accepts an ordered versionRange label bound (min <= max)', () => {
+        const cfg = resolveConfig({
+            versionMatching: { versionRange: { min: '1.0.0', max: '2.0.0' } },
+        });
+        expect(cfg.versionMatching.versionRange).toEqual({ min: '1.0.0', max: '2.0.0' });
+    });
+
+    it('accepts equal versionRange bounds (min == max)', () => {
+        const cfg = resolveConfig({
+            versionMatching: { versionRange: { min: '1.2.3', max: '1.2.3' } },
+        });
+        expect(cfg.versionMatching.versionRange).toEqual({ min: '1.2.3', max: '1.2.3' });
+    });
+
+    it('compares versionRange bounds on the numeric tuple (suffix stripped)', () => {
+        // '2.0.0-rc1' and '1.9.0' compare as [2,0,0] > [1,9,0] → inverted.
+        expect(() =>
+            resolveConfig({
+                versionMatching: { versionRange: { min: '2.0.0-rc1', max: '1.9.0' } },
+            }),
+        ).toThrow(ZodError);
+    });
+
+    it('rejects an all-undefined versionCodeRange (matches every map)', () => {
+        // Minor gap 3: an empty range silently became a full fuzzy fallback.
+        expect(() => resolveConfig({ versionMatching: { versionCodeRange: {} } })).toThrow(
+            ZodError,
+        );
+    });
+
+    it('rejects an all-undefined versionRange (matches every map)', () => {
+        expect(() => resolveConfig({ versionMatching: { versionRange: {} } })).toThrow(ZodError);
+    });
+
+    it('rejects maxDistance paired with ONLY a versionCodeRange (no-op ceiling)', () => {
+        // Design ruling: maxDistance is a label-distance ceiling and does not
+        // apply to a numeric code range, so the combination is a silent no-op.
+        expect(() =>
+            resolveConfig({
+                versionMatching: { versionCodeRange: { min: 100 }, maxDistance: 1 },
+            }),
+        ).toThrow(ZodError);
+    });
+
+    it('accepts maxDistance with a versionCodeRange when a label tier is ALSO engaged', () => {
+        // strategy: 'fuzzy' engages the nearest-label tier, so the ceiling is
+        // meaningful even alongside a code range.
+        const cfg = resolveConfig({
+            versionMatching: {
+                strategy: 'fuzzy',
+                versionCodeRange: { min: 100 },
+                maxDistance: 1,
+            },
+        });
+        expect(cfg.versionMatching.maxDistance).toBe(1);
+
+        const cfg2 = resolveConfig({
+            versionMatching: {
+                versionCodeRange: { min: 100 },
+                versionRange: { min: '1.0.0' },
+                maxDistance: 1,
+            },
+        });
+        expect(cfg2.versionMatching.maxDistance).toBe(1);
+    });
+
+    it('accepts maxDistance with only a versionRange (label tier present)', () => {
+        const cfg = resolveConfig({
+            versionMatching: { versionRange: { min: '1.0.0' }, maxDistance: 2 },
+        });
+        expect(cfg.versionMatching.maxDistance).toBe(2);
+    });
+
+    it('accepts null maxDistance paired with only a versionCodeRange (no-op is fine for null)', () => {
+        // null means "no ceiling" — never a misleading no-op, so allowed.
+        const cfg = resolveConfig({
+            versionMatching: { versionCodeRange: { min: 100 }, maxDistance: null },
+        });
+        expect(cfg.versionMatching.maxDistance).toBeNull();
+    });
+
     it('rejects a negative version_code bound', () => {
         expect(() => resolveConfig({ versionMatching: { versionCodeRange: { min: -1 } } })).toThrow(
             ZodError,
@@ -171,5 +260,28 @@ describe('resolveVersionMatch', () => {
                 typeof resolveVersionMatch
             >[0]),
         ).toThrow(ZodError);
+    });
+
+    it('rejects an inverted label range', () => {
+        expect(() => resolveVersionMatch({ versionRange: { min: '2.0.0', max: '1.0.0' } })).toThrow(
+            ZodError,
+        );
+    });
+
+    it('rejects an all-undefined range', () => {
+        expect(() => resolveVersionMatch({ versionRange: {} })).toThrow(ZodError);
+        expect(() => resolveVersionMatch({ versionCodeRange: {} })).toThrow(ZodError);
+    });
+
+    it('rejects maxDistance with only a versionCodeRange', () => {
+        expect(() =>
+            resolveVersionMatch({ versionCodeRange: { min: 100 }, maxDistance: 1 }),
+        ).toThrow(ZodError);
+    });
+
+    it('accepts maxDistance with a versionRange', () => {
+        expect(
+            resolveVersionMatch({ versionRange: { min: '1.0.0' }, maxDistance: 1 }).maxDistance,
+        ).toBe(1);
     });
 });
