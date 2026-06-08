@@ -338,7 +338,11 @@ function unwrap<T>(result: StageResult<T>): T {
  */
 export function buildSession(options: InternalSessionOptions): SessionState {
     const failurePolicy = options.failurePolicy ?? 'warn';
-    const versionMatch = options.versionMatch ?? 'exact';
+    // Per-session `versionMatch` wins; otherwise the typed config's
+    // `versionMatching` default; otherwise 'exact' (fail-hard-by-default).
+    // `pickMapForVersion` normalizes whichever form this is.
+    const versionMatch: VersionMatch =
+        options.versionMatch ?? options.config?.versionMatching ?? 'exact';
 
     const events = options.events ?? new EventBus();
     if (options.trace) events.setTrace(true);

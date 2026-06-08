@@ -20,12 +20,21 @@ interface SessionOptions {
     version?: string;
     versionCode?: number;                     // authoritative selection key; auto-detected if omitted
     failurePolicy?: 'strict' | 'warn';        // default: 'warn'
-    versionMatch?: 'exact' | 'fuzzy';         // default: 'exact'
+    versionMatch?: 'exact' | 'fuzzy' | VersionMatchConfig; // default: 'exact'
+    config?: RosettaConfig;                   // typed config; supplies the versionMatch default
     trace?: boolean;                          // default: false
     healthCheckThreshold?: number;            // default: 0.8
     skipHealthCheck?: boolean;                // default: false
     enforceSigner?: boolean;                  // default: true (secure default)
     targetPolicy?: TargetPolicy;              // default: built-in denylist, fail-closed
+}
+
+interface VersionMatchConfig {
+    strategy?: 'exact' | 'fuzzy';             // default: 'exact'
+    versionCodeRange?: { min?: number; max?: number };  // opt-in numeric range over version_code
+    versionRange?: { min?: string; max?: string };      // opt-in semver-ish range over the label
+    maxDistance?: number | null;              // default: null (no ceiling on a nearest-label pick)
+    ranked?: boolean;                         // default: false (expose ranked candidates)
 }
 
 interface TargetPolicy {
@@ -109,15 +118,51 @@ always exact (never fuzzy).
 | Value | Behavior |
 |---|---|
 | `'exact'` (default) | After the `version_code` lookup, the registry must contain an entry whose key equals the detected version label. No match → throw. |
-| `'fuzzy'` | Fall back to the closest available map by semver distance (`major × 10_000 + minor × 100 + patch`). Ties broken by lower version. Also relaxes the `version_code` mismatch check. |
+| `'fuzzy'` | Fall back to the closest available map by **component-wise lexicographic** semver distance (`[Δmajor, Δminor, Δpatch]`, compared major-first). Ties broken by lower version, then the raw label. Also relaxes the `version_code` mismatch check. |
+| `VersionMatchConfig` (object) | The richer, opt-in form (below). Every knob defaults to its legacy-preserving value, so `{ strategy: 'fuzzy' }` is exactly `'fuzzy'`. |
+
+> The distance metric is the per-component vector `[Δmajor, Δminor,
+> Δpatch]`, **not** the old weighted sum `major × 10_000 + minor × 100 +
+> patch` (which overflowed its buckets and tied `1.0.142` with `1.1.42`).
+
+#### Expanded matching (`VersionMatchConfig`)
+
+All fields are opt-in; the selection order stays *exact `version_code`
+→ exact label → code range → label range → nearest label*, so an exact
+match always wins and a miss with everything off still **fails loudly**.
+
+| Knob | Default | Effect |
+|---|---|---|
+| `strategy` | `'exact'` | `'fuzzy'` enables the nearest-label fallback |
+| `versionCodeRange: { min?, max? }` | unset | numeric range over `version_code`; the in-range map closest to the detected code wins (ties → lower code, then lower label) |
+| `versionRange: { min?, max? }` | unset | semver-ish range over the label; the in-range map closest by lexicographic distance wins |
+| `maxDistance` | `null` | ceiling on the nearest-label pick — if any of `[Δmajor, Δminor, Δpatch]` exceeds it, selection fails loudly instead of accepting a far map |
+| `ranked` | `false` | exposes the full ranked candidate list on the internal pick result (closest first) for diagnostics |
 
 Fuzzy fallback is intentionally opt-in. Wrong-version maps silently
 corrupt hooks; the default failure mode is "tell the user to ship a
 map for this version" rather than "guess."
 
-When fuzzy succeeds, the picked map's `version` will *not* equal the
-detected version. The session still attaches and runs, but the
-diagnostic events make the fuzzy pick visible.
+When a fuzzy/range pick succeeds, the picked map's `version` will *not*
+equal the detected version. The session still attaches and runs, but
+the diagnostic events make the pick visible.
+
+### `config`
+
+An optional typed [`RosettaConfig`](../reference/types.md). The session
+consults only its `versionMatching` policy, and only as the **default**
+when the per-session `versionMatch` is omitted (an explicit
+`versionMatch` always wins). This lets a project set one default version
+policy in its config object and reuse it across sessions. The
+parse-limit caps (`config.parseLimits`) are applied at map-*load* time
+via `loadMap(input, config)`, not here, so they are inert on this path.
+
+```typescript
+import { resolveConfig, rosetta } from 'rosetta-frida';
+
+const config = resolveConfig({ versionMatching: { strategy: 'fuzzy', maxDistance: 1 } });
+rosetta.session({ map: registry, config }); // fuzzy-by-default, capped at distance 1
+```
 
 ### `trace`
 

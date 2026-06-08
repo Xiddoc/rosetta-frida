@@ -187,6 +187,7 @@ interface SessionOptions {
     versionCode?: number; // authoritative selection key; auto-detected if omitted
     failurePolicy?: FailurePolicy;
     versionMatch?: VersionMatch;
+    config?: RosettaConfig; // supplies the versionMatch default when omitted
     trace?: boolean;
     healthCheckThreshold?: number;
     skipHealthCheck?: boolean;
@@ -209,11 +210,26 @@ How the Resolver responds to a missed lookup. See
 ### `VersionMatch`
 
 ```typescript
-type VersionMatch = 'exact' | 'fuzzy';
+type VersionMatch = 'exact' | 'fuzzy' | VersionMatchConfig;
+
+interface VersionMatchConfig {
+    strategy?: 'exact' | 'fuzzy'; // default 'exact'
+    versionCodeRange?: { min?: number; max?: number }; // opt-in numeric range over version_code
+    versionRange?: { min?: string; max?: string }; // opt-in semver-ish range over the label
+    maxDistance?: number | null; // default null — ceiling on a nearest-label pick
+    ranked?: boolean; // default false — expose ranked candidates
+}
 ```
 
-How strictly registry version matching behaves. See
+How strictly registry version matching behaves. The string forms are
+shorthand for the object form with all opt-in knobs at their
+legacy-preserving defaults; exact `version_code` always wins and a miss
+with fuzzy off still fails loudly. See
+[Session API — `versionMatch`](../api/session.md#versionmatch) and
 [Multi-version bundles](../recipes/multi-version-bundle.md).
+
+The same shape is the typed config's `versionMatching` policy
+(`RosettaConfig`), validated by the one shared Zod schema.
 
 ## Resolver types
 

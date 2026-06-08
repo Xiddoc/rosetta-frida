@@ -376,4 +376,294 @@ describe('pickMapForVersion — fuzzy', () => {
         expect(picked.fuzzy).toBe(false);
         expect(picked.registryKey).toBe('0.2147483647.0');
     });
+
+    it('sets fuzzyKind: "nearest" on a closest-label pick', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '2.0.0': buildMap('2.0.0'),
+        };
+        const picked = pickMapForVersion(registry, { version: '1.5.0', versionMatch: 'fuzzy' });
+        expect(picked.fuzzyKind).toBe('nearest');
+        expect(picked.ranked).toBeUndefined();
+    });
+});
+
+describe('pickMapForVersion — object-form versionMatch', () => {
+    it('treats { strategy: "fuzzy" } identically to the "fuzzy" string', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.1.0': buildMap('1.1.0'),
+        };
+        const picked = pickMapForVersion(registry, {
+            version: '1.1.1',
+            versionMatch: { strategy: 'fuzzy' },
+        });
+        expect(picked.fuzzy).toBe(true);
+        expect(picked.registryKey).toBe('1.1.0');
+    });
+
+    it('{ strategy: "exact" } fails loudly on a miss (fail-hard-by-default)', () => {
+        const registry: RosettaMapRegistry = { '1.0.0': buildMap('1.0.0') };
+        expect(() =>
+            pickMapForVersion(registry, { version: '2.0.0', versionMatch: { strategy: 'exact' } }),
+        ).toThrow(/no map for version '2\.0\.0'/);
+    });
+
+    it('an empty object form defaults to exact and fails loudly on a miss', () => {
+        const registry: RosettaMapRegistry = { '1.0.0': buildMap('1.0.0') };
+        expect(() => pickMapForVersion(registry, { version: '2.0.0', versionMatch: {} })).toThrow(
+            /no map for version '2\.0\.0'/,
+        );
+    });
+});
+
+describe('pickMapForVersion — maxDistance ceiling (opt-in)', () => {
+    const registry: RosettaMapRegistry = {
+        '1.0.0': buildMap('1.0.0'),
+        '5.0.0': buildMap('5.0.0'),
+    };
+
+    it('accepts a pick within the ceiling', () => {
+        const picked = pickMapForVersion(registry, {
+            version: '1.1.0',
+            versionMatch: { strategy: 'fuzzy', maxDistance: 1 },
+        });
+        expect(picked.registryKey).toBe('1.0.0');
+        expect(picked.fuzzy).toBe(true);
+    });
+
+    it('rejects a pick beyond the ceiling and fails loudly', () => {
+        expect(() =>
+            pickMapForVersion(registry, {
+                version: '3.0.0', // closest is 1.0.0 at Δmajor=2 (or 5.0.0 at Δ=2 → tie, lower wins)
+                versionMatch: { strategy: 'fuzzy', maxDistance: 1 },
+            }),
+        ).toThrow(/exceeds the configured maxDistance of 1/);
+    });
+
+    it('maxDistance: 0 means only a zero-distance (tuple-equal) pick is allowed', () => {
+        const reg: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.0.0-rc1': buildMap('1.0.0-rc1'),
+        };
+        // '1.0.0-rc1' parses to [1,0,0] — zero distance to target '1.0.0', but
+        // not an exact LABEL match, so it goes through fuzzy and is accepted.
+        const picked = pickMapForVersion(reg, {
+            version: '1.0.0-rc1-extra',
+            versionMatch: { strategy: 'fuzzy', maxDistance: 0 },
+        });
+        expect(picked.fuzzy).toBe(true);
+        expect(picked.registryKey).toBe('1.0.0');
+    });
+
+    it('null maxDistance imposes no ceiling (legacy behaviour)', () => {
+        const picked = pickMapForVersion(registry, {
+            version: '99.0.0',
+            versionMatch: { strategy: 'fuzzy', maxDistance: null },
+        });
+        expect(picked.registryKey).toBe('5.0.0');
+    });
+});
+
+describe('pickMapForVersion — ranked candidates (opt-in)', () => {
+    const registry: RosettaMapRegistry = {
+        '1.0.0': buildMap('1.0.0'),
+        '1.1.0': buildMap('1.1.0'),
+        '2.0.0': buildMap('2.0.0'),
+    };
+
+    it('omits ranked by default', () => {
+        const picked = pickMapForVersion(registry, { version: '1.0.5', versionMatch: 'fuzzy' });
+        expect(picked.ranked).toBeUndefined();
+    });
+
+    it('exposes ranked candidates closest-first when opted in', () => {
+        const picked = pickMapForVersion(registry, {
+            version: '1.0.5',
+            versionMatch: { strategy: 'fuzzy', ranked: true },
+        });
+        expect(picked.ranked).toBeDefined();
+        const keys = picked.ranked?.map((c) => c.registryKey);
+        // Closest to 1.0.5: 1.0.0 (Δ=[0,0,5]) then 1.1.0 (Δ=[0,1,0]) then 2.0.0.
+        expect(keys).toEqual(['1.0.0', '1.1.0', '2.0.0']);
+        expect(picked.registryKey).toBe('1.0.0');
+        expect(picked.ranked?.[0]?.distance).toEqual([0, 0, 5]);
+    });
+});
+
+describe('pickMapForVersion — versionCodeRange (opt-in)', () => {
+    const registry: RosettaMapRegistry = {
+        '1.0.0': buildMap('1.0.0', 'com.example.app', 100),
+        '1.1.0': buildMap('1.1.0', 'com.example.app', 110),
+        '2.0.0': buildMap('2.0.0', 'com.example.app', 200),
+    };
+
+    it('selects an in-range map by closeness to the detected code', () => {
+        // Detected code 130 is absent; range [100,200] qualifies all three;
+        // closest by code to 130 is 110.
+        const picked = pickMapForVersion(registry, {
+            version: 'x',
+            versionCode: 130,
+            versionMatch: { versionCodeRange: { min: 100, max: 200 } },
+        });
+        expect(picked.fuzzy).toBe(true);
+        expect(picked.fuzzyKind).toBe('code-range');
+        expect(picked.registryKey).toBe('1.1.0');
+    });
+
+    it('selects the lowest in-range code when no code is detected', () => {
+        const picked = pickMapForVersion(registry, {
+            version: 'x',
+            versionMatch: { versionCodeRange: { min: 110 } },
+        });
+        expect(picked.registryKey).toBe('1.1.0');
+    });
+
+    it('honours an upper bound', () => {
+        const picked = pickMapForVersion(registry, {
+            version: 'x',
+            versionMatch: { versionCodeRange: { max: 100 } },
+        });
+        expect(picked.registryKey).toBe('1.0.0');
+    });
+
+    it('falls through (fails loudly) when nothing is in range and strategy is exact', () => {
+        expect(() =>
+            pickMapForVersion(registry, {
+                version: 'x',
+                versionMatch: { versionCodeRange: { min: 300 } },
+            }),
+        ).toThrow(/no map for version 'x'/);
+    });
+
+    it('exact version_code still wins over a configured range', () => {
+        // Detected code 200 exact-matches 2.0.0; the range would otherwise
+        // prefer a code near nothing — exact precedence holds.
+        const picked = pickMapForVersion(registry, {
+            version: 'x',
+            versionCode: 200,
+            versionMatch: { versionCodeRange: { min: 100, max: 110 } },
+        });
+        expect(picked.fuzzy).toBe(false);
+        expect(picked.registryKey).toBe('2.0.0');
+    });
+
+    it('breaks an equidistant code tie to the lower code', () => {
+        const reg: RosettaMapRegistry = {
+            low: buildMap('1.0.0', 'com.example.app', 100),
+            high: buildMap('1.1.0', 'com.example.app', 120),
+        };
+        // Detected 110 is equidistant (10) from 100 and 120 → lower code wins.
+        const picked = pickMapForVersion(reg, {
+            version: 'x',
+            versionCode: 110,
+            versionMatch: { versionCodeRange: { min: 100, max: 120 } },
+        });
+        expect(picked.registryKey).toBe('low');
+    });
+
+    it('breaks a full tie (same code, no detected code) to the lower label', () => {
+        const reg: RosettaMapRegistry = {
+            bbb: buildMap('1.1.0', 'com.example.app', 100),
+            aaa: buildMap('1.0.0', 'com.example.app', 100),
+        };
+        const picked = pickMapForVersion(reg, {
+            version: 'x',
+            versionMatch: { versionCodeRange: { min: 100, max: 100 } },
+        });
+        expect(picked.registryKey).toBe('aaa');
+    });
+
+    it('full-tie break is order-independent (lower label wins either insertion order)', () => {
+        // Mirror of the above with keys inserted in the opposite order, so the
+        // comparator's "keep current best" (returns +1) branch is exercised:
+        // best=aaa first, then bbb does NOT replace it.
+        const reg: RosettaMapRegistry = {
+            aaa: buildMap('1.0.0', 'com.example.app', 100),
+            bbb: buildMap('1.1.0', 'com.example.app', 100),
+        };
+        const picked = pickMapForVersion(reg, {
+            version: 'x',
+            versionMatch: { versionCodeRange: { min: 100, max: 100 } },
+        });
+        expect(picked.registryKey).toBe('aaa');
+    });
+});
+
+describe('pickMapForVersion — versionRange (opt-in label range)', () => {
+    const registry: RosettaMapRegistry = {
+        '1.0.0': buildMap('1.0.0'),
+        '1.5.0': buildMap('1.5.0'),
+        '2.0.0': buildMap('2.0.0'),
+        '3.0.0': buildMap('3.0.0'),
+    };
+
+    it('picks the closest in-range label by component-wise distance', () => {
+        // Range [1.0.0, 2.0.0] qualifies 1.0.0, 1.5.0, 2.0.0; target 1.9.0 →
+        // closest is 1.5.0 (Δ=[0,4,0]) over 2.0.0 (Δ=[1,9,0]) and 1.0.0
+        // (Δ=[0,9,0]) — the major-delta on 2.0.0 dominates.
+        const picked = pickMapForVersion(registry, {
+            version: '1.9.0',
+            versionMatch: { versionRange: { min: '1.0.0', max: '2.0.0' } },
+        });
+        expect(picked.fuzzy).toBe(true);
+        expect(picked.fuzzyKind).toBe('label-range');
+        expect(picked.registryKey).toBe('1.5.0');
+    });
+
+    it('excludes out-of-range labels (3.0.0 ignored by the upper bound)', () => {
+        const picked = pickMapForVersion(registry, {
+            version: '2.0.0-pre', // [2,0,0]; 3.0.0 is excluded by max '2.0.0'
+            versionMatch: { versionRange: { max: '2.0.0' } },
+        });
+        // Eligible: 1.0.0/1.5.0/2.0.0; exact-tuple match is 2.0.0 (Δ=[0,0,0]).
+        expect(picked.registryKey).toBe('2.0.0');
+    });
+
+    it('honours a lower-only bound', () => {
+        const picked = pickMapForVersion(registry, {
+            version: '2.9.0',
+            versionMatch: { versionRange: { min: '2.0.0' } },
+        });
+        // 2.0.0 (Δ=[0,9,0]) / 3.0.0 (Δ=[1,9,0]) eligible; the lower major
+        // delta makes 2.0.0 the closest.
+        expect(picked.registryKey).toBe('2.0.0');
+    });
+
+    it('fails loudly when nothing is in the label range (strategy exact)', () => {
+        expect(() =>
+            pickMapForVersion(registry, {
+                version: '1.0.0-x',
+                versionMatch: { versionRange: { min: '9.0.0' } },
+            }),
+        ).toThrow(/no map for version/);
+    });
+
+    it('exposes ranked candidates within the range when opted in', () => {
+        const picked = pickMapForVersion(registry, {
+            version: '1.9.0',
+            versionMatch: { versionRange: { min: '1.0.0', max: '2.0.0' }, ranked: true },
+        });
+        // Closest-first by component-wise distance to 1.9.0:
+        //   1.5.0 [0,4,0] < 1.0.0 [0,9,0] < 2.0.0 [1,9,0].
+        expect(picked.ranked?.map((c) => c.registryKey)).toEqual(['1.5.0', '1.0.0', '2.0.0']);
+    });
+
+    it('code range takes priority over a label range when both are set', () => {
+        const reg: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0', 'com.example.app', 100),
+            '2.0.0': buildMap('2.0.0', 'com.example.app', 200),
+        };
+        // version_code range pins 100 (1.0.0); the label range would prefer
+        // 2.0.0 for target 9.0.0 — but code-range runs first and wins.
+        const picked = pickMapForVersion(reg, {
+            version: '9.0.0',
+            versionMatch: {
+                versionCodeRange: { max: 100 },
+                versionRange: { min: '2.0.0' },
+            },
+        });
+        expect(picked.fuzzyKind).toBe('code-range');
+        expect(picked.registryKey).toBe('1.0.0');
+    });
 });

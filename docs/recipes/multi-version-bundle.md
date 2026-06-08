@@ -156,9 +156,12 @@ rosetta.session({
 });
 ```
 
-With `'fuzzy'`, if the detected version is `2.16.33` and the registry
-has `[3.4.5, 3.4.6, 3.5.0]`, the session picks `3.4.6` (semver
-distance 1, vs `3.4.5` distance 2 and `3.5.0` distance ~199).
+With `'fuzzy'`, the session falls back to the closest registry entry by
+**component-wise lexicographic** distance `[Δmajor, Δminor, Δpatch]`
+(compared major-first; ties → lower version). If the detected version
+is `3.4.7` and the registry has `[3.4.5, 3.4.6, 3.5.0]`, the session
+picks `3.4.6` (`Δ = [0,0,1]`) over `3.4.5` (`Δ = [0,0,2]`) and `3.5.0`
+(`Δ = [0,1,7]` — the minor delta dominates).
 
 The picked map's `version` field will *not* equal the detected
 version. The session attaches and runs; the picked-version is
@@ -182,6 +185,52 @@ send({
     detected: session.version,
     picked: session.map.version,
 });
+```
+
+## Expanded matching — ranges, ceilings, ranked hints
+
+The string `'fuzzy'` is shorthand for the richer object form, whose
+knobs are all opt-in (and default to the legacy behaviour). Selection
+order is *exact `version_code` → exact label → code range → label range
+→ nearest label*, so an exact match always wins.
+
+**Constrain by `version_code` range** (the authoritative key):
+
+```typescript
+rosetta.session({
+    map: registry,
+    versionMatch: { versionCodeRange: { min: 30400, max: 30599 } },
+});
+// The in-range map closest to the detected version_code wins.
+```
+
+**Constrain by version-label range** (semver-ish):
+
+```typescript
+rosetta.session({
+    map: registry,
+    versionMatch: { versionRange: { min: '3.4.0', max: '3.6.0' } },
+});
+```
+
+**Cap how far a nearest pick may stray** — fail loudly past the ceiling:
+
+```typescript
+rosetta.session({
+    map: registry,
+    versionMatch: { strategy: 'fuzzy', maxDistance: 1 },
+});
+// A closest map at distance [0,2,0] is rejected (throws) rather than used.
+```
+
+**Set a project-wide default via the typed config** (a per-session
+`versionMatch` still overrides it):
+
+```typescript
+import { resolveConfig } from 'rosetta-frida';
+
+const config = resolveConfig({ versionMatching: { strategy: 'fuzzy', maxDistance: 1 } });
+rosetta.session({ map: registry, config });
 ```
 
 ## Inspecting a registry bundle

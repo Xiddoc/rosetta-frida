@@ -198,6 +198,56 @@ Construction order (per `src/session/session.ts`):
 After construction, the session is read-only and the ambient
 namespace points at its resolver.
 
+## Version selection & expanded fuzzy matching
+
+Map selection is layered, highest precedence first (RFC 0001
+Decision 3 — *fail hard by default; fuzzy is strictly opt-in*):
+
+1. **Exact `version_code`** — the authoritative, O(1) key (memoised
+   `version_code → registry key` index). Always tried first; never
+   overridden by any fuzzy/range knob.
+2. **Exact version *label*** — the registry key equal to the detected
+   label.
+3. **Opt-in `versionCodeRange`** — a numeric `[min, max]` over
+   `version_code`. The in-range map closest to the detected code wins
+   (ties → lower code, then lower label). Higher priority than a label
+   range because the code is more authoritative.
+4. **Opt-in `versionRange`** — a semver-ish `[min, max]` over the
+   label. The in-range map closest by component-wise lexicographic
+   distance wins.
+5. **Nearest-label fuzzy** — the legacy `versionMatch: 'fuzzy'`
+   fallback: the closest registered label by component-wise distance,
+   optionally gated by `maxDistance`.
+
+If none of the enabled tiers produces a match, selection **fails
+loudly** with the same `no map for version '<v>'` error as before —
+the cardinal rule is preserved.
+
+### Configuring it
+
+`versionMatch` accepts two equivalent shapes:
+
+- the legacy string `'exact'` (default) or `'fuzzy'`;
+- the richer object form (`VersionMatchConfig`), every knob of which
+  defaults to its legacy-preserving value, so `{ strategy: 'fuzzy' }`
+  is byte-for-byte the old `'fuzzy'`:
+
+  | Knob | Type | Default | Effect |
+  |---|---|---|---|
+  | `strategy` | `'exact' \| 'fuzzy'` | `'exact'` | enables the nearest-label fallback (tier 5) |
+  | `versionCodeRange` | `{ min?, max? }` (numbers) | unset | enables tier 3 |
+  | `versionRange` | `{ min?, max? }` (labels) | unset | enables tier 4 |
+  | `maxDistance` | `number \| null` | `null` (no ceiling) | rejects a nearest-label pick whose `[Δmajor, Δminor, Δpatch]` exceeds it (fails loudly) |
+  | `ranked` | `boolean` | `false` | exposes the full ranked candidate list (`PickedMap.ranked`) for diagnostics |
+
+The same shape is also the typed-config default
+(`RosettaConfig.versionMatching`, validated by the same Zod schema):
+pass `config` to a session to set a project-wide default. A per-session
+`versionMatch` always overrides the config default; an omitted
+`versionMatch` falls back to `config.versionMatching`, which itself
+defaults to `'exact'`. All knobs flow through the one typed `Config`
+object — no scattered env lookups.
+
 ## V1.0 MVP scope
 
 What landed in V1.0:
@@ -231,7 +281,6 @@ What is deferred:
 |---|---|
 | `rosetta diff`, `merge`, `migrate`, `types`, `verify`, `fetch`, `merge-bundle` CLI commands | V1.5 |
 | `frida-compile` plugin for auto-marker-wrapping | V1.5 |
-| Fuzzy version matching expanded (e.g. version ranges, premium hints) | V1.5 |
 | Schema migrators (e.g. a future 2 → 3 bump; the 1 → 2 change was a hard cutover) | V1.5 |
 | Public maps repo (`rosetta-frida-maps`) | V2 |
 | Runtime injection / hot-reload (`rosetta.injectMap(...)`) | V2 |

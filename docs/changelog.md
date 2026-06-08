@@ -14,6 +14,21 @@ public surface may still shift before 1.0.0.
 
 ### Runtime
 
+- **Expanded fuzzy version matching** (`src/session/version-match.ts`,
+  `src/config.ts`; issue #22) — `versionMatch` now also accepts a richer
+  object form (`VersionMatchConfig`) alongside the legacy `'exact'` /
+  `'fuzzy'` strings: an opt-in numeric `versionCodeRange` over the
+  authoritative `version_code`, an opt-in semver-ish `versionRange` over the
+  label, a `maxDistance` ceiling that makes a too-far nearest-label pick
+  **fail loudly**, and a `ranked` flag that exposes the full ranked
+  candidate list. The same shape is the new typed-config default
+  (`RosettaConfig.versionMatching`, validated by one shared Zod schema and
+  consultable via `SessionOptions.config`). Exact `version_code` stays the
+  default and highest-precedence selection; every new knob is strictly
+  opt-in and a miss with fuzzy disabled still throws the same
+  `no map for version '…'` error (RFC 0001 Decision 3 preserved). Moves the
+  V1.5-roadmap item out of *deferred*.
+
 - **On-device `signer_sha256` enforcement** (`src/session/signer-detect.ts`)
   — when the loaded map carries a `signer_sha256`, `rosetta.session(...)`
   now reads the running app's signing certificate **in-process**

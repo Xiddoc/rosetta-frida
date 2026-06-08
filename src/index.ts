@@ -14,11 +14,22 @@ export * from './types/index.js';
 // `config.ts` (still exported there for its own unit tests).
 export {
     resolveConfig,
+    resolveVersionMatch,
     DEFAULT_CONFIG,
     DEFAULT_MAX_INPUT_BYTES,
     DEFAULT_MAX_NESTING_DEPTH,
+    DEFAULT_FUZZY_MAX_DISTANCE,
+    DEFAULT_FUZZY_RANKED,
 } from './config.js';
-export type { RosettaConfig, RosettaConfigInput, ParseLimits } from './config.js';
+export type {
+    RosettaConfig,
+    RosettaConfigInput,
+    ParseLimits,
+    VersionMatchConfig,
+    VersionMatchConfigInput,
+    VersionCodeRange,
+    VersionLabelRange,
+} from './config.js';
 
 // Java bridge — the single seam onto Frida's global `Java`.
 export {

@@ -4,6 +4,7 @@
  * These are LOCKED contracts. Wave 2 implements rosetta.session(...) against them.
  */
 
+import type { RosettaConfig, VersionMatchConfigInput } from '../config.js';
 import type { RosettaMap, RosettaMapRegistry } from './map.js';
 
 /**
@@ -20,14 +21,30 @@ export type FailurePolicy = 'strict' | 'warn';
 /**
  * How strict version matching is.
  *
- * - 'exact' — the loaded map's version must exactly match the detected
- *             version (or the user-supplied version override).
- * - 'fuzzy' — fall back to the closest available map (in a registry
- *             bundle) by semver distance, with the health check tightened.
+ * Two equivalent surfaces:
+ *
+ * - The **legacy string** `'exact' | 'fuzzy'`:
+ *   - 'exact' — the loaded map's version must exactly match the detected
+ *               version (or the user-supplied version override). A miss
+ *               fails loudly.
+ *   - 'fuzzy' — fall back to the closest available map (in a registry
+ *               bundle) by component-wise lexicographic semver distance.
+ *
+ * - The **richer object form** ({@link VersionMatchConfigInput}) — STRICTLY
+ *   OPT-IN expanded matching (issue #22): a numeric `versionCodeRange` and/or
+ *   a semver-ish `versionRange` to constrain the candidate set, a
+ *   `maxDistance` ceiling on the nearest-match pick, and a `ranked` flag to
+ *   surface runner-up candidates. Every knob defaults to its legacy-
+ *   preserving value, so `{ strategy: 'fuzzy' }` behaves exactly like the
+ *   `'fuzzy'` string.
+ *
+ * Exact `version_code` match remains the default and the highest-precedence
+ * selection regardless of which form is used; the fuzzy machinery is only
+ * consulted on an exact miss (RFC 0001 Decision 3 — fail hard by default).
  *
  * Default: 'exact'.
  */
-export type VersionMatch = 'exact' | 'fuzzy';
+export type VersionMatch = 'exact' | 'fuzzy' | VersionMatchConfigInput;
 
 /**
  * Policy for the target-namespace guard (RFC 0001 C1, critical security
@@ -123,8 +140,25 @@ export interface SessionOptions {
     /** Failure policy when a real name isn't in the map. Default: 'warn'. */
     failurePolicy?: FailurePolicy;
 
-    /** Version matching strictness. Default: 'exact'. */
+    /**
+     * Version matching strictness for THIS session.
+     *
+     * Accepts the legacy `'exact'` / `'fuzzy'` string or the richer object
+     * form ({@link VersionMatch}). When omitted, falls back to the typed
+     * config's `versionMatching` default (see {@link SessionOptions.config}),
+     * which itself defaults to `'exact'` — fail-hard-by-default.
+     */
     versionMatch?: VersionMatch;
+
+    /**
+     * Optional typed configuration. Only its `versionMatching` policy is
+     * consulted by the session, and only as the DEFAULT when the per-session
+     * `versionMatch` is omitted (an explicit `versionMatch` always wins). The
+     * parse-limit caps in `config.parseLimits` are honored at map-LOAD time
+     * via `loadMap(input, config)`, not here (the session takes an
+     * already-loaded map), so they are inert on this path by design.
+     */
+    config?: RosettaConfig;
 
     /** If true, prints a readable resolution log to stderr. Default: false. */
     trace?: boolean;

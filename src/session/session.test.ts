@@ -22,6 +22,7 @@ import {
     MissingSignerError,
     SignerMismatchError,
 } from '../errors.js';
+import { resolveConfig } from '../config.js';
 import { EventBus } from '../diagnostics/event-bus.js';
 import type { DiagnosticEvent } from '../types/events.js';
 import type { RosettaMap, RosettaMapRegistry } from '../types/map.js';
@@ -317,6 +318,85 @@ describe('createSession — registry input', () => {
             healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
         });
         expect(session.map.version).toBe('1.1.0');
+    });
+
+    it('accepts the object-form versionMatch ({ strategy: "fuzzy" })', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.1.0': buildMap('1.1.0'),
+        };
+        const session = createSession({
+            map: registry,
+            app: 'com.example.app',
+            version: '1.1.1',
+            versionMatch: { strategy: 'fuzzy' },
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(session.map.version).toBe('1.1.0');
+    });
+
+    it('selects via an opt-in versionRange', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.5.0': buildMap('1.5.0'),
+            '9.0.0': buildMap('9.0.0'),
+        };
+        const session = createSession({
+            map: registry,
+            app: 'com.example.app',
+            version: '1.4.0',
+            versionMatch: { versionRange: { min: '1.0.0', max: '2.0.0' } },
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        // 1.5.0 (Δ=[0,1,0]) is closest to 1.4.0 inside [1.0.0, 2.0.0].
+        expect(session.map.version).toBe('1.5.0');
+    });
+
+    it('honours the typed config versionMatching default when versionMatch is omitted', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.1.0': buildMap('1.1.0'),
+        };
+        const session = createSession({
+            map: registry,
+            app: 'com.example.app',
+            version: '1.1.1',
+            config: resolveConfig({ versionMatching: { strategy: 'fuzzy' } }),
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(session.map.version).toBe('1.1.0');
+    });
+
+    it('per-session versionMatch overrides the config default (explicit exact wins)', () => {
+        const registry: RosettaMapRegistry = {
+            '1.0.0': buildMap('1.0.0'),
+            '1.1.0': buildMap('1.1.0'),
+        };
+        expect(() =>
+            createSession({
+                map: registry,
+                app: 'com.example.app',
+                version: '1.1.1',
+                // Config says fuzzy, but the explicit per-session 'exact' wins
+                // → fail-hard on the miss.
+                config: resolveConfig({ versionMatching: { strategy: 'fuzzy' } }),
+                versionMatch: 'exact',
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+            }),
+        ).toThrow(/no map for version '1\.1\.1'/);
+    });
+
+    it('config default of exact still fails hard on a miss (default-preserving)', () => {
+        const registry: RosettaMapRegistry = { '1.0.0': buildMap('1.0.0') };
+        expect(() =>
+            createSession({
+                map: registry,
+                app: 'com.example.app',
+                version: '2.0.0',
+                config: resolveConfig(),
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+            }),
+        ).toThrow(/no map for version '2\.0\.0'/);
     });
 });
 
