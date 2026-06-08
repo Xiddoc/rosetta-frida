@@ -32,7 +32,20 @@ describe('printUsage', () => {
         const lines: string[] = [];
         printUsage((l) => lines.push(l));
         expect(lines[0]).toMatch(/^Usage: rosetta/);
-        for (const cmd of ['init', 'pull', 'validate', 'convert', 'patch', 'extract', 'inspect']) {
+        for (const cmd of [
+            'init',
+            'pull',
+            'validate',
+            'convert',
+            'patch',
+            'extract',
+            'inspect',
+            'diff',
+            'merge',
+            'merge-bundle',
+            'verify',
+            'types',
+        ]) {
             expect(lines.some((l) => l.includes(cmd))).toBe(true);
         }
     });
@@ -130,6 +143,54 @@ describe('route — dispatch happy paths', () => {
         const code = await route(['validate', 'm.json'], makeIo(fs, captured));
         expect(code).toBe(EXIT_OK);
         expect(captured.stdout[0]).toMatch(/^rosetta validate: OK:/);
+    });
+
+    it('routes diff and exits 0', async () => {
+        const fs = makeFakeFs({ 'a.json': VALID_JSON, 'b.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(['diff', 'a.json', 'b.json'], makeIo(fs, captured));
+        expect(code).toBe(EXIT_OK);
+        expect(captured.stdout[0]).toMatch(/^rosetta diff: com\.example\.app:/);
+    });
+
+    it('routes merge and exits 0', async () => {
+        const fs = makeFakeFs({ 'a.json': VALID_JSON, 'b.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(
+            ['merge', 'a.json', 'b.json', '-o', 'out.json'],
+            makeIo(fs, captured),
+        );
+        expect(code).toBe(EXIT_OK);
+        expect(fs.files.has('out.json')).toBe(true);
+        expect(captured.stdout[0]).toBe('rosetta merge: wrote out.json');
+    });
+
+    it('routes merge-bundle (alias) and exits 0', async () => {
+        const fs = makeFakeFs({ 'a.json': VALID_JSON, 'b.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(
+            ['merge-bundle', 'a.json', 'b.json', '-o', 'out.json'],
+            makeIo(fs, captured),
+        );
+        expect(code).toBe(EXIT_OK);
+        expect(captured.stdout[0]).toBe('rosetta merge-bundle: wrote out.json');
+    });
+
+    it('routes verify and exits 0', async () => {
+        const fs = makeFakeFs({ 'm.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(['verify', 'm.json'], makeIo(fs, captured));
+        expect(code).toBe(EXIT_OK);
+        expect(captured.stdout[0]).toMatch(/^rosetta verify: OK:/);
+    });
+
+    it('routes types and exits 0', async () => {
+        const fs = makeFakeFs({ 'm.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(['types', 'm.json', '-o', 'out.d.ts'], makeIo(fs, captured));
+        expect(code).toBe(EXIT_OK);
+        expect(fs.files.has('out.d.ts')).toBe(true);
+        expect(captured.stdout[0]).toBe('rosetta types: wrote out.d.ts');
     });
 });
 

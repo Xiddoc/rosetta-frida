@@ -37,7 +37,7 @@
  * discoverability; it shares this implementation.
  */
 
-import { MapValidationError, RosettaError } from '../../src/errors.js';
+import { RosettaError } from '../../src/errors.js';
 import { validateStructure } from '../../src/convert/index.js';
 import { renderJson } from '../../src/convert/json.js';
 import type { ClassEntry, FieldEntry, MethodEntry, RosettaMap } from '../../src/types/map.js';
@@ -233,15 +233,10 @@ export async function mergeFiles(argv: readonly string[], fs: FsLike): Promise<s
     }
     const merged = mergeMaps(maps, opts.strict);
     // Re-validate the fold result so a merge that produced an invalid shape
-    // fails loudly before it is written. validateStructure throws
-    // MapValidationError; wrap nothing — the router renders it.
-    let validated: RosettaMap;
-    try {
-        validated = validateStructure(merged);
-    } catch (err) {
-        if (err instanceof MapValidationError) throw err;
-        throw new RosettaError(`merged map is invalid: ${(err as Error).message}`);
-    }
+    // (e.g. an overload set that overflowed MAX_METHOD_OVERLOADS) fails loudly
+    // before it is written. `validateStructure` throws a `MapValidationError`
+    // the router renders with its indented issue list — same as `validate`.
+    const validated = validateStructure(merged);
     await writeNew(fs, opts.outputPath, renderJson(validated), { force: opts.force });
     return opts.outputPath;
 }
