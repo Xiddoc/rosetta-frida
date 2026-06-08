@@ -20,12 +20,21 @@ interface SessionOptions {
     version?: string;
     versionCode?: number;                     // authoritative selection key; auto-detected if omitted
     failurePolicy?: 'strict' | 'warn';        // default: 'warn'
-    versionMatch?: 'exact' | 'fuzzy';         // default: 'exact'
+    versionMatch?: 'exact' | 'fuzzy' | VersionMatchConfig; // default: 'exact'
+    config?: RosettaConfig;                   // typed config; supplies the versionMatch default
     trace?: boolean;                          // default: false
     healthCheckThreshold?: number;            // default: 0.8
     skipHealthCheck?: boolean;                // default: false
     enforceSigner?: boolean;                  // default: true (secure default)
     targetPolicy?: TargetPolicy;              // default: built-in denylist, fail-closed
+}
+
+interface VersionMatchConfig {
+    strategy?: 'exact' | 'fuzzy';             // default: 'exact'
+    versionCodeRange?: { min?: number; max?: number };  // opt-in numeric range over version_code
+    versionRange?: { min?: string; max?: string };      // opt-in semver-ish range over the label
+    maxDistance?: number | null;              // default: null (no ceiling on a nearest-label pick)
+    ranked?: boolean;                         // default: false (expose ranked candidates)
 }
 
 interface TargetPolicy {
@@ -109,15 +118,66 @@ always exact (never fuzzy).
 | Value | Behavior |
 |---|---|
 | `'exact'` (default) | After the `version_code` lookup, the registry must contain an entry whose key equals the detected version label. No match → throw. |
-| `'fuzzy'` | Fall back to the closest available map by semver distance (`major × 10_000 + minor × 100 + patch`). Ties broken by lower version. Also relaxes the `version_code` mismatch check. |
+| `'fuzzy'` | Fall back to the closest available map by **component-wise lexicographic** semver distance (`[Δmajor, Δminor, Δpatch]`, compared major-first). Ties broken by lower version, then the raw label. Also relaxes the `version_code` mismatch check. |
+| `VersionMatchConfig` (object) | The richer, opt-in form (below). Every knob defaults to its legacy-preserving value, so `{ strategy: 'fuzzy' }` is exactly `'fuzzy'`. |
+
+> The distance metric is the per-component vector `[Δmajor, Δminor,
+> Δpatch]`, **not** the old weighted sum `major × 10_000 + minor × 100 +
+> patch` (which overflowed its buckets and tied `1.0.142` with `1.1.42`).
+
+#### Expanded matching (`VersionMatchConfig`)
+
+All fields are opt-in; the selection order stays *exact `version_code`
+→ exact label → code range → label range → nearest label*, so an exact
+match always wins and a miss with everything off still **fails loudly**.
+
+| Knob | Default | Effect |
+|---|---|---|
+| `strategy` | `'exact'` | `'fuzzy'` enables the nearest-label fallback |
+| `versionCodeRange: { min?, max? }` | unset | numeric range over `version_code`; the in-range map closest to the detected code wins (ties → lower code, then lower label) |
+| `versionRange: { min?, max? }` | unset | semver-ish range over the label; the in-range map closest by lexicographic distance wins |
+| `maxDistance` | `null` | **label-distance** ceiling on a distance-ranked pick (applies to the nearest-label tier AND the `versionRange` tier; **not** to `versionCodeRange`). Compared by the same major-dominant lexicographic metric as the ranking: a pick is accepted only when its distance `[Δmajor, Δminor, Δpatch]` is `<= [maxDistance, 0, 0]`, else selection fails loudly. So `maxDistance: 1` accepts any zero-major-delta pick and `[1,0,0]`, but rejects `[1,0,1]` and `[2,0,0]`. |
+| `ranked` | `false` | exposes the full ranked candidate list on the internal pick result (closest first) for diagnostics |
+
+> **Ranges are independently opt-in.** Each of `strategy: 'fuzzy'`,
+> `versionCodeRange`, and `versionRange` is on its own an explicit opt-in
+> to approximate selection. A range engages even when `strategy` is
+> `'exact'` (or omitted) — this is **intentional**: setting a range *is*
+> the opt-in, so `{ versionCodeRange: { … } }` or `{ versionRange: { … } }`
+> selects within that range without also setting `strategy: 'fuzzy'`. With
+> *all* of them off, an exact miss still fails loudly. Exact `version_code`,
+> then exact label, always win first regardless.
+
+> **`maxDistance` is a label-distance ceiling only.** Because the
+> `versionCodeRange` tier ranks by a different (numeric-code) metric, the
+> ceiling does not apply to it. Pairing `maxDistance` with *only* a
+> `versionCodeRange` (no `versionRange`, `strategy` not `'fuzzy'`) is
+> rejected at config time so the no-op ceiling can't silently mislead.
 
 Fuzzy fallback is intentionally opt-in. Wrong-version maps silently
 corrupt hooks; the default failure mode is "tell the user to ship a
 map for this version" rather than "guess."
 
-When fuzzy succeeds, the picked map's `version` will *not* equal the
-detected version. The session still attaches and runs, but the
-diagnostic events make the fuzzy pick visible.
+When a fuzzy/range pick succeeds, the picked map's `version` will *not*
+equal the detected version. The session still attaches and runs, but
+the diagnostic events make the pick visible.
+
+### `config`
+
+An optional typed [`RosettaConfig`](../reference/types.md). The session
+consults only its `versionMatching` policy, and only as the **default**
+when the per-session `versionMatch` is omitted (an explicit
+`versionMatch` always wins). This lets a project set one default version
+policy in its config object and reuse it across sessions. The
+parse-limit caps (`config.parseLimits`) are applied at map-*load* time
+via `loadMap(input, config)`, not here, so they are inert on this path.
+
+```typescript
+import { resolveConfig, rosetta } from 'rosetta-frida';
+
+const config = resolveConfig({ versionMatching: { strategy: 'fuzzy', maxDistance: 1 } });
+rosetta.session({ map: registry, config }); // fuzzy-by-default, capped at distance 1
+```
 
 ### `trace`
 
@@ -126,7 +186,7 @@ as a single readable line:
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15 select=exact
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.IRemoteService$Stub ← aaaa (map)
 [rosetta] com.example.app.IRemoteService$Stub.requestTicket ← c (map) (Landroid/os/Bundle;Lbbbb;)V
@@ -304,9 +364,9 @@ sequenceDiagram
     D-->>S: { app, version, versionCode? }
     Note over S: emit 'detect' event
     S->>P: pick map (version_code first, then label)
-    P-->>S: { map, fuzzy?, registryKey? }
+    P-->>S: { map, fuzzyKind, registryKey? }
     Note over S: cross-check map.app; version_code (or label) acceptable
-    Note over S: emit 'map-load' event
+    Note over S: emit 'map-load' event (carries selectionKind)
     opt map.signer_sha256 set AND enforceSigner!=false
         S->>G: checkSigner(map.signer_sha256)
         G-->>S: { passed, expected, actual, source }

@@ -49,6 +49,16 @@ export interface DetectEvent {
     source: 'auto' | 'override';
 }
 
+/**
+ * How the loaded map was selected from the input (issue #22). `'exact'` is a
+ * `version_code` / label match (and the kind for a single-map input);
+ * `'nearest'` is the legacy closest-label fallback; `'code-range'` /
+ * `'label-range'` are the opt-in range fallbacks. Mirrors
+ * `PickedMap.fuzzyKind` so a subscriber can tell a deliberate (possibly far)
+ * range pick apart from a nearest-label guess.
+ */
+export type MapSelectionKind = 'exact' | 'nearest' | 'code-range' | 'label-range';
+
 /** Event emitted on map load. */
 export interface MapLoadEvent {
     type: 'map-load';
@@ -56,6 +66,11 @@ export interface MapLoadEvent {
     version: string;
     classCount: number;
     schemaVersion: number;
+    /**
+     * Which selection tier produced this map. Distinguishes the five tiers
+     * rather than collapsing them to a single fuzzy boolean.
+     */
+    selectionKind: MapSelectionKind;
 }
 
 /**

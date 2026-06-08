@@ -59,6 +59,49 @@ public surface may still shift before 1.0.0.
 
 ### Runtime
 
+- **Expanded fuzzy version matching** (`src/session/version-match.ts`,
+  `src/config.ts`; issue #22) — `versionMatch` now also accepts a richer
+  object form (`VersionMatchConfig`) alongside the legacy `'exact'` /
+  `'fuzzy'` strings: an opt-in numeric `versionCodeRange` over the
+  authoritative `version_code`, an opt-in semver-ish `versionRange` over the
+  label, a `maxDistance` ceiling that makes a too-far nearest-label pick
+  **fail loudly**, and a `ranked` flag that exposes the full ranked
+  candidate list. The same shape is the new typed-config default
+  (`RosettaConfig.versionMatching`, validated by one shared Zod schema and
+  consultable via `SessionOptions.config`). Exact `version_code` stays the
+  default and highest-precedence selection; every new knob is strictly
+  opt-in and a miss with fuzzy disabled still throws the same
+  `no map for version '…'` error (RFC 0001 Decision 3 preserved). Moves the
+  V1.5-roadmap item out of *deferred*.
+
+  *Review follow-ups (issue #22):*
+  - **`maxDistance` is now a major-dominant lexicographic ceiling**,
+    consistent with the candidate ranking — a pick is accepted only when its
+    distance `[Δmajor, Δminor, Δpatch]` is `<= [maxDistance, 0, 0]`. The old
+    per-component check was inconsistent (it rejected `[0,0,5]` yet accepted
+    `[1,0,0]` at `maxDistance: 1`). It is explicitly a **label-distance**
+    ceiling: it now also gates the `versionRange` (label-range) tier, and is
+    rejected at config time when paired with **only** a `versionCodeRange`
+    (a no-op, since that tier ranks by a different metric).
+  - **Parse-time range validation hardened**: an inverted `versionRange`
+    (`min > max`, compared on the same parsed tuple as selection) and an
+    all-undefined range (`{}`, which silently matched every map) are now
+    rejected with a clear error instead of surfacing later as a misleading
+    "no map".
+  - **`map-load` now carries a `selectionKind`** (`'exact' | 'nearest' |
+    'code-range' | 'label-range'`), threaded through the pick result and the
+    post-pick acceptance check, so the five selection tiers stay
+    distinguishable rather than collapsing to one `fuzzy` boolean — a
+    deliberate (possibly far) range pick is visible to callers and events.
+  - **Documented that ranges are independently opt-in**: any one of
+    `strategy: 'fuzzy'`, `versionCodeRange`, or `versionRange` engages
+    approximate selection on its own; a range works under `strategy:
+    'exact'`/omitted by design.
+  - Internal: extracted a single shared `compareTuple` / `parseVersion`
+    (`src/session/version-tuple.ts`) used by both the config range
+    refinements and the runtime pick, and a guarded `getMap` registry
+    accessor — removing duplicate comparators and `as RosettaMap` casts.
+
 - **On-device `signer_sha256` enforcement** (`src/session/signer-detect.ts`)
   — when the loaded map carries a `signer_sha256`, `rosetta.session(...)`
   now reads the running app's signing certificate **in-process**
