@@ -165,6 +165,7 @@ interface MapLoadEvent {
     version: string;
     classCount: number;
     schemaVersion: number;
+    selectionKind: 'exact' | 'nearest' | 'code-range' | 'label-range';
 }
 ```
 
@@ -174,10 +175,11 @@ interface MapLoadEvent {
 | `version` | The map's `version` field. For registry bundles, this is the picked entry's version. |
 | `classCount` | Number of entries in `map.classes`. |
 | `schemaVersion` | The map's `schema_version`. Currently always `2`. |
+| `selectionKind` | Which tier selected this map: `'exact'` (a `version_code` / label match, also a single-map input), `'nearest'` (closest-label fuzzy fallback), `'code-range'`, or `'label-range'` (the opt-in range fallbacks). The four kinds stay distinct rather than collapsing to one boolean, so a deliberate — possibly far — range pick is distinguishable from a nearest guess. |
 
 **Trace-line format:**
 
-- `[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15`
+- `[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15 select=exact`
 
 **Subscribing:**
 

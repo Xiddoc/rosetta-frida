@@ -107,7 +107,7 @@ export function formatEvent(event: DiagnosticEvent): string {
             return `[rosetta] detect ${event.source}: ${event.app}@${event.version}`;
         }
         case 'map-load': {
-            return `[rosetta] map-load ${event.app}@${event.version} schema=${event.schemaVersion} classes=${event.classCount}`;
+            return `[rosetta] map-load ${event.app}@${event.version} schema=${event.schemaVersion} classes=${event.classCount} select=${event.selectionKind}`;
         }
         case 'signer-check': {
             const status = event.passed ? 'PASS' : 'FAIL';

@@ -19,6 +19,21 @@ import { dirname } from 'node:path';
 import { MapValidationError, RosettaError } from '../../src/errors.js';
 
 /**
+ * Signals that `rosetta diff --exit-code` found a non-empty diff. It is NOT a
+ * failure — the rendered report is the requested output — but CI asked for a
+ * non-zero exit when the map rotated. The router prints {@link report} to
+ * stdout (no error prefix) and returns exit 1. Defined in the CLI layer (not
+ * the library error taxonomy) because it is purely a process-exit-code
+ * concern, not a library error.
+ */
+export class DiffDriftError extends Error {
+    constructor(public readonly report: string) {
+        super('diff is non-empty (--exit-code)');
+        this.name = 'DiffDriftError';
+    }
+}
+
+/**
  * Subset of `node:fs/promises` the CLI commands need. Kept narrow so the
  * mock in tests stays small, but wide enough that *every* command can
  * route its filesystem access through a single injected seam:

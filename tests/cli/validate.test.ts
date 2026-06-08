@@ -44,10 +44,22 @@ function makeFs(initial: Record<string, string>): FsLike {
 
 describe('parseValidateArgs', () => {
     it('accepts exactly one positional', () => {
-        expect(parseValidateArgs(['m.json']).inputPath).toBe('m.json');
+        const o = parseValidateArgs(['m.json']);
+        expect(o.inputPath).toBe('m.json');
+        expect(o.deep).toBe(false);
+        expect(o.json).toBe(false);
     });
 
-    it('errors on flags', () => {
+    it('accepts --deep and its --semantic alias', () => {
+        expect(parseValidateArgs(['m.json', '--deep']).deep).toBe(true);
+        expect(parseValidateArgs(['m.json', '--semantic']).deep).toBe(true);
+    });
+
+    it('accepts --json', () => {
+        expect(parseValidateArgs(['m.json', '--deep', '--json']).json).toBe(true);
+    });
+
+    it('errors on unknown flags', () => {
         expect(() => parseValidateArgs(['--bogus'])).toThrow(/unknown option/);
     });
 
@@ -185,6 +197,161 @@ describe('runValidate', () => {
         };
         const msg = await runValidate([sample], io);
         expect(msg).toMatch(/^OK/);
+    });
+});
+
+describe('runValidate --deep (folded-in semantic checks)', () => {
+    // The semantic engine itself is unit-tested in src/verify/; these pin the
+    // verb contract: deep mode runs the checks, hard errors fail (throw), and
+    // warnings are reported in the success message without failing the build.
+    const consistent = JSON.stringify({
+        schema_version: 2,
+        app: 'com.example.app',
+        version: '1.0.0',
+        version_code: 100,
+        classes: { 'com.example.app.Foo': { obfuscated: 'a' } },
+    });
+
+    it('returns an OK consistent summary for a clean map', async () => {
+        const fake = makeFakeFs({ '/m.json': consistent });
+        const msg = await runValidate(['/m.json', '--deep'], makeIo(fake, makeCaptured()));
+        expect(msg).toMatch(/^OK/);
+        expect(msg).toContain('consistent');
+    });
+
+    it('throws a MapValidationError on a HARD semantic error (duplicate obfuscated)', async () => {
+        const map = JSON.stringify({
+            schema_version: 2,
+            app: 'com.example.app',
+            version: '1.0.0',
+            version_code: 100,
+            classes: {
+                'com.example.app.A': { obfuscated: 'x' },
+                'com.example.app.B': { obfuscated: 'x' },
+            },
+        });
+        const fake = makeFakeFs({ '/m.json': map });
+        await expect(
+            runValidate(['/m.json', '--deep'], makeIo(fake, makeCaptured())),
+        ).rejects.toThrow(MapValidationError);
+    });
+
+    it('reports a WARNING (dangling extends) in the message WITHOUT failing', async () => {
+        const map = JSON.stringify({
+            schema_version: 2,
+            app: 'com.example.app',
+            version: '1.0.0',
+            version_code: 100,
+            classes: {
+                'com.example.app.Child': { obfuscated: 'b', extends: 'com.example.app.Missing' },
+            },
+        });
+        const fake = makeFakeFs({ '/m.json': map });
+        const msg = await runValidate(['/m.json', '--deep'], makeIo(fake, makeCaptured()));
+        expect(msg).toMatch(/^OK/);
+        expect(msg).toContain('1 warning');
+        expect(msg).toContain('warning at classes.com.example.app.Child.extends');
+    });
+
+    it('does NOT hard-fail a vendor app referencing legit library namespaces', async () => {
+        // MAJOR E: a Google-family app referencing gms/material it never maps
+        // must not exit 1. With the full-prefix heuristic there are no findings.
+        const map = JSON.stringify({
+            schema_version: 2,
+            app: 'com.google.android.apps.foo',
+            version: '1.0.0',
+            version_code: 100,
+            classes: {
+                'com.google.android.apps.foo.Main': {
+                    obfuscated: 'a',
+                    extends: 'com.google.android.gms.common.api.GoogleApiClient',
+                },
+            },
+        });
+        const fake = makeFakeFs({ '/m.json': map });
+        const msg = await runValidate(['/m.json', '--deep'], makeIo(fake, makeCaptured()));
+        expect(msg).toMatch(/^OK/);
+    });
+
+    it('reports a PLURAL warning count and lists each warning', async () => {
+        const map = JSON.stringify({
+            schema_version: 2,
+            app: 'com.example.app',
+            version: '1.0.0',
+            version_code: 100,
+            classes: {
+                'com.example.app.A': { obfuscated: 'a', extends: 'com.example.app.MissingA' },
+                'com.example.app.B': { obfuscated: 'b', extends: 'com.example.app.MissingB' },
+            },
+        });
+        const fake = makeFakeFs({ '/m.json': map });
+        const msg = await runValidate(['/m.json', '--deep'], makeIo(fake, makeCaptured()));
+        expect(msg).toContain('2 warnings');
+        expect(msg).toContain('warning at classes.com.example.app.A.extends');
+        expect(msg).toContain('warning at classes.com.example.app.B.extends');
+    });
+
+    it('reports a PLURAL error count on multiple hard errors', async () => {
+        const map = JSON.stringify({
+            schema_version: 2,
+            app: 'com.example.app',
+            version: '1.0.0',
+            version_code: 100,
+            classes: {
+                'com.example.app.A': { obfuscated: 'x' },
+                'com.example.app.B': { obfuscated: 'x' },
+                'com.example.app.C': { obfuscated: 'y' },
+                'com.example.app.D': { obfuscated: 'y' },
+            },
+        });
+        const fake = makeFakeFs({ '/m.json': map });
+        await expect(
+            runValidate(['/m.json', '--deep'], makeIo(fake, makeCaptured())),
+        ).rejects.toThrow(/2 errors/);
+    });
+
+    it('--json emits the structured VerifyIssue[] (warnings included) when no hard error', async () => {
+        const map = JSON.stringify({
+            schema_version: 2,
+            app: 'com.example.app',
+            version: '1.0.0',
+            version_code: 100,
+            classes: {
+                'com.example.app.Child': { obfuscated: 'b', extends: 'com.example.app.Missing' },
+            },
+        });
+        const fake = makeFakeFs({ '/m.json': map });
+        const msg = await runValidate(
+            ['/m.json', '--deep', '--json'],
+            makeIo(fake, makeCaptured()),
+        );
+        const parsed = JSON.parse(msg) as { severity: string; path: string }[];
+        expect(parsed).toHaveLength(1);
+        expect(parsed[0]?.severity).toBe('warning');
+    });
+
+    it('--json still throws on a hard error so the exit code stays honest', async () => {
+        const map = JSON.stringify({
+            schema_version: 2,
+            app: 'com.example.app',
+            version: '1.0.0',
+            version_code: 100,
+            classes: {
+                'com.example.app.A': { obfuscated: 'x' },
+                'com.example.app.B': { obfuscated: 'x' },
+            },
+        });
+        const fake = makeFakeFs({ '/m.json': map });
+        await expect(
+            runValidate(['/m.json', '--deep', '--json'], makeIo(fake, makeCaptured())),
+        ).rejects.toThrow(MapValidationError);
+    });
+
+    it('schema failure is reported before any semantic check', async () => {
+        const fake = makeFakeFs({ '/m.json': '{ "schema_version": 1 }' });
+        await expect(
+            runValidate(['/m.json', '--deep'], makeIo(fake, makeCaptured())),
+        ).rejects.toThrow();
     });
 });
 

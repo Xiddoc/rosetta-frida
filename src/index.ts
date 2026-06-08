@@ -14,11 +14,22 @@ export * from './types/index.js';
 // `config.ts` (still exported there for its own unit tests).
 export {
     resolveConfig,
+    resolveVersionMatch,
     DEFAULT_CONFIG,
     DEFAULT_MAX_INPUT_BYTES,
     DEFAULT_MAX_NESTING_DEPTH,
+    DEFAULT_FUZZY_MAX_DISTANCE,
+    DEFAULT_FUZZY_RANKED,
 } from './config.js';
-export type { RosettaConfig, RosettaConfigInput, ParseLimits } from './config.js';
+export type {
+    RosettaConfig,
+    RosettaConfigInput,
+    ParseLimits,
+    VersionMatchConfig,
+    VersionMatchConfigInput,
+    VersionCodeRange,
+    VersionLabelRange,
+} from './config.js';
 
 // Java bridge — the single seam onto Frida's global `Java`.
 export {
@@ -63,6 +74,16 @@ export type { ParsedMarker, ParsedSingle, ParsedRegistry } from './marker/index.
 // Converters
 export { yamlToMap, convertToJson, renderJson } from './convert/index.js';
 export type { ConvertFormat } from './convert/index.js';
+
+// Map tooling cores (library-first; the CLI verbs are thin wrappers).
+export { diffMaps, renderHumanDiff } from './diff/index.js';
+export type { MapDiff, ClassDelta, ObfChange, SignatureChange } from './diff/index.js';
+export { mergeMaps } from './merge/index.js';
+export type { MergeOptions, ObfOverride } from './merge/index.js';
+export { verifyMap } from './verify/index.js';
+export type { VerifyIssue, VerifySeverity } from './verify/index.js';
+export { renderTypes, collectNames } from './types-emit/index.js';
+export type { ClassNames } from './types-emit/index.js';
 
 // Session + auto-detect + health-check (Wave 2G)
 export {

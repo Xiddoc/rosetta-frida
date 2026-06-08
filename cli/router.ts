@@ -36,7 +36,10 @@ import { runInit } from './commands/init.js';
 import { runValidate } from './commands/validate.js';
 import { runConvert } from './commands/convert.js';
 import { runPull, defaultPullConfig } from './commands/pull.js';
-import { formatErrorLines, successLine, type CommandIo } from './commands/io.js';
+import { runDiff } from './commands/diff.js';
+import { runMerge } from './commands/merge.js';
+import { runTypes } from './commands/types.js';
+import { DiffDriftError, formatErrorLines, successLine, type CommandIo } from './commands/io.js';
 
 /** A command's run function: argv tail + io → its success message. */
 type CommandRun = (args: readonly string[], io: CommandIo) => Promise<string>;
@@ -75,8 +78,8 @@ const COMMANDS = {
     },
     validate: {
         run: runValidate,
-        invocation: 'validate <map>',
-        summary: 'Schema + sanity check (auto-detect format)',
+        invocation: 'validate <map> [--deep]',
+        summary: 'Schema check (+ --deep semantic checks; --json)',
     },
     convert: {
         run: runConvert,
@@ -97,6 +100,21 @@ const COMMANDS = {
         run: runInspect,
         invocation: 'inspect <bundle.js>',
         summary: 'One-line summary of embedded map',
+    },
+    diff: {
+        run: runDiff,
+        invocation: 'diff <from> <to> [--json] [--exit-code]',
+        summary: 'Structural diff between two maps (what rotated)',
+    },
+    merge: {
+        run: runMerge,
+        invocation: 'merge <a> <b> [...] -o <out> [--strict]',
+        summary: 'Combine partial maps for one (app, version_code)',
+    },
+    types: {
+        run: runTypes,
+        invocation: 'types <map> -o <out.d.ts>',
+        summary: 'Emit .d.ts real-name stubs for autocompletion',
     },
 } satisfies Record<string, CommandEntry>;
 
@@ -132,6 +150,13 @@ async function dispatch(cmd: Command, args: readonly string[], io: CommandIo): P
         io.stdout(successLine(cmd, message));
         return EXIT_OK;
     } catch (err) {
+        // `diff --exit-code` on a non-empty diff is not a failure: the report
+        // is the requested output. Print it to stdout (no error prefix) and
+        // exit 1 so CI can gate on map drift.
+        if (err instanceof DiffDriftError) {
+            io.stdout(successLine(cmd, err.report));
+            return EXIT_FAILURE;
+        }
         for (const line of formatErrorLines(cmd, err)) io.stderr(line);
         return EXIT_FAILURE;
     }

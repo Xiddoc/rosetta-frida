@@ -12,7 +12,95 @@ public surface may still shift before 1.0.0.
 
 ## Unreleased
 
+### CLI (map-authoring verbs)
+
+- **Library-first parity for the V1.5 verbs.** The pure cores of `diff`,
+  `merge`, `types`, and the semantic checks were extracted out of
+  `cli/commands/*` into `src/` and re-exported from `src/index.ts`, so they
+  are usable programmatically (matching `convert`): `diffMaps` /
+  `renderHumanDiff` (`src/diff/`), `mergeMaps` (`src/merge/`), `verifyMap`
+  (`src/verify/`), and `renderTypes` / `collectNames` (`src/types-emit/`). The
+  CLI files are now thin arg-parse + IO wrappers.
+- **Dropped the `merge-bundle` alias.** It was a verbatim duplicate of `merge`
+  (and leaked its own name into the success line). Only `merge` remains.
+- **Folded `verify` into `validate --deep`.** The standalone `verify` verb took
+  the same input, output shape, and exit codes as `validate` and differed only
+  by check depth, so it became a `--deep` (alias `--semantic`) flag on
+  `validate`. `--json` emits the structured findings for CI. `verifyMap` stays
+  exported for programmatic use.
+- **`mergeMaps` now takes an options object** (`{ strict, onOverride }`) instead
+  of a positional boolean. In non-strict mode each last-wins override of an
+  *obfuscated* name — the "silent wrong name corrupts hooks" hazard — emits a
+  `note:` line to stderr. The per-class scalar fold now strips `undefined` like
+  the top-level path, so an explicit `extends: undefined` on a later input can
+  no longer erase a base value.
+- **`diff` gained `--exit-code`** (CI "fail if the map rotated": exit 1 on a
+  non-empty diff; default stays 0). The human header now shows both maps'
+  `version` labels when present, and `diffMaps` asserts both maps describe the
+  same app so a direct caller cannot silently mislabel the diff.
+
+### CLI (correctness fixes)
+
+- **`types`: valid TypeScript for schema-legal names.** String literals are now
+  rendered with `JSON.stringify` (double-quoted, fully escaped) so a
+  class/method/field name containing `'` or `\` no longer emits a syntax error;
+  the generated JSDoc header sanitizes a block-comment terminator out of the
+  interpolated `app`/`version` so a hostile `version` cannot break out of the
+  comment.
+- **`validate --deep`: fewer false positives, no fail-hard on heuristics.** The
+  dangling-`extends` / un-translated-arg-type heuristic now matches against the
+  **full** `app` package prefix (not a 2-segment slice), eliminating
+  cross-namespace false positives on real vendor apps (e.g. a
+  `com.google.android.apps.*` app referencing `com.google.android.gms.*`). The
+  semantic findings are classified by severity: duplicate obfuscated names per
+  dex, `aidl_txn` collisions, and unparseable signatures are HARD errors (exit
+  1); the heuristic cross-references are WARNINGS that are reported but never
+  fail the build (`VerifyIssue` gained a `severity` field).
+
 ### Runtime
+
+- **Expanded fuzzy version matching** (`src/session/version-match.ts`,
+  `src/config.ts`; issue #22) — `versionMatch` now also accepts a richer
+  object form (`VersionMatchConfig`) alongside the legacy `'exact'` /
+  `'fuzzy'` strings: an opt-in numeric `versionCodeRange` over the
+  authoritative `version_code`, an opt-in semver-ish `versionRange` over the
+  label, a `maxDistance` ceiling that makes a too-far nearest-label pick
+  **fail loudly**, and a `ranked` flag that exposes the full ranked
+  candidate list. The same shape is the new typed-config default
+  (`RosettaConfig.versionMatching`, validated by one shared Zod schema and
+  consultable via `SessionOptions.config`). Exact `version_code` stays the
+  default and highest-precedence selection; every new knob is strictly
+  opt-in and a miss with fuzzy disabled still throws the same
+  `no map for version '…'` error (RFC 0001 Decision 3 preserved). Moves the
+  V1.5-roadmap item out of *deferred*.
+
+  *Review follow-ups (issue #22):*
+  - **`maxDistance` is now a major-dominant lexicographic ceiling**,
+    consistent with the candidate ranking — a pick is accepted only when its
+    distance `[Δmajor, Δminor, Δpatch]` is `<= [maxDistance, 0, 0]`. The old
+    per-component check was inconsistent (it rejected `[0,0,5]` yet accepted
+    `[1,0,0]` at `maxDistance: 1`). It is explicitly a **label-distance**
+    ceiling: it now also gates the `versionRange` (label-range) tier, and is
+    rejected at config time when paired with **only** a `versionCodeRange`
+    (a no-op, since that tier ranks by a different metric).
+  - **Parse-time range validation hardened**: an inverted `versionRange`
+    (`min > max`, compared on the same parsed tuple as selection) and an
+    all-undefined range (`{}`, which silently matched every map) are now
+    rejected with a clear error instead of surfacing later as a misleading
+    "no map".
+  - **`map-load` now carries a `selectionKind`** (`'exact' | 'nearest' |
+    'code-range' | 'label-range'`), threaded through the pick result and the
+    post-pick acceptance check, so the five selection tiers stay
+    distinguishable rather than collapsing to one `fuzzy` boolean — a
+    deliberate (possibly far) range pick is visible to callers and events.
+  - **Documented that ranges are independently opt-in**: any one of
+    `strategy: 'fuzzy'`, `versionCodeRange`, or `versionRange` engages
+    approximate selection on its own; a range works under `strategy:
+    'exact'`/omitted by design.
+  - Internal: extracted a single shared `compareTuple` / `parseVersion`
+    (`src/session/version-tuple.ts`) used by both the config range
+    refinements and the runtime pick, and a guarded `getMap` registry
+    accessor — removing duplicate comparators and `as RosettaMap` casts.
 
 - **On-device `signer_sha256` enforcement** (`src/session/signer-detect.ts`)
   — when the loaded map carries a `signer_sha256`, `rosetta.session(...)`
