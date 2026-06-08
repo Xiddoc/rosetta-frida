@@ -13,24 +13,30 @@ $ npx rosetta --help
 Usage: rosetta <command> [options]
 
 Commands:
-  init <app> <version> [options]       Scaffold a new map skeleton (--version-code required)
-  pull <app>@<version_code> [options]  Fetch + verify map from rosetta-maps repo (--require-sidecar)
-  validate <map>                       Schema + sanity check (auto-detect format)
-  convert <in> -o <out>                Convert YAML map to canonical JSON
-  patch <bundle.js> --map <new.json>   Replace embedded map in bundle
-  extract <bundle.js> -o <out.json>    Pull embedded map out of bundle
-  inspect <bundle.js>                  One-line summary of embedded map
+  init <app> <version> [options]            Scaffold a new map skeleton (--version-code required)
+  pull <app>@<version_code> [options]       Fetch + verify map from rosetta-maps repo (--require-sidecar)
+  validate <map> [--deep]                   Schema check (+ --deep semantic checks; --json)
+  convert <in> -o <out>                     Convert YAML map to canonical JSON
+  patch <bundle.js> --map <new.json>        Replace embedded map in bundle
+  extract <bundle.js> -o <out.json>         Pull embedded map out of bundle
+  inspect <bundle.js>                       One-line summary of embedded map
+  diff <from> <to> [--json] [--exit-code]   Structural diff between two maps (what rotated)
+  merge <a> <b> [...] -o <out> [--strict]   Combine partial maps for one (app, version_code)
+  types <map> -o <out.d.ts>                 Emit .d.ts real-name stubs for autocompletion
 ```
 
 | Command | What it does | Operates on |
 |---|---|---|
 | [`init`](init.md) | Scaffold a strict-JSON skeleton for a new `(app, version)` pair (`--version-code` required). | The filesystem — writes `maps/<app>/<version_code>.json` by default. |
 | [`pull`](pull.md) | Fetch the verified map for an `(app, version_code)` from the community rosetta-maps repo, validate it, and write it into the project. Build-time only. | The network (read) + the filesystem (write). |
-| [`validate`](validate.md) | Run the schema + sanity check against a map. Auto-detects format from the extension. | One map file (JSON / YAML). |
+| [`validate`](validate.md) | Run the schema + sanity check against a map (auto-detects format). `--deep` adds semantic checks (dangling `extends`, duplicate obfuscated names per dex, un-translated arg types, `aidl_txn` collisions); `--json` for CI. | One map file (JSON / YAML). |
 | [`convert`](convert.md) | Convert a YAML map to canonical JSON. | One map file. |
 | [`patch`](patch.md) | Replace the embedded map in a compiled bundle with a fresh one. In-place by default. | A compiled bundle + a new map. |
 | [`extract`](extract.md) | Pull the embedded map back out of a compiled bundle into a standalone JSON file. | A compiled bundle. |
 | [`inspect`](inspect.md) | Print a one-line summary of the map embedded in a compiled bundle. | A compiled bundle. |
+| [`diff`](diff.md) | Report what rotated (classes/methods/fields/signatures) between two maps. Human report + `--json`; `--exit-code` gates CI on drift. | Two map files. |
+| [`merge`](merge.md) | Combine several partial maps for one `(app, version_code)` into one (sources unioned, entries merged; `--strict` errors on conflicting obfuscated names). | Two or more map files. |
+| [`types`](types.md) | Emit a `.d.ts` of the map's real names so hook authors get autocompletion. | One map file. |
 
 ## Two command shapes
 
@@ -118,25 +124,31 @@ npx rosetta patch hook.bundle.js --map maps/com.example.app/${VERSION}.json -o h
 This is the CI flow the marker block was designed for. See
 [Marker block](../maps/marker-block.md) for the full mechanism.
 
-## What's not in V1
+## Shipped in V1.5
 
-The following commands are planned for V1.5 but not in V1.0:
+The map-authoring verbs once listed here as deferred have landed:
+[`diff`](diff.md), [`merge`](merge.md), [`types`](types.md), and the deep
+semantic checks under [`validate --deep`](validate.md#deep-semantic-checks-deep).
+See their pages for the full grammar.
 
-- `rosetta diff <a.json> <b.json>` — show rotation deltas between
-  versions (the canonical "what changed in this release" report).
-- `rosetta merge <a.json> <b.json> [...]` — merge partial maps,
-  preferring higher-confidence entries.
-- `rosetta merge-bundle <bundle.js> <map1.json> [...]` — convert a
-  single-map bundle to a registry bundle.
-- `rosetta types <map.json> -o <out.d.ts>` — generate per-map
-  TypeScript declarations.
-- `rosetta migrate <map.json>` — run schema migrators on old maps.
-- `rosetta verify --device <id>` — live health check via
-  `frida-server`.
+> **Surface changes (review).** The `merge-bundle` alias was dropped (it was a
+> verbatim duplicate of `merge`). The standalone `verify` verb was folded into
+> `validate --deep` — it took the same input, output shape, and exit codes and
+> differed only by check depth. The semantic engine remains available
+> programmatically as `verifyMap` (exported from the package root).
+
+## Still deferred
+
+- `rosetta migrate <map.json>` — run schema migrators on old maps
+  (tracked with the rosetta-maps schema-evolution work; the schema owner
+  defines the migration contract).
+- `rosetta validate --device <id>` — a *live* health check via
+  `frida-server`. Today's [`validate --deep`](validate.md#deep-semantic-checks-deep)
+  is static-only (semantic checks on a map it is handed); a device-backed mode
+  is future work.
+- A `frida-compile` plugin for automatic marker-block wrapping.
 
 > The build-time community-registry fetch (once sketched as
 > `rosetta fetch`) **shipped in V1.0 as [`rosetta pull`](pull.md)**. It
 > pulls the single verified map for an `(app, version_code)` from the
 > rosetta-maps repo on the developer's machine.
-
-Stay tuned for V1.5.

@@ -32,9 +32,30 @@ describe('printUsage', () => {
         const lines: string[] = [];
         printUsage((l) => lines.push(l));
         expect(lines[0]).toMatch(/^Usage: rosetta/);
-        for (const cmd of ['init', 'pull', 'validate', 'convert', 'patch', 'extract', 'inspect']) {
+        for (const cmd of [
+            'init',
+            'pull',
+            'validate',
+            'convert',
+            'patch',
+            'extract',
+            'inspect',
+            'diff',
+            'merge',
+            'types',
+        ]) {
             expect(lines.some((l) => l.includes(cmd))).toBe(true);
         }
+    });
+
+    it('no longer lists the removed merge-bundle / verify verbs', () => {
+        const lines: string[] = [];
+        printUsage((l) => lines.push(l));
+        expect(lines.some((l) => /\bmerge-bundle\b/.test(l))).toBe(false);
+        // `verify` was folded into `validate --deep`; it must not appear as a
+        // standalone command row. (The word can still appear in prose, but the
+        // command-table invocations no longer carry a `verify <...>` row.)
+        expect(lines.some((l) => /^\s*verify\s/.test(l))).toBe(false);
     });
 });
 
@@ -130,6 +151,62 @@ describe('route — dispatch happy paths', () => {
         const code = await route(['validate', 'm.json'], makeIo(fs, captured));
         expect(code).toBe(EXIT_OK);
         expect(captured.stdout[0]).toMatch(/^rosetta validate: OK:/);
+    });
+
+    it('routes diff and exits 0', async () => {
+        const fs = makeFakeFs({ 'a.json': VALID_JSON, 'b.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(['diff', 'a.json', 'b.json'], makeIo(fs, captured));
+        expect(code).toBe(EXIT_OK);
+        expect(captured.stdout[0]).toMatch(/^rosetta diff: com\.example\.app:/);
+    });
+
+    it('routes merge and exits 0', async () => {
+        const fs = makeFakeFs({ 'a.json': VALID_JSON, 'b.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(
+            ['merge', 'a.json', 'b.json', '-o', 'out.json'],
+            makeIo(fs, captured),
+        );
+        expect(code).toBe(EXIT_OK);
+        expect(fs.files.has('out.json')).toBe(true);
+        expect(captured.stdout[0]).toBe('rosetta merge: wrote out.json');
+    });
+
+    it('routes validate --deep and exits 0', async () => {
+        const fs = makeFakeFs({ 'm.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(['validate', 'm.json', '--deep'], makeIo(fs, captured));
+        expect(code).toBe(EXIT_OK);
+        expect(captured.stdout[0]).toMatch(/^rosetta validate: OK:/);
+    });
+
+    it('rejects the removed merge-bundle verb as unknown (exit 2)', async () => {
+        const fs = makeFakeFs({ 'a.json': VALID_JSON, 'b.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(
+            ['merge-bundle', 'a.json', 'b.json', '-o', 'out.json'],
+            makeIo(fs, captured),
+        );
+        expect(code).toBe(EXIT_MISUSE);
+        expect(captured.stderr[0]).toMatch(/unknown command: merge-bundle/);
+    });
+
+    it('rejects the removed verify verb as unknown (exit 2)', async () => {
+        const fs = makeFakeFs({ 'm.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(['verify', 'm.json'], makeIo(fs, captured));
+        expect(code).toBe(EXIT_MISUSE);
+        expect(captured.stderr[0]).toMatch(/unknown command: verify/);
+    });
+
+    it('routes types and exits 0', async () => {
+        const fs = makeFakeFs({ 'm.json': VALID_JSON });
+        const captured = makeCaptured();
+        const code = await route(['types', 'm.json', '-o', 'out.d.ts'], makeIo(fs, captured));
+        expect(code).toBe(EXIT_OK);
+        expect(fs.files.has('out.d.ts')).toBe(true);
+        expect(captured.stdout[0]).toBe('rosetta types: wrote out.d.ts');
     });
 });
 

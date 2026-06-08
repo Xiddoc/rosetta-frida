@@ -12,6 +12,51 @@ public surface may still shift before 1.0.0.
 
 ## Unreleased
 
+### CLI (map-authoring verbs)
+
+- **Library-first parity for the V1.5 verbs.** The pure cores of `diff`,
+  `merge`, `types`, and the semantic checks were extracted out of
+  `cli/commands/*` into `src/` and re-exported from `src/index.ts`, so they
+  are usable programmatically (matching `convert`): `diffMaps` /
+  `renderHumanDiff` (`src/diff/`), `mergeMaps` (`src/merge/`), `verifyMap`
+  (`src/verify/`), and `renderTypes` / `collectNames` (`src/types-emit/`). The
+  CLI files are now thin arg-parse + IO wrappers.
+- **Dropped the `merge-bundle` alias.** It was a verbatim duplicate of `merge`
+  (and leaked its own name into the success line). Only `merge` remains.
+- **Folded `verify` into `validate --deep`.** The standalone `verify` verb took
+  the same input, output shape, and exit codes as `validate` and differed only
+  by check depth, so it became a `--deep` (alias `--semantic`) flag on
+  `validate`. `--json` emits the structured findings for CI. `verifyMap` stays
+  exported for programmatic use.
+- **`mergeMaps` now takes an options object** (`{ strict, onOverride }`) instead
+  of a positional boolean. In non-strict mode each last-wins override of an
+  *obfuscated* name — the "silent wrong name corrupts hooks" hazard — emits a
+  `note:` line to stderr. The per-class scalar fold now strips `undefined` like
+  the top-level path, so an explicit `extends: undefined` on a later input can
+  no longer erase a base value.
+- **`diff` gained `--exit-code`** (CI "fail if the map rotated": exit 1 on a
+  non-empty diff; default stays 0). The human header now shows both maps'
+  `version` labels when present, and `diffMaps` asserts both maps describe the
+  same app so a direct caller cannot silently mislabel the diff.
+
+### CLI (correctness fixes)
+
+- **`types`: valid TypeScript for schema-legal names.** String literals are now
+  rendered with `JSON.stringify` (double-quoted, fully escaped) so a
+  class/method/field name containing `'` or `\` no longer emits a syntax error;
+  the generated JSDoc header sanitizes a block-comment terminator out of the
+  interpolated `app`/`version` so a hostile `version` cannot break out of the
+  comment.
+- **`validate --deep`: fewer false positives, no fail-hard on heuristics.** The
+  dangling-`extends` / un-translated-arg-type heuristic now matches against the
+  **full** `app` package prefix (not a 2-segment slice), eliminating
+  cross-namespace false positives on real vendor apps (e.g. a
+  `com.google.android.apps.*` app referencing `com.google.android.gms.*`). The
+  semantic findings are classified by severity: duplicate obfuscated names per
+  dex, `aidl_txn` collisions, and unparseable signatures are HARD errors (exit
+  1); the heuristic cross-references are WARNINGS that are reported but never
+  fail the build (`VerifyIssue` gained a `severity` field).
+
 ### Runtime
 
 - **On-device `signer_sha256` enforcement** (`src/session/signer-detect.ts`)
