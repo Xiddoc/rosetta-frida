@@ -85,9 +85,10 @@ The policy is **opt-in-strict during rollout**:
 
 | Sidecar state | Without `--require-sidecar` | With `--require-sidecar` |
 |---|---|---|
-| Present, digest matches | proceed | proceed |
+| Present, digest matches (basename absent or matching) | proceed | proceed |
 | Present, digest mismatches | **fail closed** | **fail closed** |
-| Present, malformed (bad hex/length) | **fail closed** | **fail closed** |
+| Present, malformed (bad hex/length, empty, or >1 non-empty line) | **fail closed** | **fail closed** |
+| Present, basename token names the wrong file | **fail closed** | **fail closed** |
 | Absent (HTTP 404) | warn on stderr, proceed | **fail closed** |
 
 Pass `--require-sidecar` in CI / release builds so a map can never be
@@ -95,12 +96,25 @@ bundled without a verified transport-integrity digest.
 
 > **Cross-client contract.** This sidecar format is shared across the
 > Rosetta tools: the [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps)
-> repo emits the `.json.sha256` sidecar, and the
+> repo emits and owner-verifies the `.json.sha256` sidecar, and the
 > [`rosetta-xposed`](https://github.com/Xiddoc/rosetta-xposed) Gradle
 > "bake a pulled map" step verifies the **same** digest the same way. The
-> algorithm — first whitespace-delimited token, lowercased, matched against
-> `^[0-9a-f]{64}$`, compared to the SHA-256 of the exact map bytes — is
-> identical on every client.
+> parse rule is **byte-for-byte identical on every client** (the single
+> source of truth is the rosetta-maps
+> [`docs/reference/integrity.md`](https://github.com/Xiddoc/rosetta-maps/blob/main/docs/reference/integrity.md)):
+>
+> 1. Take only the **first line** (a single optional trailing `\n` is allowed;
+>    a trailing `\r` from a CRLF ending is tolerated as whitespace). Any
+>    **further non-empty line fails closed** — a single-map sidecar is exactly
+>    one line; multi-entry coreutils files are out of scope.
+> 2. Split that line on ASCII whitespace (leading/trailing whitespace and
+>    single-space / multiple-space / tab separators all tolerated). The first
+>    token is the digest, lowercased; reject unless it matches `^[0-9a-f]{64}$`.
+> 3. If a **second token (the basename)** is present it **must equal** the
+>    map's `<version_code>.json` filename, else **fail closed** (catches a
+>    misfiled / copy-pasted sidecar). An absent basename token is allowed.
+> 4. Compare the digest to the SHA-256 of the **exact map bytes**; a mismatch
+>    **fails closed**.
 
 ## Examples
 
