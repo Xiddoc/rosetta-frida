@@ -150,7 +150,9 @@ nav:
       - rosetta merge: cli/merge.md
       - rosetta types: cli/types.md
   - Recipes:
-      - AIDL stub hooks: recipes/aidl-stub-hook.md
+      - String-anchored class: recipes/string-anchored-class.md
+      - Superclass-anchored method: recipes/superclass-anchored-method.md
+      - AIDL stub hooks (special case): recipes/aidl-stub-hook.md
       - Overloaded methods: recipes/overloaded-methods.md
       - Field access: recipes/field-access.md
       - Multi-version bundles: recipes/multi-version-bundle.md

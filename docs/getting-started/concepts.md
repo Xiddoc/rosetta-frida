@@ -130,11 +130,47 @@ the obfuscated short name plus methods, fields, and optional metadata
 (parent class, AIDL descriptor, DEX shard, anchor strings,
 provenance).
 
-YAML and TypeScript-module input formats are supported via the
-[`rosetta convert`](../cli/convert.md) CLI. Strict JSON is the canonical
-on-disk and on-wire format.
+YAML is supported as an authoring input via the
+[`rosetta convert`](../cli/convert.md) CLI; TS/JS inputs are not
+supported. Strict JSON is the canonical on-disk and on-wire format.
 
 See [Maps — format reference](../maps/format.md) for every field.
+
+## Anchoring — how a map entry survives rotation
+
+A map entry says "real name `X` is obfuscated as `aaaa` in this
+version." But `aaaa` is a moving target: next release it might name a
+completely different class. An **anchor** is the obfuscation-stable
+property that ties the entry back to the *right* class even as the short
+name rotates — and it's what the [health check](#sessions) verifies at
+attach time.
+
+The reason anchoring works at all: an obfuscator rewrites **names**, but
+it leaves **data** and **framework bindings** alone. So the durable
+anchors are the things that are *not* names:
+
+- **A stable string literal the class embeds.** An algorithm name like
+  `"AES/GCM/NoPadding"`, a log tag, a JSON key, a URL path — the
+  developer wrote it as data, so it rides through rotation untouched. Set
+  it in the entry's `anchors`. This is the **default, most broadly
+  applicable** anchor: it works even for a deep internal class that
+  exposes no public API at all. See
+  [Recipe — string-anchored class](../recipes/string-anchored-class.md).
+- **A stable framework parent.** A class that extends
+  `android.app.JobService` or implements `java.lang.Runnable` keeps that
+  parent across rotations, because the framework type is not part of the
+  app and is not obfuscated. Pin the subclass by its parent via
+  `extends`. See
+  [Recipe — superclass-anchored method](../recipes/superclass-anchored-method.md).
+- **An AIDL descriptor — the lucky special case.** *If* the class is an
+  AIDL stub, it carries a stable `DESCRIPTOR` string and transaction
+  codes that make a particularly strong anchor (`kind: aidl_stub`,
+  `aidl_descriptor`, `aidl_txn`). But most classes are not AIDL stubs, so
+  this is a bonus when it applies — not the plan you start from. See
+  [Recipe — AIDL stub hooks](../recipes/aidl-stub-hook.md).
+
+Think generic first (string / superclass), and reach for AIDL only when
+the class happens to give it to you.
 
 ## The marker block
 
