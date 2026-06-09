@@ -6,7 +6,7 @@ A library that lets you write Frida hooks against **real (unobfuscated)
 class and method names**, with a translation layer that resolves them
 to the obfuscated names that actually exist at runtime in the target
 app. The translation tables are **per-app, per-version** JSON maps
-(`schema_version: 2`) that the library loads at attach time.
+(`schema_version: 3`) that the library loads at attach time.
 
 Write once, hook many versions.
 
@@ -291,11 +291,13 @@ map's authoritative `version_code` key.
 
 ### 7. Versioning the mapping file format itself
 
-Current schema is **`2`**. The RFC-0001 app-identity refinement made
-`version_code` required, added the optional `signer_sha256` guard, and
-dropped `apk_sha256`. The literal is a hard gate (`z.literal(2)`);
-`schema_version: 1` maps are rejected and must be re-emitted with a
-`version_code`.
+Current schema is **`3`**. Schema 2 (the RFC-0001 app-identity refinement)
+made `version_code` required, added the optional `signer_sha256` guard, and
+dropped `apk_sha256`; schema 3 then removed `confidence`, tightened
+`captured_at` to an ISO date, let `signer_sha256` be a match-any array, and
+added the optional `generated_from` / `status` / `superseded_by` fields. The
+literal is a hard gate (`z.literal(3)`); `schema_version: 1` and `2` maps are
+rejected and must be re-emitted at version `3`.
 
 ## When to NOT use rosetta-frida (anti-scope)
 
@@ -327,7 +329,7 @@ V2 roadmap (`docs/reference/design.md`). When picking up work here:
 2. **Honour the locked type contracts in `src/types/`** — downstream
    code depends on those shapes; sketch the contract first when adding
    a subsystem.
-3. **Keep maps strict JSON, `schema_version: 2`, with a `version_code`.**
+3. **Keep maps strict JSON, `schema_version: 3`, with a `version_code`.**
    YAML/TS are authoring inputs converted via `rosetta convert`.
 4. **Maintain the 100% coverage gate** (`npm run verify`); co-locate
    tests with source and use the Frida mock under `tests/mocks/`.

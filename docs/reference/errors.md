@@ -20,6 +20,7 @@ import {
     MalformedSignerError,
     MissingSignerError,
     HealthCheckFailedError,
+    MapRetractedError,
     MarkerBlockError,
     UnresolvedAccessError,
 } from 'rosetta-frida';
@@ -378,6 +379,35 @@ did not resolve.`
 
 In `failurePolicy: 'warn'` (the default), the same failure emits a
 `health-check` event with `passed: false` but doesn't throw.
+
+## `MapRetractedError`
+
+The loaded map carries `status: 'retracted'` (schema 3, #40) — it was
+withdrawn (e.g. found to resolve to the wrong names), so the session
+refuses it **fail-closed**, before any identity/health probing. There is
+no override (unlike the signer guard's `enforceSigner: false`): re-emit or
+pick a non-retracted map.
+
+```typescript
+class MapRetractedError extends RosettaError {
+    readonly app: string;
+    readonly version: string;
+    readonly supersededBy?: number;
+}
+```
+
+| Field | Description |
+|---|---|
+| `app` | The retracted map's app package. |
+| `version` | The retracted map's version label. |
+| `supersededBy` | The `version_code` of the replacement map, when the map named one. |
+
+**When fired:**
+
+- `rosetta.session({ map })` when `map.status === 'retracted'`. A
+  [`map-status`](events.md#mapstatusevent) event is emitted first so the
+  reason is observable. A `superseded` map does **not** throw — it loads
+  with a `map-status` warning.
 
 ## `MarkerBlockError`
 

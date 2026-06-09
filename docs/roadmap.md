@@ -275,8 +275,7 @@ These close out the app-identity work that landed the `version_code` and
   `validate`-time check/warning that it equals the per-class tally.
   Recommend (b) now (non-breaking — `classes` is already optional), (a)
   at the next bump. Either way, keep `sources[]` for the per-*tool*
-  metadata that has nowhere else to live (`config`, `notes`,
-  `confidence`).
+  metadata that has nowhere else to live (`config`, `notes`).
 - **Status.** planned.
 
 ---

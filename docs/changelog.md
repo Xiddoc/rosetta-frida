@@ -12,6 +12,31 @@ public surface may still shift before 1.0.0.
 
 ## Unreleased
 
+### Map schema `2` → `3` (breaking)
+
+The map format moved to `schema_version: 3`. The hard literal gate
+(`z.literal(3)`) rejects `schema_version: 1` and `2` maps — re-emit at
+version 3. Changes (tracking the canonical rosetta-maps schema):
+
+- **Removed `confidence`** (#43) from `sources[]` and class entries. The
+  strict objects now reject it as an unknown key. No replacement.
+- **`captured_at` is an ISO date** (`YYYY-MM-DD`, #39). Arbitrary text is
+  now rejected.
+- **`signer_sha256` may be an array** (#38, #32). Either a single
+  bare-lowercase 64-hex digest or a non-empty array of them; a live signer
+  matching **any** entry passes (covers key-rotation lineages). The
+  `SignerCheckResult` gains `expectedHashes` (the normalized match-any set).
+- **Added `generated_from`** (#36): `{ signatures_rev }`, a 7–40-char git
+  commit hash pointing back at the signatures revision a map was generated
+  from. Optional; required-if-present.
+- **Added lifecycle `status`** (#40): `active` (default) / `superseded` /
+  `retracted`, plus an optional `superseded_by` `version_code`. A
+  `superseded` map loads with a new `map-status` warning event; a
+  `retracted` map is refused fail-closed with the new `MapRetractedError`.
+
+New public surface: `MapStatusEvent`, `MapRetractedError`, the
+`GeneratedFrom` / `MapStatus` types.
+
 ### CLI (map-authoring verbs)
 
 - **Library-first parity for the V1.5 verbs.** The pure cores of `diff`,

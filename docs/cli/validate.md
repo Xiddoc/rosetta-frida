@@ -34,7 +34,7 @@ schema](../maps/format.md#validation) check, then prints either:
 **Pass:**
 
 ```text
-OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=2
+OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=3
 ```
 
 Exit code 0.
@@ -55,14 +55,14 @@ Exit code 1.
 
 ```sh
 $ npx rosetta validate maps/com.example.app/30405.json
-OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=2
+OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=3
 ```
 
 ### YAML
 
 ```sh
 $ npx rosetta validate maps/com.example.app/3.4.5.yaml
-OK: maps/com.example.app/3.4.5.yaml — com.example.app@3.4.5, 15 class(es), schema_version=2
+OK: maps/com.example.app/3.4.5.yaml — com.example.app@3.4.5, 15 class(es), schema_version=3
 ```
 
 ### TS/JS module → refused
@@ -77,28 +77,29 @@ FAIL: maps/com.example.app/3.4.5.ts — TS/JS map modules are no longer supporte
 ```sh
 $ npx rosetta validate maps/example/broken.json
 FAIL: maps/example/broken.json — invalid map
-  at schema_version: Invalid literal value, expected 2
+  at schema_version: Invalid literal value, expected 3
   at classes.com.example.app.Foo.methods: must be an object
 ```
 
 ## What validation checks
 
-1. **Top-level fields.** `schema_version === 2` (a hard literal gate —
-   schema 1 maps are rejected); `app` and `version` are non-empty
+1. **Top-level fields.** `schema_version === 3` (a hard literal gate —
+   schema 1 and 2 maps are rejected); `app` and `version` are non-empty
    strings; `version_code` is a non-negative integer; `classes` is an
-   object. Optional `captured_at`, `signer_sha256`, `client_hints`
+   object. Optional `captured_at` (an ISO `YYYY-MM-DD` date),
+   `signer_sha256` (a 64-hex string **or** a non-empty array of them),
+   `generated_from` (`{ signatures_rev }`, a 7–40-char git hash), `status`
+   (`active`/`superseded`/`retracted`), `superseded_by`, `client_hints`
    (with strict `frida_min_version` / `frida_max_version` sub-keys), and
    `sources` match their declared types when present.
 2. **Class entries.** Every entry has `obfuscated: string`. Optional
    fields (`extends`, `kind`, `dex`, `aidl_descriptor`, `anchors`,
-   `source`, `confidence`, `methods`, `fields`) match their declared
-   types when present.
+   `source`, `methods`, `fields`) match their declared types when present.
 3. **Method entries.** `obfuscated` and `signature` required.
    Multi-overload arrays must be non-empty and have unique
    signatures within one real-name key.
 4. **Field entries.** `obfuscated` and `type` required.
-5. **Source provenance.** `sources[].tool` required. `confidence`
-   if present must be one of `'high' | 'medium' | 'low'`.
+5. **Source provenance.** `sources[].tool` required.
 6. **Signatures look like JVM descriptors.** `(...args...)return`
    shape with valid character classes.
 
@@ -146,11 +147,11 @@ that differed only by check depth. Findings are classified by severity:
 
 ```sh
 $ npx rosetta validate maps/com.example.app/30405.json --deep
-rosetta validate: OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=2, consistent
+rosetta validate: OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=3, consistent
 
 # a heuristic warning is reported but does NOT fail the build (exit 0):
 $ npx rosetta validate maps/com.example.app/partial.json --deep
-rosetta validate: OK: maps/com.example.app/partial.json — com.example.app@3.4.5, 12 class(es), schema_version=2 (1 warning)
+rosetta validate: OK: maps/com.example.app/partial.json — com.example.app@3.4.5, 12 class(es), schema_version=3 (1 warning)
   warning at classes.com.example.app.Child.extends: extends app class 'com.example.app.Base' which is not a key in classes
 
 # a hard error fails (exit 1):

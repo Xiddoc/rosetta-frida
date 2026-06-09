@@ -1,6 +1,6 @@
 # Diagnostic events
 
-The session's `EventBus` emits five kinds of structured events.
+The session's `EventBus` emits six kinds of structured events.
 Subscribers — programmatic, via `rosetta.events.on(...)` — get every
 event. Trace mode (`trace: true`) also writes each event to
 `console.error` as a single-line formatted string. The two channels
@@ -12,7 +12,8 @@ type DiagnosticEvent =
     | HealthCheckEvent
     | DetectEvent
     | MapLoadEvent
-    | SignerCheckEvent;
+    | SignerCheckEvent
+    | MapStatusEvent;
 ```
 
 ## `ResolveEvent`
@@ -217,7 +218,7 @@ interface SignerCheckEvent {
 |---|---|
 | `passed` | `true` if any live signer's SHA-256 matched the map's expected hash. When `false`, the session throws [`SignerMismatchError`](errors.md#signermismatcherror) right after emitting this event. |
 | `app` | The session's detected/supplied app package name. |
-| `expected` | The map's `signer_sha256`, normalized (lowercase, no colons). |
+| `expected` | The map's expected `signer_sha256`, normalized (lowercase, no colons). When the map pins an array of hashes (match-any), this is the comma-joined, sorted set. |
 | `actual` | Every live signing-certificate SHA-256 observed (normalized). More than one entry when the app has multiple signers. |
 | `source` | Which PackageManager flag yielded the signers — `'signingInfo'` (API 28+ `GET_SIGNING_CERTIFICATES`) or `'signatures'` (pre-28 `GET_SIGNATURES`). |
 
@@ -245,6 +246,44 @@ rosetta.events.onType('signer-check', (e) => {
 
 See [API · Session · Signer enforcement](../api/session.md#signer-enforcement).
 
+## `MapStatusEvent`
+
+Emitted once at session creation **only when** the loaded map carries a
+non-`active` lifecycle `status` (schema 3, #40), right after the map is
+picked. A map with `status: 'active'` (or no `status`) emits nothing.
+
+```typescript
+interface MapStatusEvent {
+    type: 'map-status';
+    status: 'superseded' | 'retracted';
+    app: string;
+    version: string;
+    supersededBy?: number;
+}
+```
+
+| Field | Description |
+|---|---|
+| `status` | `'superseded'` (the map still loads — this is a WARNING) or `'retracted'` (the session throws [`MapRetractedError`](errors.md#mapretractederror) right after emitting this event). |
+| `app` | The loaded map's app package name. |
+| `version` | The loaded map's version label. |
+| `supersededBy` | The `version_code` of the replacement map, when the map named one (`superseded_by`). |
+
+**Trace-line format:**
+
+- Superseded: `[rosetta] map-status SUPERSEDED com.example.app@1.2.3 superseded_by=99`
+- Retracted: `[rosetta] map-status RETRACTED com.example.app@1.2.3`
+
+**Subscribing:**
+
+```typescript
+rosetta.events.onType('map-status', (e) => {
+    if (e.status === 'superseded') {
+        console.warn(`map for ${e.app}@${e.version} is superseded`, e.supersededBy);
+    }
+});
+```
+
 ## Event ordering
 
 A clean session-creation flow emits events in this order:
@@ -256,6 +295,10 @@ sequenceDiagram
 
     S->>L: DetectEvent { source: 'auto' | 'override' }
     S->>L: MapLoadEvent { app, version, classCount }
+    opt map.status != 'active'
+        S->>L: MapStatusEvent { status, supersededBy }
+        Note over S: retracted → throw MapRetractedError
+    end
     opt map.signer_sha256 set AND enforceSigner!=false
         S->>L: SignerCheckEvent { passed, expected, actual }
     end
@@ -269,7 +312,9 @@ sequenceDiagram
 
 `DetectEvent` always precedes `MapLoadEvent` (you need to know the
 version to pick a map). `MapLoadEvent` always precedes the optional
-`SignerCheckEvent` and then `HealthCheckEvent` (you need a map to check).
+`MapStatusEvent`, then the optional `SignerCheckEvent`, then
+`HealthCheckEvent` (you need a map to check). A `retracted` `MapStatusEvent`
+is the last event the session emits before throwing `MapRetractedError`.
 `ResolveEvent`s flow indefinitely after.
 
 ## Subscribing to all events

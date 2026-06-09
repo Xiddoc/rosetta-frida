@@ -27,7 +27,7 @@ Example:
 
 ```sh
 $ npx rosetta inspect hook.bundle.js
-com.example.app@3.4.5, schema_version 2, 15 classes
+com.example.app@3.4.5, schema_version 3, 15 classes
 ```
 
 ### Registry bundle
@@ -82,9 +82,9 @@ $ for b in dist/*.bundle.js; do
     echo -n "$b: "
     npx rosetta inspect "$b"
 done
-dist/hook-3.4.5.bundle.js: com.example.app@3.4.5, schema_version 2, 15 classes
-dist/hook-3.4.6.bundle.js: com.example.app@3.4.6, schema_version 2, 15 classes
-dist/hook-3.5.0.bundle.js:  com.example.app@3.5.0, schema_version 2, 15 classes
+dist/hook-3.4.5.bundle.js: com.example.app@3.4.5, schema_version 3, 15 classes
+dist/hook-3.4.6.bundle.js: com.example.app@3.4.6, schema_version 3, 15 classes
+dist/hook-3.5.0.bundle.js:  com.example.app@3.5.0, schema_version 3, 15 classes
 ```
 
 ## Exit codes
