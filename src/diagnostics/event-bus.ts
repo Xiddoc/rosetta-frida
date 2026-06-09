@@ -113,6 +113,11 @@ export function formatEvent(event: DiagnosticEvent): string {
             const status = event.passed ? 'PASS' : 'FAIL';
             return `[rosetta] signer-check ${status} ${event.app} expected=${event.expected} signers=${event.actual.length} (${event.source})`;
         }
+        case 'map-status': {
+            const supersededBy =
+                event.supersededBy !== undefined ? ` superseded_by=${event.supersededBy}` : '';
+            return `[rosetta] map-status ${event.status.toUpperCase()} ${event.app}@${event.version}${supersededBy}`;
+        }
     }
 }
 

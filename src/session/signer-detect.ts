@@ -288,10 +288,17 @@ export function detectSigners(
 
 /** Structured result of comparing the live signers against a map hash. */
 export interface SignerCheckResult {
-    /** True iff any live signer hash equals the (normalized) expected hash. */
+    /** True iff any live signer hash equals any (normalized) expected hash. */
     passed: boolean;
-    /** The map's expected signer hash, normalized for the comparison. */
+    /**
+     * The map's expected signer hash(es), normalized and sorted for the
+     * comparison. A schema-3 map may pin a SINGLE hash or a non-empty ARRAY
+     * (match-any, #38); either is normalized to this sorted list. The
+     * comma-joined rendering is what events/error reports display.
+     */
     expected: string;
+    /** The expected hash(es), normalized and sorted (the match-any set). */
+    expectedHashes: readonly string[];
     /**
      * Every live signer hash observed, normalized and sorted. Sorted so a
      * mismatch report is deterministic and matches the Kotlin client's
@@ -308,12 +315,15 @@ export interface SignerCheckResult {
  * throws on a *mismatch* (it returns `passed: false`) — the session owns
  * the fail-closed decision.
  *
- * The expected hash is normalized via {@link normalizeSignerHash} (so a map
- * authored with `AB:CD:...` / uppercase compares equal to the live bytes)
- * and then checked for well-formedness: it must be exactly 64 lowercase hex
- * characters ({@link HEX_64}). A map hash that fails this is an author error
- * in the artifact, not a spoof, so it throws {@link MalformedSignerError}
- * rather than reporting a (misleading) mismatch — mirroring the Kotlin
+ * The map's expected value may be a SINGLE hash or a non-empty ARRAY of
+ * hashes (schema 3, #38); both are accepted and a live signer matching ANY
+ * one of them passes. Each expected hash is normalized via
+ * {@link normalizeSignerHash} (so a map authored with `AB:CD:...` /
+ * uppercase compares equal to the live bytes) and then checked for
+ * well-formedness: it must be exactly 64 lowercase hex characters
+ * ({@link HEX_64}). A map hash that fails this is an author error in the
+ * artifact, not a spoof, so it throws {@link MalformedSignerError} rather
+ * than reporting a (misleading) mismatch — mirroring the Kotlin
  * `SignerGuard.verify` contract. The well-formedness check runs *before*
  * reading the live signers, so a bad map hash is reported even when the app
  * exposes no readable signer.
@@ -323,20 +333,35 @@ export interface SignerCheckResult {
  * must fail closed); the session surfaces it as {@link MissingSignerError}.
  */
 export function checkSigner(
-    expectedSignerSha256: string,
+    expectedSignerSha256: string | readonly string[],
     javaApi?: SignerJavaApi,
 ): SignerCheckResult {
-    const expected = normalizeSignerHash(expectedSignerSha256);
-    if (!HEX_64.test(expected)) {
-        throw new MalformedSignerError(
-            expectedSignerSha256,
-            `map signer_sha256 must be 64 hex chars after normalization, got ${expected.length}`,
-        );
-    }
+    const rawExpected = Array.isArray(expectedSignerSha256)
+        ? expectedSignerSha256
+        : [expectedSignerSha256 as string];
+    const expectedHashes = rawExpected
+        .map((raw) => {
+            const normalized = normalizeSignerHash(raw);
+            if (!HEX_64.test(normalized)) {
+                throw new MalformedSignerError(
+                    raw,
+                    `map signer_sha256 must be 64 hex chars after normalization, got ${normalized.length}`,
+                );
+            }
+            return normalized;
+        })
+        .sort();
     const detected = detectSigners(javaApi);
     // Sort the observed hashes so reports are deterministic and align with
     // the Kotlin client's sorted-set rendering.
     const actual = [...detected.hashes].sort();
-    const passed = actual.includes(expected);
-    return { passed, expected, actual, source: detected.source };
+    const expectedSet = new Set(expectedHashes);
+    const passed = actual.some((hash) => expectedSet.has(hash));
+    return {
+        passed,
+        expected: expectedHashes.join(', '),
+        expectedHashes,
+        actual,
+        source: detected.source,
+    };
 }

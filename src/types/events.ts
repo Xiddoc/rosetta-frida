@@ -93,13 +93,33 @@ export interface SignerCheckEvent {
     source: 'signingInfo' | 'signatures';
 }
 
+/**
+ * Event emitted when the loaded map carries a non-`active` lifecycle
+ * `status` (#40). A `'superseded'` map emits this as a WARNING and still
+ * loads; a `'retracted'` map emits it immediately before the session throws
+ * `MapRetractedError` (so a subscriber sees the reason even though load
+ * fails). An `'active'` (or absent) status emits no event.
+ */
+export interface MapStatusEvent {
+    type: 'map-status';
+    /** The lifecycle status that triggered the event. */
+    status: 'superseded' | 'retracted';
+    /** The map's app package. */
+    app: string;
+    /** The map's version label. */
+    version: string;
+    /** The `version_code` of the replacement map, if the map named one. */
+    supersededBy?: number;
+}
+
 /** Union of all diagnostic events. */
 export type DiagnosticEvent =
     | ResolveEvent
     | HealthCheckEvent
     | DetectEvent
     | MapLoadEvent
-    | SignerCheckEvent;
+    | SignerCheckEvent
+    | MapStatusEvent;
 
 /** Subscriber type. */
 export type EventListener<E extends DiagnosticEvent = DiagnosticEvent> = (event: E) => void;
