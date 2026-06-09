@@ -355,6 +355,15 @@ describe('guardInput', () => {
             MapInputTooLargeError,
         );
     });
+
+    it('throws on the depth limit when bytes are within budget', () => {
+        // Within the byte budget but nested past the depth cap — exercises the
+        // depth branch of the pre-parse guard directly (mirrors Kotlin
+        // MapLoader.guardInput).
+        expect(() =>
+            guardInput('[[[[[]]]]]', { maxInputBytes: 1_000_000, maxNestingDepth: 2 }),
+        ).toThrow(MapInputTooLargeError);
+    });
 });
 
 function expectThrows(fn: () => unknown): unknown {
