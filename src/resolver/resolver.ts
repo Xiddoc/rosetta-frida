@@ -196,7 +196,19 @@ export class ResolverImpl implements Resolver {
         this.#targetPolicy = options.targetPolicy ?? {};
         this.#appPrefix = appPrefixOf(options.appPackage ?? this.#map.app, this.#targetPolicy);
         for (const [realName, entry] of Object.entries(this.#map.classes)) {
-            this.#reverseClassIndex.set(entry.obfuscated, realName);
+            // putIfAbsent: when two real classes share an obfuscated short
+            // name (which shouldn't happen in a well-formed map) the FIRST
+            // one in iteration order keeps the reverse mapping. This
+            // FIRST-WINS rule is the CROSS-CLIENT CANONICAL collision policy:
+            // the Kotlin rosetta-xposed resolver builds its reverse index the
+            // same way (`reverseClassIndex.putIfAbsent(...)`), so a
+            // collision-laden map reverse-resolves to the same real name on
+            // both clients. Do not flip this to last-wins without changing the
+            // Kotlin twin in lockstep. (A deliberate `override(...)` later DOES
+            // re-point the obf → real entry — that is a separate write path.)
+            if (!this.#reverseClassIndex.has(entry.obfuscated)) {
+                this.#reverseClassIndex.set(entry.obfuscated, realName);
+            }
         }
     }
 
@@ -283,7 +295,7 @@ export class ResolverImpl implements Resolver {
                 classScope: className,
             });
             throw new ResolveError(
-                this.#missMessage('method', `${className}.${methodName}`),
+                this.#missMessage('method', methodName, className),
                 methodName,
                 this.#map.app,
                 this.#map.version,
@@ -402,7 +414,7 @@ export class ResolverImpl implements Resolver {
                 classScope: className,
             });
             throw new ResolveError(
-                this.#missMessage('field', `${className}.${fieldName}`),
+                this.#missMessage('field', fieldName, className),
                 fieldName,
                 this.#map.app,
                 this.#map.version,
@@ -502,8 +514,24 @@ export class ResolverImpl implements Resolver {
         this.#events.emit({ type: 'resolve', ...payload });
     }
 
-    #missMessage(kind: 'class' | 'method' | 'field', name: string): string {
-        return `rosetta-frida: ${kind} '${name}' not found in map for ${this.#map.app}@${this.#map.version}.`;
+    /**
+     * Canonical cross-client miss wording (RFC 0001 / maps decision): a class
+     * miss reads `class '<name>' not found`; a method or field miss reads
+     * `method '<name>' not found on class '<class>'` (the member's OWN name,
+     * scoped by the class it was looked up on — NOT a dotted `class.member`
+     * blob). The `in map for <app>@<version>` suffix is retained so a failure
+     * still names the map it was resolved against. The rosetta-xposed Kotlin
+     * twin must use the identical wording; the conformance suite (which today
+     * pins error TYPES, not strings) gains a string case when this lands.
+     */
+    #missMessage(kind: 'class', name: string): string;
+    #missMessage(kind: 'method' | 'field', name: string, className: string): string;
+    #missMessage(kind: 'class' | 'method' | 'field', name: string, className?: string): string {
+        const where = `in map for ${this.#map.app}@${this.#map.version}`;
+        if (kind === 'class') {
+            return `rosetta-frida: class '${name}' not found ${where}.`;
+        }
+        return `rosetta-frida: ${kind} '${name}' not found on class '${className as string}' ${where}.`;
     }
 }
 
