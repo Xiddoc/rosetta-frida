@@ -7,14 +7,6 @@ YAML can still author maps without losing the runtime's strict schema
 validation — `rosetta convert` renders YAML to the canonical JSON
 artifact.
 
-> **Removed (security):** TS/JS map modules are no longer an authoring
-> format. The converter used to `import()` the module to extract its
-> exported map, executing arbitrary contributor-supplied code at
-> author/build time *before* validation — a build-time RCE. Maps are
-> pure data; author them as **JSON or YAML**. `rosetta convert` /
-> `validate` now refuse `.ts`/`.js`/`.mjs`/`.cjs` inputs with a clear
-> error rather than importing them.
-
 ## Format choice
 
 | Format | Role | Native bundler import | Comments | Type safety |
@@ -112,17 +104,15 @@ with a concrete list of issue paths.
 - **Map keys that look numeric.** `3.4.5:` as a key in a YAML
   registry will be parsed as a float key. Quote: `"3.4.5":`.
 
-## TypeScript modules — removed
+## TypeScript modules — not supported
 
-TS/JS map modules are no longer accepted by `rosetta convert` /
-`validate`. They were loaded via dynamic `import()`, which executed
-arbitrary code before validation — a build-time RCE. There is no
-`--allow-exec` escape hatch: the cleanest fix is to drop the code path
-entirely, since maps are pure data and JSON/YAML cover every authoring
-need. If you maintained a TS authoring source for IDE type-checking,
-keep it as documentation only and hand-port the data into YAML or JSON
-(both validate against the same schema), or annotate the YAML with
-comments.
+TS/JS inputs (`.ts`/`.js`/`.mjs`/`.cjs`) are not accepted by `rosetta
+convert` / `validate`; a module path is refused with a clear error,
+never imported. Maps are pure data — author them as JSON or YAML (both
+validate against the same schema). If you keep a TS authoring source for
+IDE type-checking, treat it as documentation and hand-port the data into
+YAML or JSON. See the [changelog](../changelog.md) for the security
+rationale behind dropping module ingestion.
 
 ## Renderer — `renderJson(map)`
 

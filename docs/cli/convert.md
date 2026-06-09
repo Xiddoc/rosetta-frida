@@ -2,13 +2,6 @@
 
 Convert a YAML map to canonical JSON.
 
-> **Removed (security):** TS/JS-module inputs (`.ts`/`.js`/`.mjs`/`.cjs`)
-> are no longer supported. They used to be loaded via dynamic `import()`,
-> which executed arbitrary contributor-supplied code at author/build time
-> *before* validation — a build-time RCE. Maps are pure data: author them
-> as **JSON or YAML**. A module path is now refused with a clear error,
-> never imported.
-
 ## Synopsis
 
 ```sh
@@ -28,7 +21,7 @@ rosetta convert <in> -o <out> [--force]
 | Extension | Behavior |
 |---|---|
 | `.yaml`, `.yml` | Read, parse YAML, validate, render to JSON. |
-| `.ts`, `.js`, `.mjs`, `.cjs` | **Refused** — TS/JS map modules are no longer supported (build-time RCE). Author as JSON or YAML. Never imported. |
+| `.ts`, `.js`, `.mjs`, `.cjs` | **Refused** — TS/JS inputs are not supported. Author as JSON or YAML. Never imported. |
 | `.json` | **Rejected** — input is already canonical; nothing to convert. Use `rosetta validate` instead. |
 
 The output path (`-o`/`--output`) is contained to the project tree
@@ -146,4 +139,5 @@ JSON. Short version:
 - **YAML** for authoring (comments, multi-line strings). Convert on
   commit.
 
-TS/JS modules are no longer an authoring format (build-time RCE).
+TS/JS inputs are not supported; author as JSON or YAML. See the
+[changelog](../changelog.md) for the security rationale.
