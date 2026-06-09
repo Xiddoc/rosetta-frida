@@ -1,5 +1,5 @@
 {
-    "schema_version": 2,
+    "schema_version": 3,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -13,8 +13,7 @@
         {
             "tool": "sigmatcher",
             "config": "signatures/example.json",
-            "classes": 10,
-            "confidence": "high"
+            "classes": 10
         },
         {
             "tool": "hand-authored",
@@ -34,7 +33,6 @@
                 "Transaction failed"
             ],
             "source": "sigmatcher",
-            "confidence": "high",
             "methods": {
                 "requestTicket": [
                     {

@@ -11,7 +11,7 @@ the field-by-field reference. For the authoring workflow, see
     The canonical, language-neutral map schema is owned by the separate
     [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo
     (`schema/rosetta-map.schema.json` — the source of truth for the
-    `schema_version: 2` format). rosetta-frida is a **client** of that
+    `schema_version: 3` format). rosetta-frida is a **client** of that
     schema: its Zod validator (`src/validate/schema.ts`) tracks the
     canonical schema. This page documents the same format as consumed by
     the Frida client. `rosetta-xposed` (Kotlin) is the other client.
@@ -25,12 +25,15 @@ objects, an enum, a synthetic Companion, an anonymous inner class.
 
 ```typescript
 interface RosettaMap {
-    schema_version: 2;
+    schema_version: 3;
     app: string;
     version: string;
     version_code: number;
-    captured_at?: string;
-    signer_sha256?: string;
+    captured_at?: string; // ISO YYYY-MM-DD
+    signer_sha256?: string | string[]; // single hash OR match-any array
+    generated_from?: { signatures_rev: string };
+    status?: 'active' | 'superseded' | 'retracted';
+    superseded_by?: number;
     client_hints?: {
         frida_min_version?: string;
         frida_max_version?: string;
@@ -44,7 +47,7 @@ interface RosettaMap {
 
 | Field | Type | Description |
 |---|---|---|
-| `schema_version` | `2` | The schema version. Must be `2`. Bumped on breaking schema changes; old maps will fail to load against newer libraries until in-tree migrators are added. (`2` added the required `version_code` and optional `signer_sha256`, and dropped `apk_sha256`.) |
+| `schema_version` | `3` | The schema version. Must be `3`. Bumped on breaking schema changes; old maps will fail to load against newer libraries until in-tree migrators are added. (`3` removed `confidence`, tightened `captured_at` to an ISO date, let `signer_sha256` be an array, and added `generated_from` / `status` / `superseded_by`.) |
 | `app` | string | Android package name (`com.example.app`). Cross-checked against the auto-detected app at session start. |
 | `version` | string | App version *label* (`PackageInfo.versionName`, e.g. `3.4.5`). A human display label only — NOT authoritative for selection (labels can repeat across builds). Used as the fuzzy-match fallback key. |
 | `version_code` | integer | **The authoritative app-identity key** — the full Android `longVersionCode` (`(versionCodeMajor << 32) | versionCode`), never masked. The runtime selects maps by this first (O(1), monotonic per build); the `version` label is only a fallback. Capped at Number.MAX_SAFE_INTEGER (2^53 − 1) so the Frida JS client can represent it exactly. |
@@ -54,8 +57,11 @@ interface RosettaMap {
 
 | Field | Type | Description |
 |---|---|---|
-| `captured_at` | ISO date string | When the map was captured. Useful when reading old maps to know how stale they are. |
-| `signer_sha256` | SHA-256 hex | Authenticity guard — the SHA-256 of the APK *signing certificate* (not the APK bytes). Cheap to verify on-device via PackageManager; guards against loading a map for a repackaged/spoofed app. **Enforced at attach time:** when present, `rosetta.session(...)` reads the live app's signing certificate in-process and fails closed (`SignerMismatchError`) on a mismatch. Opt out with `enforceSigner: false`. See [API · Session](../api/session.md#signer-enforcement). |
+| `captured_at` | ISO date (`YYYY-MM-DD`) | When the map was captured. Validated as a real calendar date — arbitrary text is rejected (schema 3, #39). Useful when reading old maps to know how stale they are. |
+| `signer_sha256` | SHA-256 hex, or array of them | Authenticity guard — the SHA-256 of the APK *signing certificate* (not the APK bytes). Either a single bare-lowercase 64-hex digest **or a non-empty array** of them; a live signer matching **any** entry passes (schema 3, #38 — covers key-rotation lineages). Cheap to verify on-device via PackageManager; guards against loading a map for a repackaged/spoofed app. **Enforced at attach time:** when present, `rosetta.session(...)` reads the live app's signing certificate in-process and fails closed (`SignerMismatchError`) on a mismatch. Opt out with `enforceSigner: false`. See [API · Session](../api/session.md#signer-enforcement). |
+| `generated_from` | object | Provenance pointer back to the signatures revision this map was generated from (schema 3, #36). When present, `signatures_rev` (a 7–40-char git commit hash) is required. |
+| `status` | `'active' \| 'superseded' \| 'retracted'` | Lifecycle status (schema 3, #40). Absent ⇒ `active`. A `superseded` map still loads but `rosetta.session(...)` emits a `map-status` warning event; a `retracted` map is refused fail-closed (`MapRetractedError`). |
+| `superseded_by` | integer | The `version_code` of the map that replaces this one. Only meaningful alongside `status: 'superseded'` (or as a hint on a `retracted` map). |
 | `client_hints` | object | Per-client metadata (its own keys are strict). Frida reads `client_hints.frida_min_version` / `client_hints.frida_max_version` (semver) — the Frida runtime range this map is known to work with. Not enforced at runtime in V1; emitted as metadata. |
 | `sources` | `MapSource[]` | Provenance per tool. See [Provenance](#provenance). |
 
@@ -69,8 +75,7 @@ tracks which entries came from where:
     {
         "tool": "sigmatcher",
         "config": "signatures/example.json",
-        "classes": 10,
-        "confidence": "high"
+        "classes": 10
     },
     {
         "tool": "hand-authored",
@@ -86,7 +91,6 @@ interface MapSource {
     config?: string;
     classes?: number;
     notes?: string;
-    confidence?: 'high' | 'medium' | 'low';
 }
 ```
 
@@ -100,7 +104,6 @@ cross-references one of these entries — see
 | `config` | The config or config-path the tool was run with. |
 | `classes` | Count of classes attributed to this source. |
 | `notes` | Free-form notes about the capture session. |
-| `confidence` | Default confidence for entries from this source. Per-entry `confidence` overrides it. |
 
 ## Classes — `ClassEntry`
 
@@ -116,7 +119,6 @@ A class entry is keyed by its real fully-qualified name:
         "aidl_descriptor": "com.example.app.IRemoteService",
         "anchors": ["com.example.app.IRemoteService", "Transaction failed"],
         "source": "sigmatcher",
-        "confidence": "high",
         "methods": { /* ... */ },
         "fields": { /* ... */ }
     }
@@ -136,7 +138,6 @@ interface ClassEntry {
     methods?: MethodMap;
     fields?: FieldMap;
     source?: string;
-    confidence?: 'high' | 'medium' | 'low';
 }
 
 type ClassKind =
@@ -160,7 +161,6 @@ type ClassKind =
 | `methods` | Methods keyed by real name. See [Methods](#methods). |
 | `fields` | Fields keyed by real name. See [Fields](#fields). |
 | `source` | Cross-reference into top-level `sources` — which tool contributed this entry. |
-| `confidence` | Per-entry override of the source's default confidence. |
 
 ## Methods
 
@@ -305,14 +305,14 @@ type RosettaMapRegistry = Record<string, RosettaMap>;
 ```json
 {
     "3.4.5": {
-        "schema_version": 2,
+        "schema_version": 3,
         "app": "com.example.app",
         "version": "3.4.5",
         "version_code": 30405,
         "classes": {}
     },
     "3.4.6": {
-        "schema_version": 2,
+        "schema_version": 3,
         "app": "com.example.app",
         "version": "3.4.6",
         "version_code": 30406,
@@ -415,9 +415,15 @@ Two additional shape constraints:
 
 - **`app`** must be a dotted package name
   (`^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$`).
-- **`signer_sha256`** (when present) must be 64 lowercase hex characters
-  (`^[0-9a-f]{64}$`). The session layer additionally normalises and
-  re-validates it at runtime.
+- **`signer_sha256`** (when present) is either a single 64-lowercase-hex
+  string (`^[0-9a-f]{64}$`) or a non-empty array of such strings (match-any).
+  The map value is always bare lowercase hex — no colons/uppercase; the
+  session layer normalises the *live app-presented* hash (strip `:`,
+  lowercase) before comparison.
+- **`generated_from.signatures_rev`** (when present) must be a 7–40-char
+  lowercase-hex git commit hash (`^[0-9a-f]{7,40}$`).
+- **`status`** (when present) is one of `active` / `superseded` /
+  `retracted`; **`superseded_by`** is a non-negative integer `version_code`.
 
 **Reserved keys.** The keys `__proto__`, `constructor`, and `prototype`
 are rejected anywhere they appear in a `classes`, `methods`, or `fields`
@@ -434,11 +440,12 @@ New optional fields are additive: old maps continue to load against
 newer libraries (the library just sees `undefined` for the new
 fields).
 
-Breaking changes bump `schema_version`. The current schema is `2`
-(it made `version_code` required, added the optional `signer_sha256`
-authenticity guard, and dropped `apk_sha256`); `schema_version: 1`
-maps fail to load and must be re-emitted with a `version_code`. Future
-breaking changes will ship in-tree migrators (`2 → 3`, ...) so old
+Breaking changes bump `schema_version`. The current schema is `3`
+(it removed `confidence`, tightened `captured_at` to an ISO date, let
+`signer_sha256` be an array of hashes, and added the optional
+`generated_from`, `status`, and `superseded_by` fields); `schema_version: 2`
+(and `1`) maps fail to load and must be re-emitted at version `3`. Future
+breaking changes will ship in-tree migrators (`3 → 4`, ...) so old
 maps keep loading after migration.
 
 !!! note "Bumping the schema version (maintainers)"

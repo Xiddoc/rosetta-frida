@@ -28,7 +28,7 @@ import { makeClassProxy } from './class-proxy.js';
 // Authored in the terser single-overload form; validateMap normalises
 // methods to arrays so the proxy/resolver see the in-memory shape.
 const map: RosettaMap = validateMap({
-    schema_version: 2,
+    schema_version: 3,
     version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
@@ -298,7 +298,7 @@ describe('makeClassProxy — $-metadata collision', () => {
     useFridaMock();
 
     const collidingMap: RosettaMap = validateMap({
-        schema_version: 2,
+        schema_version: 3,
         version_code: 1,
         app: 'com.example.app',
         version: '1.0.0',

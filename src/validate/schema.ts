@@ -41,9 +41,10 @@ import { z } from 'zod';
 import { CURRENT_SCHEMA_VERSION } from '../types/map.js';
 import type {
     ClassKind,
-    Confidence,
     FieldEntry,
+    GeneratedFrom,
     MapSource,
+    MapStatus,
     MethodEntry,
     RosettaMap,
     RosettaMapInput,
@@ -179,12 +180,6 @@ function boundedRecord<T extends z.ZodTypeAny>(
 // Leaf schemas
 // ---------------------------------------------------------------------------
 
-export const confidenceSchema: z.ZodType<Confidence> = z.union([
-    z.literal('high'),
-    z.literal('medium'),
-    z.literal('low'),
-]);
-
 export const classKindSchema: z.ZodType<ClassKind> = z.union([
     z.literal('class'),
     z.literal('interface'),
@@ -208,7 +203,6 @@ export const mapSourceSchema: z.ZodType<MapSource> = z
         config: z.string().max(MAX_FREE_STRING_LEN).optional(),
         classes: z.number().int().optional(),
         notes: z.string().max(MAX_FREE_STRING_LEN).optional(),
-        confidence: confidenceSchema.optional(),
     })
     .strict();
 
@@ -270,7 +264,6 @@ export const classEntrySchema = z
         methods: methodMapSchema.optional(),
         fields: fieldMapSchema.optional(),
         source: z.string().max(MAX_FREE_STRING_LEN).optional(),
-        confidence: confidenceSchema.optional(),
     })
     .strict();
 
@@ -304,9 +297,89 @@ export const VERSION_PATTERN = /\S/;
  * Lowercase 64-char hex — the SHA-256 of the signing certificate. The
  * session layer normalises (lowercases) and re-validates this at runtime;
  * the schema enforces the canonical lowercase-hex shape so a malformed map
- * fails validation early rather than at attach time.
+ * fails validation early rather than at attach time. Bare hex only — the
+ * MAP value never carries colons or uppercase (those are accepted only on
+ * the runtime app-presented hash, which the signer guard normalises before
+ * comparison), so a guard-accepted map value is always schema-valid (#32).
  */
 export const SIGNER_SHA256_PATTERN = /^[0-9a-f]{64}$/;
+
+/**
+ * ISO calendar date `YYYY-MM-DD` (#39). Mirrors JSON-Schema `format: "date"`
+ * semantics: a four-digit year, two-digit month `01–12`, two-digit day
+ * `01–31`. This field-range check is the FIRST gate; {@link isRealCalendarDate}
+ * then rejects impossible days (`2026-02-30`, `2026-04-31`, a non-leap
+ * `2025-02-29`) so the client matches what a `format: "date"` checker and the
+ * canonical schema enforce — arbitrary free text (the old schema-2 behaviour)
+ * is rejected.
+ */
+export const CAPTURED_AT_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * True iff `value` is a real calendar date (not merely a `YYYY-MM-DD`-shaped
+ * string). The pattern accepts any day `01–31`, so it lets impossible dates
+ * (`2026-02-30`, `2026-04-31`, `2025-02-29` in a non-leap year) through. We
+ * round-trip the parsed components through `Date.UTC` and require every
+ * component to survive unchanged: JS normalizes an overflow day into the next
+ * month (`Date.UTC(2026, 1, 30)` becomes March 2), so a mismatch on any of
+ * year/month/day means the input named a day that does not exist. UTC is used
+ * so the check is timezone-independent. Assumes `value` already matched
+ * {@link CAPTURED_AT_PATTERN}, so the slice indices are sound.
+ */
+export function isRealCalendarDate(value: string): boolean {
+    const year = Number(value.slice(0, 4));
+    const month = Number(value.slice(5, 7));
+    const day = Number(value.slice(8, 10));
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return (
+        date.getUTCFullYear() === year &&
+        date.getUTCMonth() === month - 1 &&
+        date.getUTCDate() === day
+    );
+}
+
+/**
+ * Abbreviated-or-full git commit hash (`generated_from.signatures_rev`, #36):
+ * 7–40 lowercase hex characters.
+ */
+export const SIGNATURES_REV_PATTERN = /^[0-9a-f]{7,40}$/;
+
+/**
+ * A single bare-hex signer digest. Shared by the string and array forms of
+ * `signer_sha256` (#38).
+ */
+const signerSha256Atom = z.string().regex(SIGNER_SHA256_PATTERN, {
+    message: 'signer_sha256 must be 64 lowercase hex characters',
+});
+
+/**
+ * `signer_sha256`: EITHER a single bare-hex digest OR a non-empty array of
+ * them (match-any, #38/#32). The array form requires at least one entry — an
+ * empty array would pin no signer and is meaningless. There is deliberately NO
+ * upper bound on the array: the canonical schema has `minItems: 1` and no
+ * `maxItems`, so capping here would make this client stricter than the schema
+ * (and signers are not sources — they have nothing to do with `MAX_SOURCES`).
+ */
+export const signerSha256Schema: z.ZodType<string | string[]> = z.union([
+    signerSha256Atom,
+    z.array(signerSha256Atom).min(1),
+]);
+
+/** `generated_from` (#36): present ⇒ `signatures_rev` required. */
+export const generatedFromSchema: z.ZodType<GeneratedFrom> = z
+    .object({
+        signatures_rev: z.string().regex(SIGNATURES_REV_PATTERN, {
+            message: 'signatures_rev must be 7–40 lowercase hex characters (a git commit hash)',
+        }),
+    })
+    .strict();
+
+/** Lifecycle `status` enum (#40). Absent ⇒ active. */
+export const mapStatusSchema: z.ZodType<MapStatus> = z.union([
+    z.literal('active'),
+    z.literal('superseded'),
+    z.literal('retracted'),
+]);
 
 /**
  * Top-level map schema. Intentionally UNANNOTATED so Zod infers both sides
@@ -327,13 +400,19 @@ export const rosettaMapSchema = z
             message: 'version must contain a non-whitespace character',
         }),
         version_code: z.number().int().nonnegative().max(MAX_VERSION_CODE),
-        captured_at: z.string().max(MAX_FREE_STRING_LEN).optional(),
-        signer_sha256: z
+        captured_at: z
             .string()
-            .regex(SIGNER_SHA256_PATTERN, {
-                message: 'signer_sha256 must be 64 lowercase hex characters',
+            .regex(CAPTURED_AT_PATTERN, {
+                message: 'captured_at must be an ISO date (YYYY-MM-DD)',
+            })
+            .refine(isRealCalendarDate, {
+                message: 'captured_at must be a real calendar date (YYYY-MM-DD)',
             })
             .optional(),
+        signer_sha256: signerSha256Schema.optional(),
+        generated_from: generatedFromSchema.optional(),
+        status: mapStatusSchema.optional(),
+        superseded_by: z.number().int().nonnegative().max(MAX_VERSION_CODE).optional(),
         client_hints: z
             .object({
                 frida_min_version: z.string().max(MAX_FREE_STRING_LEN).optional(),
@@ -344,7 +423,33 @@ export const rosettaMapSchema = z
         sources: z.array(mapSourceSchema).max(MAX_SOURCES).optional(),
         classes: classMapSchema,
     })
-    .strict();
+    .strict()
+    // Cross-field lifecycle rule (#40): `superseded_by` is meaningful ONLY for
+    // a superseded map. Absent `status` means active. So:
+    //   - status === 'superseded'  ⇒  superseded_by REQUIRED.
+    //   - any other status (active / absent / retracted)  ⇒  superseded_by
+    //     FORBIDDEN.
+    // This mirrors the canonical maps schema's Python validator, which enforces
+    // the same pairing; without it this client would silently accept maps the
+    // maps repo rejects (a parity drift). A retracted map names no replacement
+    // here — withdrawal and "use this newer map instead" are distinct states.
+    .superRefine((map, ctx) => {
+        const isSuperseded = map.status === 'superseded';
+        if (isSuperseded && map.superseded_by === undefined) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['superseded_by'],
+                message: "superseded_by is required when status is 'superseded'",
+            });
+        }
+        if (!isSuperseded && map.superseded_by !== undefined) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['superseded_by'],
+                message: "superseded_by is only allowed when status is 'superseded'",
+            });
+        }
+    });
 
 /**
  * The authoring/input type the schema accepts. Equal to the hand-written

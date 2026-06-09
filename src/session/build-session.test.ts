@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
     HealthCheckFailedError,
     MalformedSignerError,
+    MapRetractedError,
     MapVersionMismatchError,
     MissingSignerError,
     SignerMismatchError,
@@ -25,6 +26,7 @@ import {
     resolverStage,
     runSignerGuard,
     selectAndVerifyStage,
+    statusStage,
     type ResolvedDetection,
 } from './build-session.js';
 import type { HealthCheckJavaApi } from './health-check.js';
@@ -33,7 +35,7 @@ import type { InternalSessionOptions } from './session.js';
 
 function buildMap(version = '1.2.3', app = 'com.example.app', versionCode = 1): RosettaMap {
     return {
-        schema_version: 2,
+        schema_version: 3,
         version_code: versionCode,
         app,
         version,
@@ -339,6 +341,115 @@ describe('runSignerGuard', () => {
         );
         expect(result.ok).toBe(false);
         if (!result.ok) expect(result.error).toBeInstanceOf(MissingSignerError);
+    });
+
+    it('passes when a live signer matches ANY entry of a signer_sha256 ARRAY (#38)', () => {
+        const certs = [[7, 7, 7, 7]];
+        const map = {
+            ...buildMap(),
+            // A non-matching hash first, the matching one second: match-any.
+            signer_sha256: ['d'.repeat(64), sha256Hex(certs[0] as number[])],
+        };
+        const { events, seen } = collect();
+        const result = runSignerGuard(
+            map,
+            'com.example.app',
+            { map, signerJavaApi: signerApi(certs) },
+            events,
+        );
+        expect(result.ok).toBe(true);
+        expect(seen.some((e) => e.type === 'signer-check' && e.passed)).toBe(true);
+    });
+
+    it('returns SignerMismatchError when no live signer matches any ARRAY entry', () => {
+        const map = { ...buildMap(), signer_sha256: ['d'.repeat(64), 'e'.repeat(64)] };
+        const result = runSignerGuard(
+            map,
+            'com.example.app',
+            { map, signerJavaApi: signerApi([[9, 9, 9]]) },
+            new EventBus(),
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.error).toBeInstanceOf(SignerMismatchError);
+    });
+
+    it('reports the full ARRAY of expected hashes in MissingSignerError (#38)', () => {
+        const map = { ...buildMap(), signer_sha256: ['c'.repeat(64), 'b'.repeat(64)] };
+        const noSignerApi: SignerJavaApi = {
+            use: ((name: string) => {
+                if (name === 'java.security.MessageDigest') {
+                    return { getInstance: () => ({ digest: () => Buffer.from([]) }) };
+                }
+                return {
+                    currentApplication: () => ({
+                        getApplicationContext: () => ({
+                            getPackageManager: () => ({
+                                getPackageInfo: () => ({ signingInfo: { value: null } }),
+                            }),
+                        }),
+                        getPackageName: () => 'com.example.app',
+                    }),
+                };
+            }) as SignerJavaApi['use'],
+        };
+        const result = runSignerGuard(
+            map,
+            'com.example.app',
+            { map, signerJavaApi: noSignerApi },
+            new EventBus(),
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.error).toBeInstanceOf(MissingSignerError);
+            // Both hashes are named (sorted), so the failure report is complete.
+            expect(result.error.message).toContain('b'.repeat(64));
+            expect(result.error.message).toContain('c'.repeat(64));
+        }
+    });
+});
+
+describe('statusStage', () => {
+    it('is a no-op (no event) for an active or absent status', () => {
+        const { events, seen } = collect();
+        expect(statusStage(buildMap(), events).ok).toBe(true);
+        const active = { ...buildMap(), status: 'active' as const };
+        expect(statusStage(active, events).ok).toBe(true);
+        expect(seen).toHaveLength(0);
+    });
+
+    it('warns (emits map-status) but proceeds for a superseded map', () => {
+        const { events, seen } = collect();
+        const map = { ...buildMap(), status: 'superseded' as const, superseded_by: 99 };
+        const result = statusStage(map, events);
+        expect(result.ok).toBe(true);
+        const ev = seen.find((e) => e.type === 'map-status');
+        expect(ev).toBeDefined();
+        if (ev && ev.type === 'map-status') {
+            expect(ev.status).toBe('superseded');
+            expect(ev.supersededBy).toBe(99);
+        }
+    });
+
+    it('refuses a retracted map fail-closed with MapRetractedError', () => {
+        // A schema-3 retracted map carries NO superseded_by (the cross-field
+        // rule allows it only on a superseded map), so the error names no
+        // replacement version and `supersededBy` is undefined.
+        const { events, seen } = collect();
+        const map = { ...buildMap(), status: 'retracted' as const };
+        const result = statusStage(map, events);
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.error).toBeInstanceOf(MapRetractedError);
+            expect(result.error.message).toContain('retracted');
+            expect((result.error as MapRetractedError).supersededBy).toBeUndefined();
+        }
+        // The reason is observable via the event even though load fails.
+        const ev = seen.find((e) => e.type === 'map-status');
+        expect(ev).toBeDefined();
+        if (ev && ev.type === 'map-status') {
+            expect(ev.status).toBe('retracted');
+            expect(ev.supersededBy).toBeUndefined();
+        }
     });
 });
 

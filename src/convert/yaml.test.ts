@@ -7,7 +7,7 @@ import { yamlToMap } from './yaml.js';
 import { MapValidationError, RosettaError } from '../errors.js';
 
 const GOOD_YAML = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "3.4.5"
 version_code: 30405
@@ -35,7 +35,7 @@ classes:
 describe('yamlToMap', () => {
     it('parses well-formed YAML into a RosettaMap', () => {
         const map = yamlToMap(GOOD_YAML);
-        expect(map.schema_version).toBe(2);
+        expect(map.schema_version).toBe(3);
         expect(map.version_code).toBe(30405);
         expect(map.app).toBe('com.example.app');
         expect(map.version).toBe('3.4.5');
@@ -53,7 +53,7 @@ describe('yamlToMap', () => {
 
     it('parses overload-array form for methods', () => {
         const yaml = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -97,7 +97,7 @@ classes: {}
 
     it('throws MapValidationError when required fields are missing', () => {
         const bad = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 classes: {}
 `;
@@ -106,7 +106,7 @@ classes: {}
 
     it('throws MapValidationError when a class entry is malformed', () => {
         const bad = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -135,7 +135,7 @@ classes:
         // `^[0-9a-f]{64}$`, so the converter must canonicalize before emit.
         const upperColon = Array.from({ length: 32 }, () => 'AB').join(':'); // 32 * "AB"
         const yaml = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -151,7 +151,7 @@ classes: {}
     it('canonicalizes a mixed-case, no-colon signer_sha256', () => {
         const mixed = 'AbCdEf0123456789'.repeat(4); // 64 mixed-case hex chars
         const yaml = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -163,11 +163,53 @@ classes: {}
         expect(map.signer_sha256).toMatch(/^[0-9a-f]{64}$/);
     });
 
+    it('canonicalizes an ARRAY of non-canonical signer_sha256 hashes (#38)', () => {
+        // The schema-3 match-any array form: each element may be authored in
+        // apksigner colon/uppercase form. The converter must normalize every
+        // entry, not just the scalar case.
+        const upperColon = Array.from({ length: 32 }, () => 'AB').join(':'); // -> ab*32
+        const mixed = 'AbCdEf0123456789'.repeat(4); // 64 mixed-case hex
+        const yaml = `
+schema_version: 3
+app: com.example.app
+version: "1.0.0"
+version_code: 100
+signer_sha256:
+    - "${upperColon}"
+    - "${mixed}"
+classes: {}
+`;
+        const map = yamlToMap(yaml);
+        expect(map.signer_sha256).toEqual(['ab'.repeat(32), mixed.toLowerCase()]);
+        for (const h of map.signer_sha256 as string[]) {
+            expect(h).toMatch(/^[0-9a-f]{64}$/);
+        }
+    });
+
+    it('leaves a non-string array entry untouched (schema still rejects it, #38)', () => {
+        // A non-string element (e.g. a YAML number) is NOT normalized — the
+        // canonicalizer only touches string entries — so the strict schema
+        // still rejects the array as malformed rather than the converter
+        // laundering it.
+        const good = 'a'.repeat(64);
+        const yaml = `
+schema_version: 3
+app: com.example.app
+version: "1.0.0"
+version_code: 100
+signer_sha256:
+    - "${good}"
+    - 12345
+classes: {}
+`;
+        expect(() => yamlToMap(yaml)).toThrow(MapValidationError);
+    });
+
     it('still rejects a signer_sha256 that is malformed after canonicalization', () => {
         // Wrong length even after stripping colons / lowercasing — canonicalize
         // does not launder garbage; the strict schema still rejects it.
         const yaml = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -179,7 +221,7 @@ classes: {}
 
     it('issues array contains paths for nested errors', () => {
         const bad = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100

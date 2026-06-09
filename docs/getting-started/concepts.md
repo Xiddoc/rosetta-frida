@@ -105,7 +105,7 @@ translation for one `(app, version)` pair. The on-disk format:
 
 ```json
 {
-    "schema_version": 2,
+    "schema_version": 3,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -179,9 +179,9 @@ block:
 
 ```js
 /*! -----BEGIN ROSETTA MAP----- */
-/*! app: com.example.app | version: 3.4.5 | schema: 2 | classes: 15 */
+/*! app: com.example.app | version: 3.4.5 | schema: 3 | classes: 15 */
 const __rosetta_map = {
-    "schema_version": 2,
+    "schema_version": 3,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,

@@ -23,12 +23,15 @@ Defined in `src/types/map.ts`.
 
 ```typescript
 interface RosettaMap {
-    schema_version: 2;
+    schema_version: 3;
     app: string;
     version: string; // versionName label — fuzzy fallback only
     version_code: number; // authoritative selection key
-    captured_at?: string;
-    signer_sha256?: string; // signing-cert hash authenticity guard
+    captured_at?: string; // ISO YYYY-MM-DD
+    signer_sha256?: string | string[]; // signing-cert hash guard (match-any)
+    generated_from?: GeneratedFrom; // signatures-revision provenance pointer
+    status?: MapStatus; // lifecycle: active (default) / superseded / retracted
+    superseded_by?: number; // version_code of the replacement map
     client_hints?: ClientHints; // per-client metadata (frida version range)
     sources?: MapSource[];
     classes: ClassMap;
@@ -60,21 +63,31 @@ interface MapSource {
     config?: string;
     classes?: number;
     notes?: string;
-    confidence?: Confidence;
 }
 ```
 
 Provenance entry. One per upstream tool / authoring pass.
 
-### `Confidence`
+### `GeneratedFrom`
 
 ```typescript
-type Confidence = 'high' | 'medium' | 'low';
+interface GeneratedFrom {
+    signatures_rev: string; // 7–40-char git commit hash
+}
 ```
 
-Per-entry or per-source confidence rating. Reserved for V2+ trust
-workflows (e.g. a fuzzy-mode picker preferring high-confidence
-entries).
+Optional provenance pointer back to the signatures revision a map was
+generated from (#36). Required-if-present.
+
+### `MapStatus`
+
+```typescript
+type MapStatus = 'active' | 'superseded' | 'retracted';
+```
+
+Lifecycle status of a map (#40). Absent ⇒ `active`. A `superseded` map
+still loads but `rosetta.session(...)` emits a `map-status` warning; a
+`retracted` map is refused fail-closed (`MapRetractedError`).
 
 ### `ClassKind`
 
@@ -105,7 +118,6 @@ interface ClassEntry {
     methods?: MethodMap;
     fields?: FieldMap;
     source?: string;
-    confidence?: Confidence;
 }
 ```
 

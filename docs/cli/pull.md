@@ -47,7 +47,7 @@ NUL byte.
    **exact raw fetched bytes**, before they are parsed or trusted. A
    mismatched or malformed sidecar fails closed; a missing one warns (or
    fails closed under `--require-sidecar`).
-6. **Validate** the fetched JSON against the `schema_version: 2` schema.
+6. **Validate** the fetched JSON against the `schema_version: 3` schema.
 7. **Identity cross-check.** The fetched map's own `app` and
    `version_code` are compared against the requested pair. A mismatch is a
    hard error — a misfiled upstream file would otherwise be written under

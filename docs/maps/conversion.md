@@ -38,7 +38,7 @@ import { parseJson } from 'rosetta-frida';
 
 const source = `
 {
-    "schema_version": 2,
+    "schema_version": 3,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -55,7 +55,7 @@ YAML conversion uses the [`yaml`](https://eemeli.org/yaml/) package
 
 ```yaml
 # rosetta-frida map — com.example.app @ 3.4.5
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "3.4.5"
 version_code: 30405

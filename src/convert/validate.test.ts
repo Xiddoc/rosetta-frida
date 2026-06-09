@@ -7,7 +7,7 @@ import { validateStructure } from './validate.js';
 import { MapValidationError } from '../errors.js';
 
 const MINIMAL = {
-    schema_version: 2,
+    schema_version: 3,
     version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
@@ -37,13 +37,12 @@ describe('validateStructure', () => {
                     config: 'sig.json',
                     classes: 1,
                     notes: 'ok',
-                    confidence: 'high' as const,
                 },
             ],
         };
         const map = validateStructure(full);
         expect(map.signer_sha256?.length).toBe(64);
-        expect(map.sources?.[0]?.confidence).toBe('high');
+        expect(map.sources?.[0]?.tool).toBe('sigmatcher');
     });
 
     it('accepts a class with all optional fields', () => {
@@ -58,7 +57,6 @@ describe('validateStructure', () => {
                     aidl_descriptor: 'com.example.app.IFoo',
                     anchors: ['anchor-string'],
                     source: 'sigmatcher',
-                    confidence: 'high',
                     methods: {
                         bar: { obfuscated: 'a', signature: '()V' },
                         baz: [
@@ -85,7 +83,7 @@ describe('validateStructure', () => {
 
     it('throws MapValidationError with issues on a bad map', () => {
         try {
-            validateStructure({ schema_version: 2, version_code: 1, app: 'x' });
+            validateStructure({ schema_version: 3, version_code: 1, app: 'x' });
             throw new Error('expected throw');
         } catch (e) {
             expect(e).toBeInstanceOf(MapValidationError);
@@ -97,7 +95,7 @@ describe('validateStructure', () => {
     it('formats a single-issue error count correctly', () => {
         try {
             validateStructure({
-                schema_version: 2,
+                schema_version: 3,
                 version_code: 1,
                 app: 'x',
                 version: '1.0',

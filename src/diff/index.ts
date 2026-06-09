@@ -2,7 +2,7 @@
  * Map diff core — the framework-neutral, pure-function engine behind
  * `rosetta diff`.
  *
- * Reports what *rotated* between two `schema_version: 2` maps: classes,
+ * Reports what *rotated* between two `schema_version: 3` maps: classes,
  * methods, and fields that were added, removed, or whose obfuscated name
  * (or method signature) changed. This is the canonical "what changed in
  * this release" report — the obfuscation-rotation pain this whole project

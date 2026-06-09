@@ -18,6 +18,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
     HealthCheckFailedError,
     MalformedSignerError,
+    MapRetractedError,
     MapVersionMismatchError,
     MissingSignerError,
     SignerMismatchError,
@@ -37,7 +38,7 @@ import {
 
 function buildMap(version: string, app = 'com.example.app', versionCode = 1): RosettaMap {
     return {
-        schema_version: 2,
+        schema_version: 3,
         version_code: versionCode,
         app,
         version,
@@ -166,10 +167,80 @@ describe('createSession — explicit app/version', () => {
         expect(mapLoad).toBeDefined();
         if (mapLoad?.type === 'map-load') {
             expect(mapLoad.classCount).toBe(2);
-            expect(mapLoad.schemaVersion).toBe(2);
+            expect(mapLoad.schemaVersion).toBe(3);
             // A single-map input is an exact selection.
             expect(mapLoad.selectionKind).toBe('exact');
         }
+    });
+});
+
+describe('createSession — lifecycle status (#40)', () => {
+    it('refuses a retracted map fail-closed with MapRetractedError', () => {
+        const map = { ...buildMap('1.2.3'), status: 'retracted' as const };
+        expect(() =>
+            createSession({
+                map,
+                app: 'com.example.app',
+                version: '1.2.3',
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+            }),
+        ).toThrow(MapRetractedError);
+    });
+
+    it('emits map-status before throwing so the reason is observable', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        const map = { ...buildMap('1.2.3'), status: 'retracted' as const };
+        expect(() =>
+            createSession({
+                map,
+                app: 'com.example.app',
+                version: '1.2.3',
+                events,
+                healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+            }),
+        ).toThrow(MapRetractedError);
+        expect(captured.some((e) => e.type === 'map-status' && e.status === 'retracted')).toBe(
+            true,
+        );
+    });
+
+    it('loads a superseded map but emits a map-status warning', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        const map = {
+            ...buildMap('1.2.3'),
+            status: 'superseded' as const,
+            superseded_by: 9,
+        };
+        const session = createSession({
+            map,
+            app: 'com.example.app',
+            version: '1.2.3',
+            events,
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        // The session is still usable.
+        expect(session.healthy).toBe(true);
+        const ev = captured.find((e) => e.type === 'map-status');
+        expect(ev).toBeDefined();
+        if (ev && ev.type === 'map-status') {
+            expect(ev.status).toBe('superseded');
+            expect(ev.supersededBy).toBe(9);
+        }
+    });
+
+    it('treats an active (or absent) status as a no-op (no map-status event)', () => {
+        const events = new EventBus();
+        const captured = captureEvents(events);
+        createSession({
+            map: { ...buildMap('1.2.3'), status: 'active' as const },
+            app: 'com.example.app',
+            version: '1.2.3',
+            events,
+            healthCheckJavaApi: makeHealthJavaApi(['aaaa', 'bbbb']),
+        });
+        expect(captured.some((e) => e.type === 'map-status')).toBe(false);
     });
 });
 
@@ -664,7 +735,7 @@ describe('createSession — health check', () => {
 
 describe('createSession — health check with AIDL descriptors and anchors', () => {
     const map: RosettaMap = {
-        schema_version: 2,
+        schema_version: 3,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
@@ -1073,7 +1144,7 @@ describe('createSession — health check honours the target-namespace guard', ()
     /** A map whose single class points at a forbidden framework FQN. */
     function maliciousMap(): RosettaMap {
         return {
-            schema_version: 2,
+            schema_version: 3,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',

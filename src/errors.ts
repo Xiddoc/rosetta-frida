@@ -246,6 +246,27 @@ export class HealthCheckFailedError extends RosettaError {
     }
 }
 
+/**
+ * Thrown when the loaded map carries `status: 'retracted'` (#40). A
+ * retracted map was withdrawn (e.g. found to resolve to the wrong names), so
+ * the session refuses it fail-closed rather than risk applying a known-bad
+ * map. There is deliberately no override: re-emit / pick a non-retracted
+ * map. Mirrors the project's "fail hard" stance for identity/safety gates.
+ */
+export class MapRetractedError extends RosettaError {
+    constructor(
+        message: string,
+        /** The retracted map's app package. */
+        public readonly app: string,
+        /** The retracted map's version label. */
+        public readonly version: string,
+        /** The `version_code` of the replacement map, if the map named one. */
+        public readonly supersededBy?: number,
+    ) {
+        super(message);
+    }
+}
+
 /** Thrown when a marker block can't be located or parsed in a compiled bundle. */
 export class MarkerBlockError extends RosettaError {
     constructor(

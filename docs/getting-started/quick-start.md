@@ -28,7 +28,7 @@ For this tutorial, use the ready-made sample map at
 
 ```json
 {
-    "schema_version": 2,
+    "schema_version": 3,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -145,7 +145,7 @@ your bundle becomes self-describing:
 
 ```sh
 $ npx rosetta inspect hook.bundle.js
-com.example.app@3.4.5, schema_version 2, 15 classes
+com.example.app@3.4.5, schema_version 3, 15 classes
 ```
 
 And you can swap maps without recompiling:
@@ -155,7 +155,7 @@ $ npx rosetta patch hook.bundle.js --map maps/com.example.app/3.5.0.json
 patch: wrote hook.bundle.js (in place)
 
 $ npx rosetta inspect hook.bundle.js
-com.example.app@3.5.0, schema_version 2, 15 classes
+com.example.app@3.5.0, schema_version 3, 15 classes
 ```
 
 The hook source did not change. The user-visible class names did not

@@ -22,6 +22,7 @@
 
 import {
     HealthCheckFailedError,
+    MapRetractedError,
     MapVersionMismatchError,
     MissingSignerError,
     type RosettaError,
@@ -35,7 +36,7 @@ import type { Resolver } from '../types/resolver.js';
 import type { FailurePolicy, VersionMatch } from '../types/session.js';
 import { detectAppAndVersion } from './auto-detect.js';
 import { runHealthCheck, DEFAULT_HEALTH_CHECK_THRESHOLD } from './health-check.js';
-import { checkSigner, NoSignerReadableError, normalizeSignerHash } from './signer-detect.js';
+import { checkSigner, formatExpectedHashes, NoSignerReadableError } from './signer-detect.js';
 import { pickMapForVersion } from './version-match.js';
 import type { InternalSessionOptions } from './session.js';
 
@@ -193,6 +194,55 @@ export function selectAndVerifyStage(
 }
 
 // ---------------------------------------------------------------------------
+// Stage 2.5 — lifecycle status gate
+// ---------------------------------------------------------------------------
+
+/**
+ * Enforce the map's lifecycle `status` (#40). Runs immediately after
+ * selection so a withdrawn map is refused before its names are probed:
+ *
+ *   - `'active'` (or absent): no-op, no event.
+ *   - `'superseded'`: emit a `map-status` WARNING event and proceed (the
+ *     map still loads — it is merely out of date).
+ *   - `'retracted'`: emit a `map-status` event (so the reason is observable)
+ *     and FAIL CLOSED with `MapRetractedError`.
+ */
+export function statusStage(map: RosettaMap, events: EventBus): StageResult<void> {
+    const status = map.status;
+    if (status === undefined || status === 'active') return { ok: true, value: undefined };
+
+    const event = {
+        type: 'map-status' as const,
+        status,
+        app: map.app,
+        version: map.version,
+        ...(map.superseded_by !== undefined ? { supersededBy: map.superseded_by } : {}),
+    };
+    events.emit(event);
+
+    if (status === 'retracted') {
+        // A retracted map names no replacement: the cross-field schema rule
+        // (#40) allows `superseded_by` ONLY on a `superseded` map, so a valid
+        // retracted map never carries one. Withdrawal ("known-bad, do not
+        // apply") and supersession ("a newer map exists") are distinct states.
+        return {
+            ok: false,
+            error: new MapRetractedError(
+                `rosetta-frida: refusing to load the map for ${map.app}@${map.version} — it is ` +
+                    `marked status: 'retracted' (withdrawn). ` +
+                    'A retracted map is known-bad and cannot be applied; re-emit or pick a ' +
+                    'non-retracted map.',
+                map.app,
+                map.version,
+            ),
+        };
+    }
+
+    // 'superseded' — warn but proceed.
+    return { ok: true, value: undefined };
+}
+
+// ---------------------------------------------------------------------------
 // Stage 3 — signer guard
 // ---------------------------------------------------------------------------
 
@@ -227,15 +277,16 @@ export function runSignerGuard(
         // closed with MissingSignerError. Other errors — notably the
         // MalformedSignerError for an ill-formed map hash — propagate.
         if (e instanceof NoSignerReadableError) {
+            const expectedLabel = formatExpectedHashes(expected);
             return {
                 ok: false,
                 error: new MissingSignerError(
                     `rosetta-frida: the loaded map (${map.app}@${map.version}) expects ` +
-                        `signing-certificate SHA-256 ${normalizeSignerHash(expected)}, but the running app ` +
+                        `signing-certificate SHA-256 ${expectedLabel}, but the running app ` +
                         `${app} exposed no readable signing certificate. ` +
                         'Refusing to apply a map whose signer guard cannot be satisfied ' +
                         '(pass enforceSigner: false to override).',
-                    normalizeSignerHash(expected),
+                    expectedLabel,
                 ),
             };
         }
@@ -386,6 +437,11 @@ export function buildSession(options: InternalSessionOptions): SessionState {
         schemaVersion: map.schema_version,
         selectionKind,
     });
+
+    // 2.5 Lifecycle status gate: refuse a retracted map (fail-closed), warn
+    //     on a superseded one. Runs before identity/health so a withdrawn map
+    //     never gets probed.
+    unwrap(statusStage(map, events));
 
     // 3. Signer-certificate authenticity guard (runs before the functional
     //    health check: identity gates a map before we probe its names).

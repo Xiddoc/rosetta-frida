@@ -30,7 +30,7 @@ in [Maps — format](../maps/format.md)) with:
 
 ```json
 {
-    "schema_version": 2,
+    "schema_version": 3,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
