@@ -13,7 +13,9 @@ export {
     methodEntrySchema,
     mapSourceSchema,
     classKindSchema,
-    confidenceSchema,
+    signerSha256Schema,
+    generatedFromSchema,
+    mapStatusSchema,
     validateMap,
     zodPathToString,
 } from './schema.js';

@@ -19,11 +19,7 @@ export interface MapSource {
     classes?: number;
     /** Free-form notes (e.g. "verified via runtime trace"). */
     notes?: string;
-    /** Confidence default for entries from this source. */
-    confidence?: Confidence;
 }
-
-export type Confidence = 'high' | 'medium' | 'low';
 
 /**
  * Optional, client-specific hints nested under a map's `client_hints`
@@ -38,6 +34,26 @@ export interface ClientHints {
     /** Maximum Frida version this map is known to work with. */
     frida_max_version?: string;
 }
+
+/**
+ * Provenance pointer back to the signatures revision a map was generated
+ * from (#36). Optional at the map level; when present, `signatures_rev` is
+ * required and must be an abbreviated-or-full git commit hash
+ * (`^[0-9a-f]{7,40}$`). Lets a consumer trace a published artifact back to
+ * the exact `rosetta-maps` signatures commit that produced it.
+ */
+export interface GeneratedFrom {
+    /** Git revision (7–40 lowercase hex) of the signatures that produced this map. */
+    signatures_rev: string;
+}
+
+/**
+ * Lifecycle status of a map (#40). Absent ⇒ `'active'`. A `'superseded'`
+ * map still loads but the session emits a warning (it has been replaced by a
+ * newer capture, optionally named by `superseded_by`); a `'retracted'` map
+ * is refused fail-closed (it was withdrawn — e.g. found to be wrong).
+ */
+export type MapStatus = 'active' | 'superseded' | 'retracted';
 
 export type ClassKind =
     | 'class'
@@ -129,8 +145,6 @@ export interface ClassEntry {
     fields?: FieldMap;
     /** Which source contributed this entry (cross-reference into top-level `sources`). */
     source?: string;
-    /** Per-entry confidence override. */
-    confidence?: Confidence;
 }
 
 /** Classes are keyed by real fully-qualified name. */
@@ -163,18 +177,21 @@ export type ClassMapInput = Record<string, ClassEntryInput>;
  * kept in sync by `scripts/check-schema-version.mjs` (run via
  * `npm run schema-version:fix`; `:check` is wired into `npm run verify`).
  *
- * Declared `const` so its type narrows to the numeric literal (e.g. `2`),
+ * Declared `const` so its type narrows to the numeric literal (e.g. `3`),
  * which is what `RosettaMap.schema_version` and `z.literal` need.
  */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 /** The top-level mapping file. */
 export interface RosettaMap {
     /**
      * Mandatory. Bumped on breaking schema changes.
      *
-     * `2` (current): adds the required `version_code` app-identity key and
-     * the optional `signer_sha256` authenticity guard; drops `apk_sha256`.
+     * `3` (current): removes the `confidence` field (from `sources` and
+     * class entries); tightens `captured_at` to an ISO `YYYY-MM-DD` date;
+     * lets `signer_sha256` be a single hash OR a non-empty array of hashes
+     * (match-any); adds the optional `generated_from` provenance pointer and
+     * the optional `status` / `superseded_by` lifecycle fields.
      */
     schema_version: typeof CURRENT_SCHEMA_VERSION;
     /**
@@ -201,7 +218,11 @@ export interface RosettaMap {
      * value a JS number represents exactly). See RFC 0001 Decision 3.
      */
     version_code: number;
-    /** ISO date when the map was captured. */
+    /**
+     * ISO `YYYY-MM-DD` calendar date when the map was captured (#39).
+     * Validated as a real date (`format: "date"` semantics) — arbitrary
+     * text is rejected.
+     */
     captured_at?: string;
     /**
      * Optional authenticity guard — hex SHA-256 of the APK signing
@@ -209,11 +230,29 @@ export interface RosettaMap {
      * PackageManager; guards against loading a map for a repackaged or
      * spoofed app. See RFC 0001 Decision 3.
      *
-     * Enforced as 64 lowercase hex chars (`^[0-9a-f]{64}$`) by the schema
-     * so a malformed digest fails validation early; the session layer
-     * additionally normalises + re-validates it at runtime.
+     * EITHER a single 64-lowercase-hex digest (`^[0-9a-f]{64}$`) OR a
+     * non-empty array of such digests (#38, #32). When several are listed,
+     * the guard matches ANY one of them (a key-rotation lineage may present
+     * more than one signer). A malformed digest fails validation early; the
+     * session layer additionally normalises + re-validates each at runtime.
      */
-    signer_sha256?: string;
+    signer_sha256?: string | string[];
+    /**
+     * Optional provenance pointer back to the signatures revision this map
+     * was generated from (#36). When present, `signatures_rev` is required.
+     */
+    generated_from?: GeneratedFrom;
+    /**
+     * Optional lifecycle status (#40). Absent ⇒ `'active'`. A `'superseded'`
+     * map loads with a warning; a `'retracted'` map is refused fail-closed.
+     */
+    status?: MapStatus;
+    /**
+     * Optional `version_code` of the map that supersedes this one (#40).
+     * Only meaningful alongside `status: 'superseded'`; a human/tooling
+     * pointer to the replacement capture.
+     */
+    superseded_by?: number;
     /**
      * Optional, client-specific hints nested under their own sub-object
      * (canonical schema groups per-client metadata here, not at the top

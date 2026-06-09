@@ -7,7 +7,8 @@ export { CURRENT_SCHEMA_VERSION } from './map.js';
 
 export type {
     MapSource,
-    Confidence,
+    GeneratedFrom,
+    MapStatus,
     ClassKind,
     MethodEntry,
     FieldEntry,
@@ -49,6 +50,7 @@ export type {
     DetectEvent,
     MapLoadEvent,
     SignerCheckEvent,
+    MapStatusEvent,
     DiagnosticEvent,
     EventListener,
 } from './events.js';
