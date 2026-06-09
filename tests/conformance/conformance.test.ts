@@ -139,6 +139,9 @@ interface ConformanceCase {
     readonly versionCodes?: readonly number[];
     readonly targetCode?: number;
     readonly expectSelectedCode?: number;
+    // `codeCollision` cases (version-select.json): FIRST-WINS duplicate-code policy.
+    readonly maps?: readonly { readonly versionCode: number; readonly version: string }[];
+    readonly expectSelectedVersion?: string;
     // Error cases (errors.json): a byte-identical substring (sans the
     // per-client brand prefix) the thrown error message must contain.
     readonly expectMessageIncludes?: string;
@@ -377,7 +380,46 @@ function runCodeSelectCase(c: ConformanceCase): void {
         versionCode: c.targetCode,
     });
     expect(picked.fuzzy).toBe(false);
+    // Pin the exact selection tier (not just `fuzzy === false`) to match the
+    // Kotlin twin's `MatchedBy.VERSION_CODE` assertion: an exact version_code
+    // pick is `fuzzyKind: 'exact'`. (No `'version_code'`-specific kind is
+    // exposed; `'exact'` is the closest distinct tier and rules out the label /
+    // range / nearest paths.)
+    expect(picked.fuzzyKind).toBe('exact');
     expect(picked.map.version_code).toBe(c.expectSelectedCode);
+}
+
+/**
+ * Run a `codeCollision`-kind case (version-select.json): build a registry from
+ * the case's `maps` (each `{versionCode, version}`, IN INPUT ORDER, keyed by its
+ * `version` label so two maps sharing a `version_code` both register) and assert
+ * that exact selection by `targetCode` returns the FIRST map that claimed the
+ * code. Pins the cross-client canonical FIRST-WINS collision policy (the
+ * memoised `versionCodeIndex` putIfAbsent); the Kotlin twin runs
+ * `MapRegistry.fromCollection` (putIfAbsent) + `VersionMatch.select`.
+ */
+function runCodeCollisionCase(c: ConformanceCase): void {
+    const entries = c.maps as readonly { versionCode: number; version: string }[];
+    const registry: RosettaMapRegistry = {};
+    // Object literal insertion order is preserved for these non-integer string
+    // keys, so Object.keys() iterates in input order and putIfAbsent picks the
+    // FIRST map for the shared code — exactly what the policy asserts.
+    entries.forEach((e) => {
+        registry[e.version] = {
+            schema_version: 2,
+            app: 'com.example.app',
+            version: e.version,
+            version_code: e.versionCode,
+            classes: {},
+        };
+    });
+    const picked = pickMapForVersion(registry, {
+        version: 'no-such-label',
+        versionCode: c.targetCode,
+    });
+    expect(picked.fuzzy).toBe(false);
+    expect(picked.fuzzyKind).toBe('exact');
+    expect(picked.map.version).toBe(c.expectSelectedVersion);
 }
 
 /**
@@ -424,6 +466,8 @@ for (const file of FIXTURES) {
                     runFuzzySelectCase(c);
                 } else if (c.kind === 'codeSelect') {
                     runCodeSelectCase(c);
+                } else if (c.kind === 'codeCollision') {
+                    runCodeCollisionCase(c);
                 } else if (c.expectError !== undefined) {
                     assertError(resolver, c);
                 } else {
