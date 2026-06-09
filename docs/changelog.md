@@ -304,7 +304,7 @@ Nine error classes, all subclasses of [`RosettaError`](reference/errors.md#roset
 
 ### Tests
 
-- **100% line / branch / function / statement coverage** (611 tests across 41 files as of V1.0; see the repository's CI for the current test count).
+- **100% line / branch / function / statement coverage** (the gate excludes barrels / pure type declarations / the CLI entry shim; see the repository's CI for the current test count).
 - Test pattern: dependency-injected `Java.use` / `fs`; each
   subsystem unit-testable in isolation.
 
