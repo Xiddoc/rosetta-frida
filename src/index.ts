@@ -84,6 +84,12 @@ export { verifyMap } from './verify/index.js';
 export type { VerifyIssue, VerifySeverity } from './verify/index.js';
 export { renderTypes, collectNames } from './types-emit/index.js';
 export type { ClassNames } from './types-emit/index.js';
+export {
+    analyse as analyseFreshness,
+    renderReport as renderFreshnessReport,
+    FreshnessInputError,
+} from './freshness/index.js';
+export type { FreshnessFinding, FreshnessReport, MapClassKeys } from './freshness/index.js';
 
 // Session + auto-detect + health-check (Wave 2G)
 export {

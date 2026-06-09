@@ -149,6 +149,7 @@ nav:
       - rosetta diff: cli/diff.md
       - rosetta merge: cli/merge.md
       - rosetta types: cli/types.md
+      - rosetta freshness: cli/freshness.md
   - Recipes:
       - String-anchored class: recipes/string-anchored-class.md
       - Superclass-anchored method: recipes/superclass-anchored-method.md
