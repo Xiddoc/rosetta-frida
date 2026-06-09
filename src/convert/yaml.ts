@@ -53,8 +53,17 @@ import { normalizeSignerHash } from '../session/signer-detect.js';
 function canonicalizeSignerSha256(parsed: unknown): void {
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return;
     const record = parsed as Record<string, unknown>;
-    if (typeof record.signer_sha256 === 'string') {
-        record.signer_sha256 = normalizeSignerHash(record.signer_sha256);
+    const value = record.signer_sha256;
+    if (typeof value === 'string') {
+        record.signer_sha256 = normalizeSignerHash(value);
+    } else if (Array.isArray(value)) {
+        // The schema-3 match-any array form (#38): normalize each element the
+        // same way as the scalar form. Non-string elements are left untouched
+        // so the strict schema still rejects them; only string entries (the
+        // colon/uppercase apksigner shape) are canonicalized.
+        record.signer_sha256 = value.map((entry) =>
+            typeof entry === 'string' ? normalizeSignerHash(entry) : entry,
+        );
     }
 }
 
