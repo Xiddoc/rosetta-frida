@@ -374,6 +374,20 @@ describe('isPinnedRef', () => {
         expect(isPinnedRef('v10.0.0-rc1')).toBe(true);
     });
 
+    it('treats a vX.Y.Z tag with a prerelease/build suffix as pinned', () => {
+        expect(isPinnedRef('v1.2.3-rc1')).toBe(true);
+        expect(isPinnedRef('v1.2.3+build.5')).toBe(true);
+    });
+
+    it('treats a moving ref that merely starts with a tag prefix as unpinned (anchored)', () => {
+        // A branch whose name starts vX.Y.Z but continues with a non-suffix
+        // character (slash / space) must NOT be misread as a pinned release.
+        expect(isPinnedRef('v1.2.3-feature/foo')).toBe(false);
+        expect(isPinnedRef('v1.2.3 wip')).toBe(false);
+        // Four numeric segments is not a vX.Y.Z tag either.
+        expect(isPinnedRef('v1.2.3.4')).toBe(false);
+    });
+
     it('treats a branch name like main as unpinned', () => {
         expect(isPinnedRef('main')).toBe(false);
         expect(isPinnedRef('develop')).toBe(false);

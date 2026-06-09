@@ -167,8 +167,15 @@ const PULL_CONFIG_SCHEMA = z.object({
 
 /** A full 40-character hex commit SHA. */
 const SHA_RE = /^[0-9a-f]{40}$/;
-/** An immutable release tag like `v1.2.3` (optionally with a suffix). */
-const TAG_RE = /^v\d+\.\d+\.\d+/;
+/**
+ * An immutable release tag: `vX.Y.Z`, optionally with a `-`/`+` prerelease
+ * or build suffix (e.g. `v1.2.3`, `v1.2.3-rc1`, `v10.0.0+build.5`). ANCHORED
+ * at both ends so a moving ref that merely STARTS with a tag-like prefix —
+ * e.g. a `v1.2.3-feature/foo` branch (slash), `v1.2.3 wip` (space), or a
+ * four-segment `v1.2.3.4` — is NOT misclassified as a pinned release tag and
+ * still triggers the not-reproducible warning.
+ */
+const TAG_RE = /^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 
 /** Whether a ref is a reproducible pin (full SHA or `vX.Y.Z` tag). */
 export function isPinnedRef(ref: string): boolean {
