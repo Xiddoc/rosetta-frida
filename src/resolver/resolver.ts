@@ -531,7 +531,12 @@ export class ResolverImpl implements Resolver {
         if (kind === 'class') {
             return `rosetta-frida: class '${name}' not found ${where}.`;
         }
-        return `rosetta-frida: ${kind} '${name}' not found on class '${className as string}' ${where}.`;
+        // The 'method' | 'field' overload makes className non-optional, so the
+        // fallback is unreachable; it replaces a blind `as string` cast with a
+        // safe default.
+        /* c8 ignore next */
+        const onClass = className ?? '<unknown>';
+        return `rosetta-frida: ${kind} '${name}' not found on class '${onClass}' ${where}.`;
     }
 }
 
