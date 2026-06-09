@@ -126,7 +126,7 @@ the same way. See `docs/api/` for the full surface.
 schema now lives in the separate
 [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo
 (`schema/rosetta-map.schema.json` — the source of truth for the
-`schema_version: 2` format). rosetta-frida is the **first-class
+`schema_version: 3` format). rosetta-frida is the **first-class
 client** of that schema: its Zod validator (`src/validate/schema.ts`)
 _tracks_ the canonical schema rather than defining it.
 `rosetta-xposed` (Kotlin) is the other client. (There is no cross-repo
@@ -134,7 +134,7 @@ or git-URL dependency yet — that waits for an npm phase; the Zod
 validator simply mirrors the canonical shape.)
 
 **Resolved (post-RFC-0001):** the canonical on-disk artifact is
-**strict JSON** (`schema_version: 2`), one file per
+**strict JSON** (`schema_version: 3`), one file per
 `(app, version_code)`, stored under a maps directory loaded at attach
 time. YAML and TS modules remain _authoring inputs_ converted to JSON
 via `rosetta convert` — the YAML below is shown for authoring
@@ -214,7 +214,7 @@ Two repos at maturity:
 - **[`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps)** (separate
   repo, **scaffolded**) — **owns the canonical, language-neutral map
   schema** (`schema/rosetta-map.schema.json`, the source of truth for the
-  `schema_version: 2` format) plus contributed maps and the sigmatcher
+  `schema_version: 3` format) plus contributed maps and the sigmatcher
   signatures they're generated from. PR-gated by automated schema
   validation (which reuses this repo's `rosetta validate`, whose Zod
   schema tracks the canonical one); no code review required. Each PR

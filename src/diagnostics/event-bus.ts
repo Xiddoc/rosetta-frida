@@ -2,8 +2,8 @@
  * Diagnostics — the structured event channel (the home of `EventBus`).
  *
  * Subscribers get every resolve / health-check / detect / map-load /
- * signer-check event. Internally subsystems call `emit(...)`; users
- * subscribe via `rosetta.events.on(...)`.
+ * signer-check / map-status event. Internally subsystems call `emit(...)`;
+ * users subscribe via `rosetta.events.on(...)`.
  *
  * This module OWNS the implementation; all first-party importers reference
  * it directly (or via `./diagnostics/index.js` for the public surface).
