@@ -432,6 +432,38 @@ describe('rosettaMapSchema', () => {
         ).toThrow();
     });
 
+    it.each(['2026-02-30', '2026-04-31', '2025-02-29', '2026-06-31', '2026-11-31'])(
+        'rejects an impossible calendar captured_at date %s (#39)',
+        (captured_at) => {
+            expect(() =>
+                rosettaMapSchema.parse({
+                    schema_version: 3,
+                    app: 'com.example.app',
+                    version: 'v',
+                    version_code: 1,
+                    captured_at,
+                    classes: {},
+                }),
+            ).toThrow(/real calendar date/);
+        },
+    );
+
+    it.each(['2024-02-29', '2026-01-31', '2026-12-31', '2026-02-28'])(
+        'accepts a real calendar captured_at date %s (#39)',
+        (captured_at) => {
+            expect(() =>
+                rosettaMapSchema.parse({
+                    schema_version: 3,
+                    app: 'com.example.app',
+                    version: 'v',
+                    version_code: 1,
+                    captured_at,
+                    classes: {},
+                }),
+            ).not.toThrow();
+        },
+    );
+
     it('accepts a signer_sha256 array (match-any, #38)', () => {
         expect(() =>
             rosettaMapSchema.parse({
@@ -443,6 +475,37 @@ describe('rosettaMapSchema', () => {
                 classes: {},
             }),
         ).not.toThrow();
+    });
+
+    it('accepts a signer_sha256 array larger than MAX_SOURCES (no maxItems cap, parity)', () => {
+        // The canonical schema has minItems:1 and NO maxItems on signer_sha256;
+        // capping it here would make this client stricter than the schema.
+        const many = Array.from({ length: MAX_SOURCES + 5 }, (_, i) =>
+            i.toString(16).padStart(2, '0').repeat(32),
+        );
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 3,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: 1,
+                signer_sha256: many,
+                classes: {},
+            }),
+        ).not.toThrow();
+    });
+
+    it('rejects an empty signer_sha256 array (minItems:1, #38)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 3,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: 1,
+                signer_sha256: [],
+                classes: {},
+            }),
+        ).toThrow();
     });
 
     it('rejects an uppercase signer_sha256 (bare lowercase only, #32)', () => {
@@ -518,10 +581,78 @@ describe('rosettaMapSchema', () => {
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
+                status: 'superseded',
                 superseded_by: -1,
                 classes: {},
             }),
         ).toThrow();
+    });
+
+    it("rejects status: 'superseded' without superseded_by (#40 cross-field)", () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 3,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: 1,
+                status: 'superseded',
+                classes: {},
+            }),
+        ).toThrow(/superseded_by is required when status is 'superseded'/);
+    });
+
+    it('rejects superseded_by on an active (status absent) map (#40 cross-field)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 3,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: 1,
+                superseded_by: 2,
+                classes: {},
+            }),
+        ).toThrow(/superseded_by is only allowed when status is 'superseded'/);
+    });
+
+    it('rejects superseded_by on an explicitly active map (#40 cross-field)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 3,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: 1,
+                status: 'active',
+                superseded_by: 2,
+                classes: {},
+            }),
+        ).toThrow(/superseded_by is only allowed when status is 'superseded'/);
+    });
+
+    it('rejects superseded_by on a retracted map (#40 cross-field)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 3,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: 1,
+                status: 'retracted',
+                superseded_by: 2,
+                classes: {},
+            }),
+        ).toThrow(/superseded_by is only allowed when status is 'superseded'/);
+    });
+
+    it('accepts a retracted map with no superseded_by (#40 cross-field)', () => {
+        expect(() =>
+            rosettaMapSchema.parse({
+                schema_version: 3,
+                app: 'com.example.app',
+                version: 'v',
+                version_code: 1,
+                status: 'retracted',
+                classes: {},
+            }),
+        ).not.toThrow();
     });
 
     it('rejects a missing version_code', () => {

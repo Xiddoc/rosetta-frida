@@ -36,7 +36,7 @@ import type { Resolver } from '../types/resolver.js';
 import type { FailurePolicy, VersionMatch } from '../types/session.js';
 import { detectAppAndVersion } from './auto-detect.js';
 import { runHealthCheck, DEFAULT_HEALTH_CHECK_THRESHOLD } from './health-check.js';
-import { checkSigner, NoSignerReadableError, normalizeSignerHash } from './signer-detect.js';
+import { checkSigner, formatExpectedHashes, NoSignerReadableError } from './signer-detect.js';
 import { pickMapForVersion } from './version-match.js';
 import type { InternalSessionOptions } from './session.js';
 
@@ -221,20 +221,19 @@ export function statusStage(map: RosettaMap, events: EventBus): StageResult<void
     events.emit(event);
 
     if (status === 'retracted') {
-        const supersededClause =
-            map.superseded_by !== undefined
-                ? ` It was superseded by version_code ${map.superseded_by}; load that map instead.`
-                : '';
+        // A retracted map names no replacement: the cross-field schema rule
+        // (#40) allows `superseded_by` ONLY on a `superseded` map, so a valid
+        // retracted map never carries one. Withdrawal ("known-bad, do not
+        // apply") and supersession ("a newer map exists") are distinct states.
         return {
             ok: false,
             error: new MapRetractedError(
                 `rosetta-frida: refusing to load the map for ${map.app}@${map.version} — it is ` +
-                    `marked status: 'retracted' (withdrawn).${supersededClause} ` +
+                    `marked status: 'retracted' (withdrawn). ` +
                     'A retracted map is known-bad and cannot be applied; re-emit or pick a ' +
                     'non-retracted map.',
                 map.app,
                 map.version,
-                map.superseded_by,
             ),
         };
     }
@@ -278,10 +277,7 @@ export function runSignerGuard(
         // closed with MissingSignerError. Other errors — notably the
         // MalformedSignerError for an ill-formed map hash — propagate.
         if (e instanceof NoSignerReadableError) {
-            const expectedLabel = (Array.isArray(expected) ? expected : [expected])
-                .map(normalizeSignerHash)
-                .sort()
-                .join(', ');
+            const expectedLabel = formatExpectedHashes(expected);
             return {
                 ok: false,
                 error: new MissingSignerError(

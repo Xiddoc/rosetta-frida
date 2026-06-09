@@ -176,7 +176,7 @@ describe('createSession — explicit app/version', () => {
 
 describe('createSession — lifecycle status (#40)', () => {
     it('refuses a retracted map fail-closed with MapRetractedError', () => {
-        const map = { ...buildMap('1.2.3'), status: 'retracted' as const, superseded_by: 2 };
+        const map = { ...buildMap('1.2.3'), status: 'retracted' as const };
         expect(() =>
             createSession({
                 map,

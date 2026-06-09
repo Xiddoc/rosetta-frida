@@ -431,29 +431,25 @@ describe('statusStage', () => {
     });
 
     it('refuses a retracted map fail-closed with MapRetractedError', () => {
-        const { events, seen } = collect();
-        const map = { ...buildMap(), status: 'retracted' as const, superseded_by: 101 };
-        const result = statusStage(map, events);
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-            expect(result.error).toBeInstanceOf(MapRetractedError);
-            expect(result.error.message).toContain('101');
-        }
-        // The reason is observable via the event even though load fails.
-        expect(seen.some((e) => e.type === 'map-status' && e.status === 'retracted')).toBe(true);
-    });
-
-    it('refuses a retracted map with no superseded_by (no replacement clause)', () => {
+        // A schema-3 retracted map carries NO superseded_by (the cross-field
+        // rule allows it only on a superseded map), so the error names no
+        // replacement version and `supersededBy` is undefined.
         const { events, seen } = collect();
         const map = { ...buildMap(), status: 'retracted' as const };
         const result = statusStage(map, events);
         expect(result.ok).toBe(false);
         if (!result.ok) {
             expect(result.error).toBeInstanceOf(MapRetractedError);
+            expect(result.error.message).toContain('retracted');
             expect((result.error as MapRetractedError).supersededBy).toBeUndefined();
         }
+        // The reason is observable via the event even though load fails.
         const ev = seen.find((e) => e.type === 'map-status');
-        if (ev && ev.type === 'map-status') expect(ev.supersededBy).toBeUndefined();
+        expect(ev).toBeDefined();
+        if (ev && ev.type === 'map-status') {
+            expect(ev.status).toBe('retracted');
+            expect(ev.supersededBy).toBeUndefined();
+        }
     });
 });
 
