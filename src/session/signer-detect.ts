@@ -183,6 +183,19 @@ export function normalizeSignerHash(hash: string): string {
 }
 
 /**
+ * Render a map's expected `signer_sha256` (a single hash or a match-any array)
+ * as a stable, human-readable label: each hash normalized via
+ * {@link normalizeSignerHash}, sorted, and comma-joined. Shared by
+ * {@link checkSigner} (the `expected` field of its result) and the
+ * `MissingSignerError` branch in `build-session.ts`, so the two cannot drift
+ * to different orderings or normalizations of the same set.
+ */
+export function formatExpectedHashes(expected: string | readonly string[]): string {
+    const list = Array.isArray(expected) ? expected : [expected as string];
+    return list.map(normalizeSignerHash).sort().join(', ');
+}
+
+/**
  * Hex-encode a Frida-wrapped Java `byte[]`. Java bytes are signed
  * (`-128..127`); mask to a byte before formatting. Produces lowercase hex
  * with no separators (already normalized).
@@ -339,6 +352,17 @@ export function checkSigner(
     const rawExpected = Array.isArray(expectedSignerSha256)
         ? expectedSignerSha256
         : [expectedSignerSha256 as string];
+    // A match-any array that pins NO signer is meaningless (the schema rejects
+    // an empty array, but `checkSigner` is also called on hand-built values in
+    // tests / programmatic use). Treat it as a malformed map hash and fail
+    // loudly rather than silently returning `passed: false` with an empty
+    // expected label, which would read as "the app is signed wrong".
+    if (rawExpected.length === 0) {
+        throw new MalformedSignerError(
+            '[]',
+            'map signer_sha256 array is empty; it must pin at least one signer hash',
+        );
+    }
     const expectedHashes = rawExpected
         .map((raw) => {
             const normalized = normalizeSignerHash(raw);

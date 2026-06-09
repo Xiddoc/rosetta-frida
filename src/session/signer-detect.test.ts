@@ -14,6 +14,7 @@ import { javaBridgeFromUse } from '../java-bridge.js';
 import {
     detectSigners,
     checkSigner,
+    formatExpectedHashes,
     normalizeSignerHash,
     NoSignerReadableError,
     GET_SIGNING_CERTIFICATES,
@@ -366,5 +367,42 @@ describe('checkSigner', () => {
         const result = checkSigner([colonised], buildSignerApi({ signingInfoCerts: certs }));
         expect(result.passed).toBe(true);
         expect(result.expectedHashes).toEqual([plain]);
+    });
+
+    it('throws MalformedSignerError on an EMPTY array (pins no signer)', () => {
+        const certs = [[1, 2, 3]];
+        let caught: MalformedSignerError | undefined;
+        try {
+            checkSigner([], buildSignerApi({ signingInfoCerts: certs }));
+        } catch (e) {
+            caught = e as MalformedSignerError;
+        }
+        expect(caught).toBeInstanceOf(MalformedSignerError);
+        expect(caught?.reason).toMatch(/empty/);
+    });
+});
+
+describe('formatExpectedHashes', () => {
+    it('normalizes, sorts, and comma-joins a single hash', () => {
+        const hash = 'B'.repeat(64);
+        expect(formatExpectedHashes(`  ${hash}  `)).toBe('b'.repeat(64));
+    });
+
+    it('normalizes (colons/case), sorts, and comma-joins an array', () => {
+        const a = 'a'.repeat(64);
+        const b = 'b'.repeat(64);
+        // Pass out of order + colon/uppercase noise; expect sorted bare-lower.
+        const colonisedB = (b.match(/../g) ?? []).join(':').toUpperCase();
+        expect(formatExpectedHashes([colonisedB, a])).toBe(`${a}, ${b}`);
+    });
+
+    it('matches checkSigner.expected for the same input', () => {
+        const certs = [[5, 6, 7]];
+        const plain = sha256Hex(certs[0]);
+        const result = checkSigner(
+            [plain, 'a'.repeat(64)],
+            buildSignerApi({ signingInfoCerts: certs }),
+        );
+        expect(result.expected).toBe(formatExpectedHashes([plain, 'a'.repeat(64)]));
     });
 });
