@@ -8,7 +8,7 @@ import { isRegistry, pickMapForVersion } from './version-match.js';
 
 function buildMap(version: string, app = 'com.example.app', versionCode = 1): RosettaMap {
     return {
-        schema_version: 2,
+        schema_version: 3,
         version_code: versionCode,
         app,
         version,

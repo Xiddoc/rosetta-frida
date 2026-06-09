@@ -180,7 +180,7 @@ describe('formatEvent — all variants', () => {
             app: 'a',
             version: '1',
             classCount: 3,
-            schemaVersion: 2,
+            schemaVersion: 3,
             selectionKind: 'code-range',
         });
         expect(mapLoadLine).toContain('map-load');
@@ -195,5 +195,28 @@ describe('formatEvent — all variants', () => {
                 source: 'signingInfo',
             }),
         ).toContain('signer-check PASS');
+    });
+
+    it('formats map-status (superseded with replacement, and retracted)', () => {
+        const superseded = formatEvent({
+            type: 'map-status',
+            status: 'superseded',
+            app: 'com.example.app',
+            version: '1.2.3',
+            supersededBy: 99,
+        });
+        expect(superseded).toContain('map-status SUPERSEDED');
+        expect(superseded).toContain('com.example.app@1.2.3');
+        expect(superseded).toContain('superseded_by=99');
+
+        const retracted = formatEvent({
+            type: 'map-status',
+            status: 'retracted',
+            app: 'com.example.app',
+            version: '1.2.3',
+        });
+        expect(retracted).toContain('map-status RETRACTED');
+        // No replacement named when supersededBy is absent.
+        expect(retracted).not.toContain('superseded_by');
     });
 });

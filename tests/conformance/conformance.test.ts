@@ -339,7 +339,7 @@ function runFuzzySelectCase(c: ConformanceCase): void {
         // index never collapses two labels; the codes are otherwise irrelevant
         // (fuzzy selection ranks on the version LABEL, not the code).
         registry[label] = {
-            schema_version: 2,
+            schema_version: 3,
             app: 'com.example.app',
             version: label,
             version_code: i + 1,
@@ -368,7 +368,7 @@ function runCodeSelectCase(c: ConformanceCase): void {
     const registry: RosettaMapRegistry = {};
     codes.forEach((code) => {
         registry[String(code)] = {
-            schema_version: 2,
+            schema_version: 3,
             app: 'com.example.app',
             version: String(code),
             version_code: code,
@@ -406,7 +406,7 @@ function runCodeCollisionCase(c: ConformanceCase): void {
     // FIRST map for the shared code — exactly what the policy asserts.
     entries.forEach((e) => {
         registry[e.version] = {
-            schema_version: 2,
+            schema_version: 3,
             app: 'com.example.app',
             version: e.version,
             version_code: e.versionCode,

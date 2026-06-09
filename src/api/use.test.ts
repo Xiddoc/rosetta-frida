@@ -16,7 +16,7 @@ import { validateMap } from '../validate/schema.js';
 import { use } from './use.js';
 
 const map: RosettaMap = validateMap({
-    schema_version: 2,
+    schema_version: 3,
     version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',

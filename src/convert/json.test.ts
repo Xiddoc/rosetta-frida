@@ -8,7 +8,7 @@ import { MapValidationError, RosettaError } from '../errors.js';
 import type { RosettaMap } from '../types/map.js';
 
 const SAMPLE_YAML = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -22,7 +22,7 @@ classes:
 `;
 
 const SAMPLE_MAP: RosettaMap = {
-    schema_version: 2,
+    schema_version: 3,
     app: 'com.example.app',
     version: '1.0.0',
     version_code: 100,
@@ -134,7 +134,7 @@ describe('convertToJson', () => {
     it('emits a canonical lowercase-no-colon signer_sha256 end-to-end (maps#11)', async () => {
         const upperColon = Array.from({ length: 32 }, () => 'AB').join(':');
         const yaml = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100

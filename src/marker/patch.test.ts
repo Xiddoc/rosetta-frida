@@ -17,7 +17,7 @@ import { parseMarkerBlock } from './parse.js';
 import { patchMarkerBlock } from './patch.js';
 
 const map = (version = '1.2.3'): RosettaMap => ({
-    schema_version: 2,
+    schema_version: 3,
     version_code: 1,
     app: 'com.example.app',
     version,

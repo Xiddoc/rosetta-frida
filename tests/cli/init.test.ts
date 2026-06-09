@@ -121,7 +121,7 @@ describe('renderSkeleton', () => {
         expect(out).toContain('"app": "com.example.app"');
         expect(out).toContain('"version": "1.2.3"');
         expect(out).toContain('"version_code": 30405');
-        expect(out).toContain('"schema_version": 2');
+        expect(out).toContain('"schema_version": 3');
         // captured_at is an explicit empty-string placeholder for the author.
         expect(out).toContain('"captured_at": ""');
         // must NOT contain version_code: 0

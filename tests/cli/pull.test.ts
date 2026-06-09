@@ -35,7 +35,7 @@ import { makeCaptured, makeFakeFs, makeFsLike, makeIo, type FakeFs } from './hel
 
 /** A minimal valid schema_version:2 map as a JSON string. */
 const VALID_MAP_JSON = JSON.stringify({
-    schema_version: 2,
+    schema_version: 3,
     app: 'com.example.app',
     version: '3.4.5',
     version_code: 30405,
@@ -674,7 +674,7 @@ describe('writePulledMap', () => {
     it('fails on schema-invalid JSON from the remote', async () => {
         // Missing required fields (obfuscated on the class entry)
         const badMap = JSON.stringify({
-            schema_version: 2,
+            schema_version: 3,
             app: 'com.example.app',
             version: '1.0',
             version_code: 1,
@@ -734,7 +734,7 @@ describe('writePulledMap', () => {
     it('rejects a map whose version_code does not match the request', async () => {
         // The upstream file at this name declares 30405, not the requested 99.
         const mismatched = JSON.stringify({
-            schema_version: 2,
+            schema_version: 3,
             app: 'com.example.app',
             version: '9.9',
             version_code: 30405,

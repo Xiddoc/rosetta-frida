@@ -7,7 +7,7 @@ import { yamlToMap } from './yaml.js';
 import { MapValidationError, RosettaError } from '../errors.js';
 
 const GOOD_YAML = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "3.4.5"
 version_code: 30405
@@ -35,7 +35,7 @@ classes:
 describe('yamlToMap', () => {
     it('parses well-formed YAML into a RosettaMap', () => {
         const map = yamlToMap(GOOD_YAML);
-        expect(map.schema_version).toBe(2);
+        expect(map.schema_version).toBe(3);
         expect(map.version_code).toBe(30405);
         expect(map.app).toBe('com.example.app');
         expect(map.version).toBe('3.4.5');
@@ -53,7 +53,7 @@ describe('yamlToMap', () => {
 
     it('parses overload-array form for methods', () => {
         const yaml = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -97,7 +97,7 @@ classes: {}
 
     it('throws MapValidationError when required fields are missing', () => {
         const bad = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 classes: {}
 `;
@@ -106,7 +106,7 @@ classes: {}
 
     it('throws MapValidationError when a class entry is malformed', () => {
         const bad = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -135,7 +135,7 @@ classes:
         // `^[0-9a-f]{64}$`, so the converter must canonicalize before emit.
         const upperColon = Array.from({ length: 32 }, () => 'AB').join(':'); // 32 * "AB"
         const yaml = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -151,7 +151,7 @@ classes: {}
     it('canonicalizes a mixed-case, no-colon signer_sha256', () => {
         const mixed = 'AbCdEf0123456789'.repeat(4); // 64 mixed-case hex chars
         const yaml = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -167,7 +167,7 @@ classes: {}
         // Wrong length even after stripping colons / lowercasing — canonicalize
         // does not launder garbage; the strict schema still rejects it.
         const yaml = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -179,7 +179,7 @@ classes: {}
 
     it('issues array contains paths for nested errors', () => {
         const bad = `
-schema_version: 2
+schema_version: 3
 app: com.example.app
 version: "1.0.0"
 version_code: 100

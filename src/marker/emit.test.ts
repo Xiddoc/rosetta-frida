@@ -17,7 +17,7 @@ import { BEGIN_MARKER, BEGIN_REGISTRY, END_MARKER, END_REGISTRY } from './format
 /** A minimal well-formed map. */
 function minimalMap(): RosettaMap {
     return {
-        schema_version: 2,
+        schema_version: 3,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
@@ -28,7 +28,7 @@ function minimalMap(): RosettaMap {
 /** A richly-populated map covering optional fields and multiple classes. */
 function richMap(): RosettaMap {
     return {
-        schema_version: 2,
+        schema_version: 3,
         version_code: 1,
         app: 'com.example.app',
         version: '3.4.5',
@@ -39,7 +39,7 @@ function richMap(): RosettaMap {
             frida_max_version: '17.99.0',
         },
         sources: [
-            { tool: 'sigmatcher', classes: 2, confidence: 'high' },
+            { tool: 'sigmatcher', classes: 2 },
             { tool: 'hand-authored', classes: 1, notes: 'verified' },
         ],
         classes: {
@@ -65,7 +65,6 @@ function richMap(): RosettaMap {
                     sessionId: { obfuscated: 'a', type: 'Ljava/lang/String;', static: false },
                 },
                 source: 'sigmatcher',
-                confidence: 'high',
             },
             IServiceCallback: {
                 obfuscated: 'bbbb',
@@ -91,7 +90,7 @@ describe('emitMarkerBlock', () => {
         const out = emitMarkerBlock(richMap());
         // header order: app | version | schema | classes
         expect(out).toMatch(
-            /\/\*! app: com\.example\.app \| version: 3\.4\.5 \| schema: 2 \| classes: 3 \*\//,
+            /\/\*! app: com\.example\.app \| version: 3\.4\.5 \| schema: 3 \| classes: 3 \*\//,
         );
     });
 
@@ -107,7 +106,7 @@ describe('emitMarkerBlock', () => {
     it('uses 4-space indent in the embedded JSON', () => {
         const out = emitMarkerBlock(richMap());
         // The first indented line should start with exactly 4 spaces.
-        expect(out).toMatch(/\n {4}"schema_version": 2,/);
+        expect(out).toMatch(/\n {4}"schema_version": 3,/);
         // A doubly-nested key should start with 8 spaces.
         expect(out).toMatch(/\n {8}"com\.example\.app\.IRemoteService\$Stub": \{/);
     });

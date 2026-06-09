@@ -289,7 +289,7 @@ describe('formatEvent', () => {
 describe('RosettaMap type shape (compile-time)', () => {
     it('accepts a minimal well-formed map', () => {
         const map: RosettaMap = {
-            schema_version: 2,
+            schema_version: 3,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',
@@ -308,13 +308,13 @@ describe('RosettaMap type shape (compile-time)', () => {
                 },
             },
         };
-        expect(map.schema_version).toBe(2);
+        expect(map.schema_version).toBe(3);
         expect(map.classes['com.example.app.IRemoteService$Stub']?.obfuscated).toBe('aaaa');
     });
 
     it('accepts overload-array form for methods', () => {
         const map: RosettaMap = {
-            schema_version: 2,
+            schema_version: 3,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',

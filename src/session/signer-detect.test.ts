@@ -328,4 +328,43 @@ describe('checkSigner', () => {
         const result = checkSigner('f'.repeat(64), buildSignerApi({ signingInfoCerts: certs }));
         expect(result.actual).toEqual([...hashes].sort());
     });
+
+    it('accepts an ARRAY of expected hashes and matches ANY (#38)', () => {
+        const certs = [[5, 5, 5]];
+        const match = sha256Hex(certs[0]);
+        const result = checkSigner(
+            ['d'.repeat(64), match],
+            buildSignerApi({ signingInfoCerts: certs }),
+        );
+        expect(result.passed).toBe(true);
+        // expectedHashes carries the full normalized+sorted set.
+        expect(result.expectedHashes).toEqual([...['d'.repeat(64), match]].sort());
+        // The display string joins them.
+        expect(result.expected).toContain(match);
+    });
+
+    it('fails on an ARRAY where no entry matches a live signer (#38)', () => {
+        const certs = [[6, 6, 6]];
+        const result = checkSigner(
+            ['d'.repeat(64), 'e'.repeat(64)],
+            buildSignerApi({ signingInfoCerts: certs }),
+        );
+        expect(result.passed).toBe(false);
+    });
+
+    it('throws MalformedSignerError when an ARRAY entry is ill-formed', () => {
+        const certs = [[1, 2, 3]];
+        expect(() =>
+            checkSigner(['a'.repeat(64), 'abc'], buildSignerApi({ signingInfoCerts: certs })),
+        ).toThrow(MalformedSignerError);
+    });
+
+    it('normalizes ARRAY entries (uppercase + colons) before comparison (#32)', () => {
+        const certs = [[8, 8, 8]];
+        const plain = sha256Hex(certs[0]);
+        const colonised = (plain.match(/../g) ?? []).join(':').toUpperCase();
+        const result = checkSigner([colonised], buildSignerApi({ signingInfoCerts: certs }));
+        expect(result.passed).toBe(true);
+        expect(result.expectedHashes).toEqual([plain]);
+    });
 });
