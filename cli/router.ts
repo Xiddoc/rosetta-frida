@@ -20,7 +20,7 @@
  * calls `route`, and exits with the returned code. All routing logic
  * lives here so it is unit-testable with an in-memory `CommandIo`.
  *
- * The seven commands are described by ONE table ({@link COMMANDS}): each
+ * Every command is described by ONE table ({@link COMMANDS}): each
  * entry carries the command's `run` function and a structured `usage`
  * (an `invocation` column + a `summary` column). The command-name union,
  * the usage block, and dispatch are all derived from that table, so
@@ -35,6 +35,7 @@ import { runPatch } from './commands/patch.js';
 import { runInit } from './commands/init.js';
 import { runValidate } from './commands/validate.js';
 import { runConvert } from './commands/convert.js';
+import { runFreshness } from './commands/freshness.js';
 import { runPull, defaultPullConfig } from './commands/pull.js';
 import { runDiff } from './commands/diff.js';
 import { runMerge } from './commands/merge.js';
@@ -115,6 +116,11 @@ const COMMANDS = {
         run: runTypes,
         invocation: 'types <map> -o <out.d.ts>',
         summary: 'Emit .d.ts real-name stubs for autocompletion',
+    },
+    freshness: {
+        run: runFreshness,
+        invocation: 'freshness <map...> --signatures <sigs.yaml>',
+        summary: 'Flag vendored maps stale vs current signatures (advisory)',
     },
 } satisfies Record<string, CommandEntry>;
 

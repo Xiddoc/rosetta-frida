@@ -64,22 +64,41 @@ once, the signature usually survives obfuscation rotation.
 ### jadx (manual)
 
 For a one-off, open the APK in jadx, search for distinctive class
-features (AIDL descriptors, stable string literals, AIDL transaction
-codes), and copy the obfuscated class names out by hand.
+features, and copy the obfuscated class names out by hand.
 
-Distinctive features to anchor on, in rough order of stability:
+The thing you anchor on is whatever about the class **survives
+obfuscation**. The obfuscator rewrites *names* — class names, method
+names, field names — but it cannot rewrite the *data* a class embeds or
+the *framework types* it is bound to. Those are your anchors.
 
-1. **AIDL `DESCRIPTOR` constant.** AIDL stubs have a stable
-   `public static final String DESCRIPTOR = "com.example.app.IFoo"`
-   that survives obfuscation. Search for the descriptor string, find
-   the holder class, and you've found the stub.
-2. **Stable string literals.** Error messages, logging tags, JSON
-   keys that the developer wrote. Search the dex for the string;
-   the containing class is your candidate.
-3. **AIDL transaction codes.** `TRANSACTION_xxx = 1`, `2`, `3`. Less
-   stable than descriptors but still anchor a class roughly.
-4. **Class hierarchy.** "Extends `android.os.Binder`" narrows the
-   search space for stub-like classes.
+Distinctive features to anchor on, in rough order of how often they
+apply (most apply to almost any class; AIDL is the rare lucky case):
+
+1. **Stable string literals.** The single most broadly applicable
+   anchor. Error messages, logging tags, JSON keys, algorithm names
+   (`"AES/GCM/NoPadding"`), URL paths — any string the developer wrote
+   is **data, not a name**, so the obfuscator leaves it untouched. Search
+   the dex for the string; the containing class is your candidate. Even
+   a deep, fully-internal class with no public API surface is reachable
+   this way. See
+   [Recipe — string-anchored class](../recipes/string-anchored-class.md).
+2. **Stable framework parent / superclass.** A class that extends or
+   implements a framework type — `android.app.JobService`,
+   `android.os.Binder`, `android.content.BroadcastReceiver`,
+   `java.lang.Runnable` — keeps that parent across rotations, because the
+   framework type is *not* part of the app and is not obfuscated. Pin the
+   rotating subclass by its stable parent via `extends`. See
+   [Recipe — superclass-anchored method](../recipes/superclass-anchored-method.md).
+3. **AIDL `DESCRIPTOR` constant (the lucky special case).** *When the
+   class is an AIDL stub*, it carries a stable
+   `public static final String DESCRIPTOR = "com.example.app.IFoo"` that
+   survives obfuscation — a particularly strong anchor. But most classes
+   are not AIDL stubs, so treat this as a bonus when it applies rather
+   than the default plan. See
+   [Recipe — AIDL stub hooks](../recipes/aidl-stub-hook.md).
+4. **AIDL transaction codes.** `TRANSACTION_xxx = 1`, `2`, `3`. Like the
+   descriptor, only present on the AIDL surface; less stable than the
+   descriptor but still roughly anchor a stub class.
 
 ### hand-author from a Frida runtime trace
 
@@ -124,13 +143,25 @@ Open the file and replace the example with real classes:
 
 ### Tips for filling entries
 
-**Start with the AIDL stubs.** They have the most stable anchors
-(`aidl_descriptor`, `aidl_txn`) and they're usually the hooks you
-care about most.
+**Anchor on what survives obfuscation, generically.** For most classes
+that means a stable string literal the class embeds (set `anchors`) or a
+stable framework parent the class extends (set `extends`). These two
+cover the broad majority of classes — including deep internal ones with
+no exposed API. See the
+[string-anchored](../recipes/string-anchored-class.md) and
+[superclass-anchored](../recipes/superclass-anchored-method.md) recipes.
 
-**Add `aidl_descriptor` always.** The health check uses it. Even if
-you never use the AIDL transaction codes, the descriptor catches
-"wrong class assigned to this real name" errors at attach time.
+**Set `anchors` for any class with a distinctive string.** Stable string
+literals embedded in a class become anchor checks at attach time —
+catching "wrong class assigned" errors with a low false-positive rate.
+They are data, not names, so they ride through rotation.
+
+**If a class happens to be an AIDL stub, add `aidl_descriptor`.** That is
+the lucky special case: when it applies, the descriptor is an even
+stronger anchor (the health check uses it), and the `aidl_txn` codes let
+you dispatch by transaction. But do not assume a class is AIDL — most are
+not. Reach for the generic anchors first and treat AIDL extras as a
+bonus when present.
 
 **Use the overload-array form only when you need to.** Most methods
 have one overload in the map; the single-form is cleaner. Switch to
@@ -141,11 +172,6 @@ name has multiple obfuscated entries.
 or returns a mapped class, the signature uses its obfuscated name
 (`Lbbbb;` not `Lcom/example/app/IServiceCallback;`). This is what
 Frida ultimately needs; the resolver translates between them.
-
-**Add `anchors` for high-confidence classes.** Stable string literals
-embedded in a class become anchor checks at attach time — catching
-"wrong class assigned" errors with a lower false-positive rate than
-the AIDL-descriptor check alone.
 
 ## 4. Validate
 
@@ -171,8 +197,7 @@ Run validate before every commit. It catches typos and missing
 fields long before the map ships to a device.
 
 See [CLI — `rosetta validate`](../cli/validate.md) for the full
-reference. Inputs are JSON or YAML only (TS/JS modules were removed
-for security).
+reference. Inputs are JSON or YAML only.
 
 ## 5. Verify on device
 
@@ -248,7 +273,8 @@ When the next release ships:
    in lockstep with the new `version_code` (here `30500`).
 3. Re-run sigmatcher to refresh class anchors.
 4. For classes sigmatcher couldn't find, jadx them by hand using the
-   anchors that survived (AIDL descriptors, stable strings).
+   anchors that survived (stable strings, framework parents, and —
+   where they apply — AIDL descriptors).
 5. Validate + verify on device.
 
 In practice **method letters are more stable than class names**.
@@ -264,20 +290,26 @@ If hand-writing JSON isn't your preferred authoring environment:
   `rosetta convert maps/com.example.app/3.4.5.yaml -o maps/com.example.app/30405.json`.
 
 Strict JSON is the canonical on-disk format; YAML is the one authoring
-convenience. (TS/JS map modules were removed — they executed arbitrary
-code at convert time. Author as JSON or YAML.) See
+convenience. TS/JS inputs are not supported; author as JSON or YAML. See
 [Conversion](conversion.md) for the full converter docs.
 
 ## Common authoring mistakes
 
-- **Forgetting `kind: aidl_stub`.** Without it, the health check
-  doesn't verify the AIDL descriptor — your map could pass attach
-  but reach the wrong class. Always set `kind` for AIDL surfaces.
+- **Not anchoring at all.** A class entry with only an `obfuscated`
+  name and no `anchors` / `extends` is a guess — nothing catches it
+  when the name rotates to a *different* class. Pin every entry on
+  something obfuscation survives: a stable string (`anchors`) or a
+  stable framework parent (`extends`).
 - **Real-name `extends` chains that don't terminate in `classes`.**
   When a class's `extends` references another real name, that name
   must also be a key in `classes`. Use the obfuscated parent name
-  (`java.lang.Object`, `android.os.Binder`) for parents you don't
-  want to map.
+  (`java.lang.Object`, `android.os.Binder`, `android.app.JobService`)
+  for parents you don't want to map.
+- **Forgetting `kind: aidl_stub` on AIDL surfaces (special case).**
+  *When a class is an AIDL stub*, omitting `kind` means the health
+  check won't verify its AIDL descriptor — the map could pass attach
+  but reach the wrong class. Always set `kind` and `aidl_descriptor`
+  for AIDL surfaces. (Non-AIDL classes don't need this.)
 - **Mixing real and obfuscated class refs in signatures.**
   Signatures always use obfuscated refs (`Lbbbb;`, not
   `Lcom/example/app/IServiceCallback;`). The resolver handles the

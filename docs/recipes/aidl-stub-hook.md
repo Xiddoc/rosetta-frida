@@ -1,10 +1,17 @@
 # Recipe — hooking an AIDL stub
 
-The most common pattern. AIDL stubs are the binder dispatch surface
-between processes — when one Android process wants to call into a
-service running in another, that call lands on a `Foo$Stub`
-descendant in the service process. Hooking the stub captures every
-IPC into the service.
+A lucky special case. Most classes you map are anchored generically — by
+a [stable string literal](string-anchored-class.md) or a
+[stable framework parent](superclass-anchored-method.md) — because that
+is all the obfuscator leaves you. AIDL stubs are the exception: they hand
+you an unusually strong anchor for free (a stable `DESCRIPTOR` string and
+transaction codes), so when a class *is* a stub, lean into it. Just don't
+assume a class is AIDL — most are not.
+
+AIDL stubs are the binder dispatch surface between processes — when one
+Android process wants to call into a service running in another, that
+call lands on a `Foo$Stub` descendant in the service process. Hooking the
+stub captures every IPC into the service.
 
 This recipe walks through the canonical example from
 `examples/sample-hook/hook.ts`, annotated.
@@ -265,3 +272,12 @@ but illustrates how tier 3 stays available for advanced needs.
 - **Missing `aidl_descriptor`.** Without it, the health check can't
   verify the class is actually the stub you think it is. Always set
   `kind: aidl_stub` and `aidl_descriptor` on stub entries.
+
+## See also
+
+- [Recipe — string-anchored class](string-anchored-class.md) — the
+  default anchor when a class has no AIDL surface, just an embedded
+  string literal.
+- [Recipe — superclass-anchored method](superclass-anchored-method.md) —
+  the default anchor when a class is pinned by a framework parent.
+- [Concepts — anchoring](../getting-started/concepts.md#anchoring--how-a-map-entry-survives-rotation).

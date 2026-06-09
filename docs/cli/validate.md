@@ -24,12 +24,7 @@ Supported extensions:
 |---|---|
 | `.json` | Strict JSON. Comments/trailing commas are rejected. |
 | `.yaml`, `.yml` | YAML — converted in-memory to a map, then validated. |
-| `.ts`, `.js`, `.mjs`, `.cjs` | **Refused** — TS/JS map modules are no longer supported (build-time RCE). Never imported. |
-
-> **Removed (security):** validating a TS/JS module used to dynamically
-> `import()` it, executing arbitrary code before any check ran. Maps are
-> pure data — author them as JSON or YAML. A module path is now refused
-> with a clear error.
+| `.ts`, `.js`, `.mjs`, `.cjs` | **Refused** — TS/JS inputs are not supported; a module path is refused, never imported. Author maps as JSON or YAML. |
 
 ## Behavior
 
