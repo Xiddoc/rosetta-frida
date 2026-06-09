@@ -556,6 +556,54 @@ describe('ResolverImpl.reverseLookup', () => {
         h.resolver.override('com.example.app.IFresh', { obfuscated: 'fff' });
         expect(h.resolver.reverseLookup('fff')).toBe('com.example.app.IFresh');
     });
+
+    it('is FIRST-WINS when two classes share an obfuscated name (cross-client policy)', () => {
+        // A malformed map can map two real classes onto the same obfuscated
+        // short name. The reverse index must keep the FIRST in iteration order,
+        // matching the Kotlin twin's putIfAbsent. (Object.entries preserves
+        // insertion order for string keys, so 'com.example.app.First' wins.)
+        const map = validateMap({
+            schema_version: 2,
+            version_code: 1,
+            app: 'com.example.app',
+            version: '1.0.0',
+            classes: {
+                'com.example.app.First': { obfuscated: 'dup' },
+                'com.example.app.Second': { obfuscated: 'dup' },
+            },
+        });
+        const resolver = new ResolverImpl({ map, events: new EventBus() });
+        expect(resolver.reverseLookup('dup')).toBe('com.example.app.First');
+    });
+});
+
+describe('ResolverImpl miss-message wording (cross-client canonical)', () => {
+    let h: Harness;
+    beforeEach(() => {
+        h = makeHarness();
+    });
+
+    it('class miss reads "class \'<name>\' not found"', () => {
+        expect(() => h.resolver.resolveClass('com.example.app.Missing')).toThrow(
+            "rosetta-frida: class 'com.example.app.Missing' not found in map for com.example.app@1.2.3.",
+        );
+    });
+
+    it("method miss reads \"method '<name>' not found on class '<class>'\"", () => {
+        expect(() =>
+            h.resolver.resolveMethod('com.example.app.IRemoteService$Stub', 'noSuchMethod'),
+        ).toThrow(
+            "rosetta-frida: method 'noSuchMethod' not found on class 'com.example.app.IRemoteService$Stub' in map for com.example.app@1.2.3.",
+        );
+    });
+
+    it("field miss reads \"field '<name>' not found on class '<class>'\"", () => {
+        expect(() =>
+            h.resolver.resolveField('com.example.app.IRemoteService$Stub', 'noSuchField'),
+        ).toThrow(
+            "rosetta-frida: field 'noSuchField' not found on class 'com.example.app.IRemoteService$Stub' in map for com.example.app@1.2.3.",
+        );
+    });
 });
 
 describe('Resolver event-emission shapes', () => {

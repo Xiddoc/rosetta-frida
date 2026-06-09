@@ -135,6 +135,16 @@ interface ConformanceCase {
     readonly versions?: readonly string[];
     readonly target?: string;
     readonly expectSelected?: string;
+    // `codeSelect` cases (version-select.json): exact version_code selection.
+    readonly versionCodes?: readonly number[];
+    readonly targetCode?: number;
+    readonly expectSelectedCode?: number;
+    // `codeCollision` cases (version-select.json): FIRST-WINS duplicate-code policy.
+    readonly maps?: readonly { readonly versionCode: number; readonly version: string }[];
+    readonly expectSelectedVersion?: string;
+    // Error cases (errors.json): a byte-identical substring (sans the
+    // per-client brand prefix) the thrown error message must contain.
+    readonly expectMessageIncludes?: string;
 }
 
 interface ConformanceFixture {
@@ -264,32 +274,40 @@ function assertError(resolver: ResolverImpl | null, c: ConformanceCase): void {
             // generic ResolveError can't satisfy an UnknownArgType case (it
             // is a ResolveError subtype).
             expect(thrown).toBeInstanceOf(UnknownArgTypeError);
-            return;
+            break;
         case 'Resolve':
             // A generic Resolve case must NOT be the precise subtype, so a
             // resolver that wrongly raised UnknownArgType here is caught.
             expect(thrown).toBeInstanceOf(ResolveError);
             expect(thrown).not.toBeInstanceOf(UnknownArgTypeError);
-            return;
+            break;
         case 'AmbiguousOverload':
             expect(thrown).toBeInstanceOf(AmbiguousOverloadError);
-            return;
+            break;
         case 'IllegalArgument':
             expect(thrown).toBeInstanceOf(Error);
             expect(thrown).not.toBeInstanceOf(RosettaError);
-            return;
+            break;
         case 'MapValidation':
             expect(thrown).toBeInstanceOf(MapValidationError);
-            return;
+            break;
         case 'TargetPolicy':
             // The target-namespace guard (target-policy.json / xposed#11):
             // a forbidden obfuscated target is rejected at the resolver
             // chokepoint before any Java.use. Kotlin twin: TargetPolicyException.
             expect(thrown).toBeInstanceOf(TargetPolicyError);
-            return;
+            break;
         /* c8 ignore next 2 -- unreachable: fixture taxonomy is closed */
         default:
             throw new Error(`unknown expectError '${String(c.expectError)}'`);
+    }
+    // Canonical-wording parity: when the fixture pins `expectMessageIncludes`,
+    // the thrown message must CONTAIN that byte-identical substring. The
+    // substring deliberately excludes the per-client brand prefix
+    // (`rosetta-frida:` here, `rosetta-xposed:` on the twin), which differs by
+    // design; everything after the prefix is identical across clients.
+    if (c.expectMessageIncludes !== undefined) {
+        expect((thrown as Error).message).toContain(c.expectMessageIncludes);
     }
 }
 
@@ -337,6 +355,74 @@ function runFuzzySelectCase(c: ConformanceCase): void {
 }
 
 /**
+ * Run a `codeSelect`-kind case (version-select.json): build a registry from the
+ * case's `versionCodes` (each backed by a throwaway map whose `version` label is
+ * the code as a string) and assert that exact selection by `targetCode` returns
+ * the map with `expectSelectedCode`. Pins that a WIDE version_code (> 2^31, the
+ * Android `versionCodeMajor` regime) selects exactly with no 32-bit truncation.
+ * The Kotlin twin runs `VersionMatch.select` with that `versionCode`; here it is
+ * `pickMapForVersion` with `versionCode` (the authoritative O(1) path).
+ */
+function runCodeSelectCase(c: ConformanceCase): void {
+    const codes = c.versionCodes as readonly number[];
+    const registry: RosettaMapRegistry = {};
+    codes.forEach((code) => {
+        registry[String(code)] = {
+            schema_version: 2,
+            app: 'com.example.app',
+            version: String(code),
+            version_code: code,
+            classes: {},
+        };
+    });
+    const picked = pickMapForVersion(registry, {
+        version: 'no-such-label',
+        versionCode: c.targetCode,
+    });
+    expect(picked.fuzzy).toBe(false);
+    // Pin the exact selection tier (not just `fuzzy === false`) to match the
+    // Kotlin twin's `MatchedBy.VERSION_CODE` assertion: an exact version_code
+    // pick is `fuzzyKind: 'exact'`. (No `'version_code'`-specific kind is
+    // exposed; `'exact'` is the closest distinct tier and rules out the label /
+    // range / nearest paths.)
+    expect(picked.fuzzyKind).toBe('exact');
+    expect(picked.map.version_code).toBe(c.expectSelectedCode);
+}
+
+/**
+ * Run a `codeCollision`-kind case (version-select.json): build a registry from
+ * the case's `maps` (each `{versionCode, version}`, IN INPUT ORDER, keyed by its
+ * `version` label so two maps sharing a `version_code` both register) and assert
+ * that exact selection by `targetCode` returns the FIRST map that claimed the
+ * code. Pins the cross-client canonical FIRST-WINS collision policy (the
+ * memoised `versionCodeIndex` putIfAbsent); the Kotlin twin runs
+ * `MapRegistry.fromCollection` (putIfAbsent) + `VersionMatch.select`.
+ */
+function runCodeCollisionCase(c: ConformanceCase): void {
+    const entries = c.maps as readonly { versionCode: number; version: string }[];
+    const registry: RosettaMapRegistry = {};
+    // Object literal insertion order is preserved for these non-integer string
+    // keys, so Object.keys() iterates in input order and putIfAbsent picks the
+    // FIRST map for the shared code — exactly what the policy asserts.
+    entries.forEach((e) => {
+        registry[e.version] = {
+            schema_version: 2,
+            app: 'com.example.app',
+            version: e.version,
+            version_code: e.versionCode,
+            classes: {},
+        };
+    });
+    const picked = pickMapForVersion(registry, {
+        version: 'no-such-label',
+        versionCode: c.targetCode,
+    });
+    expect(picked.fuzzy).toBe(false);
+    expect(picked.fuzzyKind).toBe('exact');
+    expect(picked.map.version).toBe(c.expectSelectedVersion);
+}
+
+/**
  * Run a `validate`-kind case: validate the case's own inline `inputMap`
  * through the real schema and assert it is accepted (`expectValid: true`)
  * or rejected (`expectError: 'MapValidation'`). This is how the oracle
@@ -378,6 +464,10 @@ for (const file of FIXTURES) {
                     runBoundCase(c);
                 } else if (c.kind === 'fuzzySelect') {
                     runFuzzySelectCase(c);
+                } else if (c.kind === 'codeSelect') {
+                    runCodeSelectCase(c);
+                } else if (c.kind === 'codeCollision') {
+                    runCodeCollisionCase(c);
                 } else if (c.expectError !== undefined) {
                     assertError(resolver, c);
                 } else {
