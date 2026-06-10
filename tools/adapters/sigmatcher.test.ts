@@ -316,6 +316,35 @@ describe('sigmatcherRawToRosettaMap — options propagation', () => {
         expect(map.signer_sha256).toBe('deadbeef'.repeat(8));
     });
 
+    it('emits generated_from.signatures_rev when signaturesRev is provided (#36)', () => {
+        const raw = {
+            X: {
+                original: { name: 'X', package: 'com.example.testapp' },
+                new: { name: 'aaaa', package: 'com.example.testapp' },
+                matched_methods: [],
+                matched_fields: [],
+            },
+        };
+        const map = sigmatcherRawToRosettaMap(raw, {
+            ...BASE_OPTIONS,
+            signaturesRev: 'abcdef0',
+        });
+        expect(map.generated_from).toEqual({ signatures_rev: 'abcdef0' });
+    });
+
+    it('omits generated_from when signaturesRev is absent', () => {
+        const raw = {
+            X: {
+                original: { name: 'X', package: 'com.example.testapp' },
+                new: { name: 'aaaa', package: 'com.example.testapp' },
+                matched_methods: [],
+                matched_fields: [],
+            },
+        };
+        const map = sigmatcherRawToRosettaMap(raw, BASE_OPTIONS);
+        expect(map.generated_from).toBeUndefined();
+    });
+
     it('applies classKindMap to set kind on emitted ClassEntry, leaves unmapped classes with kind undefined', () => {
         const raw = {
             Stub: {
@@ -339,6 +368,50 @@ describe('sigmatcherRawToRosettaMap — options propagation', () => {
         });
         expect(map.classes['com.example.testapp.IRemoteService$Stub']!.kind).toBe('aidl_stub');
         expect(map.classes['com.example.testapp.BlobCache']!.kind).toBeUndefined();
+    });
+});
+
+describe('sigmatcherRawToRosettaMap — canonical tool vocabulary (#32 parity)', () => {
+    // The map schema keeps `tool`/`source` free-form strings, so the VALIDATOR
+    // cannot forbid a framework-specific spelling. The thing actually under our
+    // control is the EMITTED value: the sigmatcher adapter must only ever stamp
+    // the client-NEUTRAL canonical tokens ('sigmatcher' here), NEVER a
+    // framework-specific spelling like 'rosetta-frida-runtime-discovered' that
+    // would diverge from what rosetta-xposed emits/accepts. This pins the
+    // emitter, not the validator — the genuine enforcing guard.
+    const FORBIDDEN = 'rosetta-frida-runtime-discovered';
+
+    it("stamps the canonical 'sigmatcher' token on sources and class source, never a framework-specific one", () => {
+        const raw = {
+            BlobCache: {
+                original: { name: 'BlobCache', package: 'com.example.testapp' },
+                new: { name: 'cccc', package: 'com.example.testapp' },
+                matched_methods: [
+                    {
+                        original: { name: 'get', argument_types: '', return_type: 'V' },
+                        new: { name: 'c', argument_types: '', return_type: 'V' },
+                    },
+                ],
+                matched_fields: [
+                    { original: { name: 'f', type: 'I' }, new: { name: 'a', type: 'I' } },
+                ],
+            },
+        };
+        const map = sigmatcherRawToRosettaMap(raw, BASE_OPTIONS);
+
+        // Every emitted source tool is canonical.
+        for (const src of map.sources ?? []) {
+            expect(src.tool).toBe('sigmatcher');
+            expect(src.tool).not.toBe(FORBIDDEN);
+        }
+        // Every emitted class `source` is canonical.
+        for (const cls of Object.values(map.classes)) {
+            expect(cls.source).toBe('sigmatcher');
+            expect(cls.source).not.toBe(FORBIDDEN);
+        }
+        // Belt-and-braces: the framework-specific token appears nowhere in the
+        // serialised artifact.
+        expect(JSON.stringify(map)).not.toContain(FORBIDDEN);
     });
 });
 

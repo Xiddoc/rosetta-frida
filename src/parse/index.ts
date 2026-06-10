@@ -11,3 +11,4 @@ export {
     assertContained,
     defaultMapPath,
 } from './paths.js';
+export { parseAppVersionTarget } from './target.js';

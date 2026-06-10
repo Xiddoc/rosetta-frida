@@ -58,6 +58,12 @@ export interface SigmatcherAdapterOptions {
     /** Optional ISO date when the map was captured. */
     capturedAt?: string;
     /**
+     * Optional git revision of the signatures source this map was generated
+     * from (#36). When present, emitted as `generated_from.signatures_rev` —
+     * the provenance pointer tying the artifact back to its source commit.
+     */
+    signaturesRev?: string;
+    /**
      * Map of sigmatcher definition-name → real method name, used to
      * re-merge multiple overload definitions under one real key.
      *
@@ -172,6 +178,9 @@ export function sigmatcherRawToRosettaMap(
     };
     if (options.capturedAt !== undefined) map.captured_at = options.capturedAt;
     if (options.signerSha256 !== undefined) map.signer_sha256 = options.signerSha256;
+    if (options.signaturesRev !== undefined) {
+        map.generated_from = { signatures_rev: options.signaturesRev };
+    }
     map.sources = [{ tool: 'sigmatcher', classes: Object.keys(classes).length }];
 
     // Validate for structural correctness; discard the normalised result.

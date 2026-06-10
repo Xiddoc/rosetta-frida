@@ -48,7 +48,7 @@ describe('printUsage', () => {
         }
     });
 
-    it('no longer lists the removed merge-bundle / verify verbs', () => {
+    it('no longer lists the removed merge-bundle / verify / freshness verbs', () => {
         const lines: string[] = [];
         printUsage((l) => lines.push(l));
         expect(lines.some((l) => /\bmerge-bundle\b/.test(l))).toBe(false);
@@ -56,6 +56,9 @@ describe('printUsage', () => {
         // standalone command row. (The word can still appear in prose, but the
         // command-table invocations no longer carry a `verify <...>` row.)
         expect(lines.some((l) => /^\s*verify\s/.test(l))).toBe(false);
+        // `freshness` (map-staleness detection) was deprecated and removed
+        // (#34 direction change); no command row should advertise it.
+        expect(lines.some((l) => /\bfreshness\b/.test(l))).toBe(false);
     });
 });
 
@@ -226,17 +229,14 @@ describe('route — dispatch happy paths (pull)', () => {
         const config = {
             mapsRepoBaseUrl: 'https://raw.example.com',
             mapsRepoRef: 'main',
-            requireSidecar: false,
-            // Sidecar absent (404) → non-strict warn-and-proceed; the map fetch
-            // returns the valid map. Keeps this a happy-path dispatch test.
-            fetch: (url: string) =>
-                url.endsWith('.sha256')
-                    ? Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve('') })
-                    : Promise.resolve({
-                          ok: true,
-                          status: 200,
-                          text: () => Promise.resolve(VALID_MAP),
-                      }),
+            // A map is pure data with no byte-hash sidecar (maps#37 / frida#21):
+            // the fetch seam returns the valid map for the happy-path dispatch.
+            fetch: (_url: string) =>
+                Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    text: () => Promise.resolve(VALID_MAP),
+                }),
         };
         const fs = makeFakeFs();
         const captured = makeCaptured();

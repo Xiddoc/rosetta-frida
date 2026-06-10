@@ -90,6 +90,23 @@ describe('mapSourceSchema', () => {
     it('rejects an unknown key (strict)', () => {
         expect(() => mapSourceSchema.parse({ tool: 't', bogus: 1 })).toThrow();
     });
+
+    it('accepts the canonical cross-client tool vocabulary (free-form; convention, not constraint)', () => {
+        // IMPORTANT: `tool` is a free-form `z.string()`. The canonical
+        // client-neutral vocabulary — 'sigmatcher', 'hand-authored',
+        // 'rosetta-runtime-discovered' — is a CONVENTION, NOT a schema
+        // constraint: the validator accepts ANY string (a framework-specific
+        // spelling like 'rosetta-frida-runtime-discovered' would validate just
+        // as happily). This test therefore only confirms the canonical tokens
+        // are NOT accidentally rejected; it enforces nothing about what is
+        // emitted. The genuine enforcing guard — that this client's sigmatcher
+        // adapter emits ONLY the canonical token and never a framework-specific
+        // one — lives in `tools/adapters/sigmatcher.test.ts` (pinning the value
+        // we actually control, not the permissive validator).
+        for (const tool of ['sigmatcher', 'hand-authored', 'rosetta-runtime-discovered']) {
+            expect(mapSourceSchema.parse({ tool })).toEqual({ tool });
+        }
+    });
 });
 
 describe('methodEntrySchema', () => {

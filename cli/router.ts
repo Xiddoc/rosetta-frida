@@ -35,7 +35,6 @@ import { runPatch } from './commands/patch.js';
 import { runInit } from './commands/init.js';
 import { runValidate } from './commands/validate.js';
 import { runConvert } from './commands/convert.js';
-import { runFreshness } from './commands/freshness.js';
 import { runPull, defaultPullConfig } from './commands/pull.js';
 import { runDiff } from './commands/diff.js';
 import { runMerge } from './commands/merge.js';
@@ -75,7 +74,7 @@ const COMMANDS = {
         // the router table stays uniform (all entries are CommandRun).
         run: (args, io) => runPull(args, io, defaultPullConfig()),
         invocation: 'pull <app>@<version_code> [options]',
-        summary: 'Fetch + verify map from rosetta-maps repo (--require-sidecar)',
+        summary: 'Fetch + validate a map from the rosetta-maps repo',
     },
     validate: {
         run: runValidate,
@@ -116,11 +115,6 @@ const COMMANDS = {
         run: runTypes,
         invocation: 'types <map> -o <out.d.ts>',
         summary: 'Emit .d.ts real-name stubs for autocompletion',
-    },
-    freshness: {
-        run: runFreshness,
-        invocation: 'freshness <map...> --signatures <sigs.yaml>',
-        summary: 'Flag vendored maps stale vs current signatures (advisory)',
     },
 } satisfies Record<string, CommandEntry>;
 
