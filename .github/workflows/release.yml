@@ -1,0 +1,101 @@
+name: Release
+
+# Tag-driven npm publish.
+#
+# This workflow is DORMANT until two things are true:
+#   1. An owner pushes a version tag (e.g. `git tag v0.1.0 && git push --tags`).
+#   2. The `NPM_TOKEN` repository secret is configured (an npm automation
+#      token with publish rights).
+#
+# It NEVER runs on ordinary pushes or pull requests — the only `push`
+# trigger is the `v*` tag filter, so a commit to a branch (even `master`)
+# does nothing here. `workflow_dispatch` lets an owner re-run it by hand
+# from the Actions tab (e.g. after fixing the secret), again gated on the
+# checked-out ref already being a published tag.
+on:
+    push:
+        tags:
+            - 'v*'
+    workflow_dispatch:
+
+# Least-privilege token. `id-token: write` is required for npm provenance
+# (OIDC-signed `--provenance` attestations); `contents: read` is all the
+# checkout needs. Nothing here writes back to the repo.
+permissions:
+    contents: read
+    id-token: write
+
+# Never run two publishes of the same ref concurrently.
+concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    publish:
+        name: build, verify & publish to npm
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: npm
+                  # Wires the npm authToken from NODE_AUTH_TOKEN so
+                  # `npm publish` can authenticate against the public registry.
+                  registry-url: 'https://registry.npmjs.org'
+
+            - name: Install dependencies (npm ci)
+              run: npm ci
+
+            # Guard: a `v1.2.3` tag must match `"version": "1.2.3"` in
+            # package.json. Stops a mistagged release from publishing the
+            # wrong version. Skipped for manual `workflow_dispatch` runs,
+            # which may target a non-tag ref.
+            - name: Tag matches package.json version
+              if: github.event_name == 'push'
+              run: |
+                  tag="${GITHUB_REF_NAME#v}"
+                  pkg="$(node -p "require('./package.json').version")"
+                  if [ "$tag" != "$pkg" ]; then
+                      echo "::error::tag v$tag does not match package.json version $pkg"
+                      exit 1
+                  fi
+                  echo "tag v$tag matches package.json version $pkg"
+
+            - name: Build
+              run: npm run build
+
+            # Re-run the 100% coverage gate so a broken build can't publish.
+            # Mirrors the required ci.yml `verify` job.
+            - name: Verify (100% coverage gate)
+              run: npm run verify
+
+            # Sanity-check the publish tarball BEFORE shipping: the `files`
+            # allowlist must ship `dist/` and `maps/` and must NOT leak
+            # `src/` or tests. `npm pack --dry-run --json` lists the exact
+            # files without producing an artifact.
+            - name: Verify package contents (files allowlist)
+              run: |
+                  files="$(npm pack --dry-run --json | node -e '
+                      const pkgs = JSON.parse(require("fs").readFileSync(0, "utf8"));
+                      for (const f of pkgs[0].files) console.log(f.path);
+                  ')"
+                  echo "$files"
+                  echo "$files" | grep -q "^dist/"  || { echo "::error::tarball missing dist/"; exit 1; }
+                  echo "$files" | grep -q "^maps/"  || { echo "::error::tarball missing maps/"; exit 1; }
+                  if echo "$files" | grep -qE "^src/|(^|/)tests/|\.test\.ts$"; then
+                      echo "::error::tarball leaks source or tests"; exit 1
+                  fi
+                  echo "package contents OK"
+
+            # Publish with OIDC provenance. `prepublishOnly` re-runs
+            # build + verify as a final belt-and-suspenders gate.
+            # Requires the `NPM_TOKEN` secret; absent it, this step fails
+            # closed (it does not silently skip).
+            - name: Publish to npm
+              run: npm publish --provenance --access public
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
