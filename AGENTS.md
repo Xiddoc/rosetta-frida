@@ -279,6 +279,15 @@ check, a full CLI (`init`, `validate`, `convert`, `patch`, `extract`,
 `inspect`), a 15-class sample map, and a sample hook — at 100%
 coverage (see CI badge for current test count).
 
+#### Guardrail — the CLI surface is a compatibility contract
+
+Do not add new CLI verbs (or any other user-facing public surface)
+without explicit owner approval. Every shipped verb is a compatibility
+contract: once someone scripts against it, removing or renaming it later
+is a breaking change that silently breaks their tooling. Propose the verb
+in an issue, capture the use case, and get sign-off before implementing
+it — keep the published surface deliberate and small.
+
 ### 5. TypeScript vs plain JS?
 
 **TypeScript source → JS output**, same pattern as
