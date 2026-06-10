@@ -289,32 +289,31 @@ describe('formatEvent', () => {
 describe('RosettaMap type shape (compile-time)', () => {
     it('accepts a minimal well-formed map', () => {
         const map: RosettaMap = {
-            schema_version: 3,
+            schema_version: 4,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',
             classes: {
                 'com.example.app.IRemoteService$Stub': {
                     obfuscated: 'aaaa',
-                    kind: 'aidl_stub',
+                    kind: 'class',
                     methods: {
                         requestTicket: {
                             obfuscated: 'c',
                             signature: '(Landroid/os/Bundle;Lbbbb;)V',
-                            aidl_txn: 2,
                         },
                     },
                     fields: { sessionId: { obfuscated: 'a', type: 'Ljava/lang/String;' } },
                 },
             },
         };
-        expect(map.schema_version).toBe(3);
+        expect(map.schema_version).toBe(4);
         expect(map.classes['com.example.app.IRemoteService$Stub']?.obfuscated).toBe('aaaa');
     });
 
     it('accepts overload-array form for methods', () => {
         const map: RosettaMap = {
-            schema_version: 3,
+            schema_version: 4,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',
@@ -501,22 +500,6 @@ describe('Frida mock', () => {
         const Parent = Java.use('parent');
         expect(Parent.class.getSuperclass()).toBeNull();
         expect(Parent.class.getInterfaces()).toEqual([]);
-    });
-
-    it('exposes AIDL descriptor and anchor strings on the wrapper', () => {
-        MockFrida.registerClass('aaaa', {
-            aidlDescriptor: 'com.example.app.IRemoteService',
-            anchorStrings: ['unique-marker-string'],
-        });
-        const Klass = Java.use('aaaa');
-        expect(Klass.$aidlDescriptor).toBe('com.example.app.IRemoteService');
-        expect(Klass.$anchorStrings).toContain('unique-marker-string');
-
-        // Default empty values.
-        MockFrida.registerClass('plain', {});
-        const Plain = Java.use('plain');
-        expect(Plain.$aidlDescriptor).toBeNull();
-        expect(Plain.$anchorStrings).toEqual([]);
     });
 
     it('Java.enumerateLoadedClasses iterates registered classes', () => {

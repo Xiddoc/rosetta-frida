@@ -84,7 +84,7 @@ interface HealthCheckEvent {
 |---|---|
 | `passed` | `rate >= threshold`. |
 | `rate` | Fraction of mapped classes that resolved successfully (`0.0`–`1.0`). |
-| `failedEntries` | Real names that failed. Each entry either: `Java.use(obf)` threw, or `aidl_descriptor` didn't match, or an `anchors` string was missing. |
+| `failedEntries` | Real names that failed: the target-namespace guard denied the obfuscated name, or `Java.use(obf)` threw. |
 | `threshold` | The configured threshold (default `0.8`). |
 
 **Trace-line format:**
@@ -180,7 +180,7 @@ interface MapLoadEvent {
 
 **Trace-line format:**
 
-- `[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15 select=exact`
+- `[rosetta] map-load com.example.app@3.4.5 schema=4 classes=15 select=exact`
 
 **Subscribing:**
 

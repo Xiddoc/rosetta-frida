@@ -110,13 +110,11 @@ export function renderSkeleton(app: string, version: string, version_code: numbe
         classes: {
             'com.example.app.IRemoteService$Stub': {
                 obfuscated: 'aaaa',
-                kind: 'aidl_stub',
-                aidl_descriptor: 'com.example.app.IRemoteService',
+                kind: 'class',
                 methods: {
                     requestTicket: {
                         obfuscated: 'c',
                         signature: '(Landroid/os/Bundle;Lbbbb;)V',
-                        aidl_txn: 2,
                     },
                 },
                 fields: {

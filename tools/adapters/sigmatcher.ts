@@ -25,10 +25,9 @@
  *   7. Validates the assembled object against the locked `RosettaMap`
  *      schema before returning it.
  *
- * Anything sigmatcher cannot infer (`aidl_txn`, `static` flag,
- * `is_constructor`, `synthetic`, `anchors`) is left undefined. Map
- * authors who need those fields layer them in via a hand-authored
- * merge step (Wave 1.5 `rosetta merge`).
+ * Anything sigmatcher cannot infer (`static` flag, `is_constructor`,
+ * `synthetic`) is left undefined. Map authors who need those fields layer
+ * them in via a hand-authored merge step (Wave 1.5 `rosetta merge`).
  */
 
 import { CURRENT_SCHEMA_VERSION } from '../../src/types/map.js';

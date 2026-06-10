@@ -20,13 +20,15 @@ A crypto helper, buried somewhere internal, that calls
 and the class name rotates every release — but the literal
 `"AES/GCM/NoPadding"` is right there in the class, every version.
 
-In the map, pin the entry on that literal with `anchors`:
+You pin the class on that literal **in the sigmatcher signatures source**
+(a regex-over-smali match for `AES/GCM/NoPadding`). The signatures resolve
+the class, and the emitted `schema_version: 4` map records only the
+resolved real→obfuscated names — a pure mapping, no anchor field:
 
 ```json
 "com.example.app.crypto.GcmCipherHelper": {
     "obfuscated": "f0a",
     "kind": "class",
-    "anchors": ["AES/GCM/NoPadding"],
     "methods": {
         "encrypt": {
             "obfuscated": "a",
@@ -38,9 +40,11 @@ In the map, pin the entry on that literal with `anchors`:
 
 The real fully-qualified name (`com.example.app.crypto.GcmCipherHelper`)
 is the name *you* type in hooks; `obfuscated: "f0a"` is what the class is
-called in this version; and `anchors` is the stable string that lets the
-health check confirm `f0a` really is the cipher helper and not whatever
-unrelated class inherited that short name this release.
+called in this version. The stable string `"AES/GCM/NoPadding"` is what
+*located* `f0a` during signature authoring — it is finding evidence that
+lives in the signatures YAML, not a field in the map. (Earlier schema
+versions carried an `anchors` array on the entry; `schema_version: 4`
+dropped it, because no resolver ever read it.)
 
 ## Finding the class
 
@@ -117,9 +121,10 @@ A few practical notes:
   thousands of classes and won't pin anything. Algorithm names, full URL
   paths, unusual error messages, and developer-written log tags are
   good — distinctive enough that the containing class is unambiguous.
-- **A class can carry several anchors.** `anchors` is an array; list more
-  than one stable string for a tighter check and lower false-positive
-  rate at attach time.
+- **Anchor on several strings in the signatures source.** A signature can
+  require more than one stable literal for a tighter match and lower
+  false-positive rate during re-discovery. That tightening happens in the
+  sigmatcher YAML; the map itself stays a pure name mapping.
 - **String encryption defeats this.** Some hardened apps encrypt their
   string constants and decrypt at runtime, so the literal isn't in the
   dex as plaintext. Then fall back to the
@@ -132,7 +137,7 @@ entry:
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=4 classes=15
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.crypto.GcmCipherHelper ← f0a (map)
 [rosetta] com.example.app.crypto.GcmCipherHelper.encrypt ← a (map) ([B[B)[B

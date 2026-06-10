@@ -23,7 +23,7 @@ import type { RosettaMap } from '../types/map.js';
 import { makeFieldAccessor } from './field-accessor.js';
 
 const baseMap: RosettaMap = {
-    schema_version: 3,
+    schema_version: 4,
     version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',

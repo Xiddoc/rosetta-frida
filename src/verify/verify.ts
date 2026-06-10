@@ -10,8 +10,6 @@
  *     collide at resolution time. Across different dex shards the same short
  *     name is legal (R8 reuses `a`/`b`/... per shard), so the check is scoped
  *     per `dex`.
- *   - **`aidl_txn` collisions.** Two method overloads on the SAME class
- *     sharing an `aidl_txn` transaction code — a binder dispatch ambiguity.
  *   - **Unparseable signatures.** A method `signature` the descriptor parser
  *     rejects.
  *
@@ -36,7 +34,7 @@
  */
 
 import { parseSignatureArgs } from '../resolver/signature.js';
-import type { ClassEntry, MethodEntry, RosettaMap } from '../types/map.js';
+import type { MethodEntry, RosettaMap } from '../types/map.js';
 
 /** Severity of a semantic finding. HARD fails the build; WARNING informs. */
 export type VerifySeverity = 'error' | 'warning';
@@ -173,36 +171,14 @@ function objectRefName(descriptor: string): string | undefined {
     return body.slice(1, -1).replace(/\//g, '.');
 }
 
-/** Check no two overloads on one class collide on `aidl_txn`. */
-function checkAidlTxnCollisions(className: string, entry: ClassEntry, issues: VerifyIssue[]): void {
-    const seen = new Map<number, string>();
-    for (const [methodName, overloads] of Object.entries(entry.methods ?? {})) {
-        for (const overload of overloads) {
-            if (overload.aidl_txn === undefined) continue;
-            const prior = seen.get(overload.aidl_txn);
-            if (prior !== undefined) {
-                issues.push({
-                    path: `classes.${className}.methods.${methodName}.aidl_txn`,
-                    message:
-                        `aidl_txn ${overload.aidl_txn} collides with method '${prior}' ` +
-                        `on the same class`,
-                    severity: 'error',
-                });
-            } else {
-                seen.set(overload.aidl_txn, methodName);
-            }
-        }
-    }
-}
-
 /**
  * Run every semantic check over a validated map and return the findings
  * (empty array means consistent). Each finding carries a {@link VerifySeverity}:
- * `error` findings are real defects (duplicate obfuscated names, `aidl_txn`
- * collisions, unparseable signatures) and should fail a build; `warning`
- * findings are heuristic cross-references (dangling `extends`, un-translated
- * arg types) that a partial-but-correct map can legitimately trip. Pure —
- * exported for unit tests and programmatic callers.
+ * `error` findings are real defects (duplicate obfuscated names, unparseable
+ * signatures) and should fail a build; `warning` findings are heuristic
+ * cross-references (dangling `extends`, un-translated arg types) that a
+ * partial-but-correct map can legitimately trip. Pure — exported for unit
+ * tests and programmatic callers.
  */
 export function verifyMap(map: RosettaMap): VerifyIssue[] {
     const issues: VerifyIssue[] = [];
@@ -214,7 +190,6 @@ export function verifyMap(map: RosettaMap): VerifyIssue[] {
                 checkSignatureRefs(className, methodName, overload, map, issues);
             }
         }
-        checkAidlTxnCollisions(className, entry, issues);
     }
     return issues;
 }

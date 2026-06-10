@@ -30,8 +30,6 @@ export interface ResolvedMethod {
     className: string;
     /** Method signature in JVM descriptor form (obfuscated class refs). */
     signature: string;
-    /** Optional AIDL transaction code. */
-    aidlTxn?: number;
     /** Static flag. */
     static: boolean;
     /** All overloads when the real name had multiple — selected one is at [0]. */

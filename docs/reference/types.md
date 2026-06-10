@@ -23,7 +23,7 @@ Defined in `src/types/map.ts`.
 
 ```typescript
 interface RosettaMap {
-    schema_version: 3;
+    schema_version: 4;
     app: string;
     version: string; // versionName label — fuzzy fallback only
     version_code: number; // authoritative selection key
@@ -92,14 +92,7 @@ still loads but `rosetta.session(...)` emits a `map-status` warning; a
 ### `ClassKind`
 
 ```typescript
-type ClassKind =
-    | 'class'
-    | 'interface'
-    | 'enum'
-    | 'aidl_stub'
-    | 'aidl_callback'
-    | 'synthetic'
-    | 'anonymous';
+type ClassKind = 'class' | 'interface' | 'enum' | 'synthetic' | 'anonymous';
 ```
 
 What kind of class an entry describes. Drives V2+ runtime discovery
@@ -113,8 +106,6 @@ interface ClassEntry {
     extends?: string;
     kind?: ClassKind;
     dex?: string;
-    aidl_descriptor?: string;
-    anchors?: string[];
     methods?: MethodMap;
     fields?: FieldMap;
     source?: string;
@@ -135,7 +126,6 @@ Keyed by real fully-qualified class name.
 interface MethodEntry {
     obfuscated: string;
     signature: string;
-    aidl_txn?: number;
     static?: boolean;
     synthetic?: boolean;
     is_constructor?: boolean;

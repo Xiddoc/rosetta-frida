@@ -114,7 +114,7 @@ Open the file and replace the example with real classes:
 
 ```json
 {
-    "schema_version": 3,
+    "schema_version": 4,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -126,14 +126,12 @@ Open the file and replace the example with real classes:
     "classes": {
         "com.example.app.IRemoteService$Stub": {
             "obfuscated": "aaaa",
-            "kind": "aidl_stub",
-            "aidl_descriptor": "com.example.app.IRemoteService",
+            "kind": "class",
             "source": "sigmatcher",
             "methods": {
                 "requestTicket": {
                     "obfuscated": "c",
-                    "signature": "(Landroid/os/Bundle;Lbbbb;)V",
-                    "aidl_txn": 2
+                    "signature": "(Landroid/os/Bundle;Lbbbb;)V"
                 }
             }
         }
@@ -144,24 +142,21 @@ Open the file and replace the example with real classes:
 ### Tips for filling entries
 
 **Anchor on what survives obfuscation, generically.** For most classes
-that means a stable string literal the class embeds (set `anchors`) or a
-stable framework parent the class extends (set `extends`). These two
-cover the broad majority of classes — including deep internal ones with
-no exposed API. See the
+that means a stable string literal the class embeds or a stable framework
+parent the class extends (set `extends`). These cover the broad majority
+of classes — including deep internal ones with no exposed API. See the
 [string-anchored](../recipes/string-anchored-class.md) and
 [superclass-anchored](../recipes/superclass-anchored-method.md) recipes.
 
-**Set `anchors` for any class with a distinctive string.** Stable string
-literals embedded in a class become anchor checks at attach time —
-catching "wrong class assigned" errors with a low false-positive rate.
-They are data, not names, so they ride through rotation.
-
-**If a class happens to be an AIDL stub, add `aidl_descriptor`.** That is
-the lucky special case: when it applies, the descriptor is an even
-stronger anchor (the health check uses it), and the `aidl_txn` codes let
-you dispatch by transaction. But do not assume a class is AIDL — most are
-not. Reach for the generic anchors first and treat AIDL extras as a
-bonus when present.
+> **Anchors live in the signatures source, not the map.** As of
+> `schema_version: 4` the published map is a *pure* real→obfuscated
+> mapping: it carries no `anchors`, `aidl_descriptor`, or `aidl_txn`
+> fields, and no `aidl_stub` / `aidl_callback` class kinds (AIDL stubs are
+> just `kind: class`, callbacks `kind: interface`). The stable strings,
+> AIDL descriptors, and transaction codes you anchor on are *finding
+> evidence* — they belong in the sigmatcher signatures YAML that locates
+> the class, never in the emitted map. The map only records "this real
+> name → this obfuscated name."
 
 **Use the overload-array form only when you need to.** Most methods
 have one overload in the map; the single-form is cleaner. Switch to
@@ -182,7 +177,7 @@ npx rosetta validate maps/com.example.app/30405.json
 Success:
 
 ```text
-OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=3
+OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=4
 ```
 
 Failure surfaces specific issues:
@@ -210,12 +205,13 @@ frida -U -l hook.bundle.js com.example.app
 ```
 
 The attach-time **health check** iterates every class in the map and
-verifies `Java.use(obfName)` succeeds, the AIDL descriptor matches,
-and any `anchors` strings are present. With `trace: true` in the
-session options:
+verifies `Java.use(obfName)` succeeds (after the target-namespace guard).
+Since the map is a pure real→obfuscated mapping there is nothing further
+to assert against a loaded class. With `trace: true` in the session
+options:
 
 ```text
-[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=4 classes=15
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 ```
 
@@ -238,10 +234,11 @@ rosetta.events.onType('health-check', (e) => {
 For each failed entry, recheck:
 
 1. Did the obfuscated name rotate? (Update from jadx.)
-2. Did the AIDL descriptor change? (Unlikely — descriptors are
-   stable per AIDL interface, not per build.)
-3. Did the anchor strings change? (Drop the anchors that no longer
-   apply.)
+2. Did the obfuscated *method* letters move? (Update the right column.)
+
+The anchors/descriptors you originally located the class by are *signatures*
+authoring concerns and live in the sigmatcher YAML — they are not part of the
+emitted map, so there is nothing anchor-related to edit in the map itself.
 
 ## 6. Commit
 
@@ -271,10 +268,12 @@ When the next release ships:
    latter is the authoritative key the runtime selects by, so a stale
    `version_code` makes the session reject the map. Keep the filename
    in lockstep with the new `version_code` (here `30500`).
-3. Re-run sigmatcher to refresh class anchors.
+3. Re-run sigmatcher — the anchors that locate each class live in the
+   signatures YAML, so refreshing the map is a sigmatcher pass.
 4. For classes sigmatcher couldn't find, jadx them by hand using the
    anchors that survived (stable strings, framework parents, and —
-   where they apply — AIDL descriptors).
+   where they apply — AIDL descriptors). These guide your search; only
+   the resolved real→obfuscated names land in the map.
 5. Validate + verify on device.
 
 In practice **method letters are more stable than class names**.
@@ -295,21 +294,17 @@ convenience. TS/JS inputs are not supported; author as JSON or YAML. See
 
 ## Common authoring mistakes
 
-- **Not anchoring at all.** A class entry with only an `obfuscated`
-  name and no `anchors` / `extends` is a guess — nothing catches it
-  when the name rotates to a *different* class. Pin every entry on
-  something obfuscation survives: a stable string (`anchors`) or a
-  stable framework parent (`extends`).
+- **Anchoring the wrong thing in the signatures source.** A class
+  located only by its `obfuscated` name with no stable evidence (a
+  string literal, a framework parent) is a guess — nothing catches it
+  when the name rotates to a *different* class. Anchor every signature
+  on something obfuscation survives. (Those anchors live in the
+  sigmatcher YAML; the emitted map records only the resolved names.)
 - **Real-name `extends` chains that don't terminate in `classes`.**
   When a class's `extends` references another real name, that name
   must also be a key in `classes`. Use the obfuscated parent name
   (`java.lang.Object`, `android.os.Binder`, `android.app.JobService`)
   for parents you don't want to map.
-- **Forgetting `kind: aidl_stub` on AIDL surfaces (special case).**
-  *When a class is an AIDL stub*, omitting `kind` means the health
-  check won't verify its AIDL descriptor — the map could pass attach
-  but reach the wrong class. Always set `kind` and `aidl_descriptor`
-  for AIDL surfaces. (Non-AIDL classes don't need this.)
 - **Mixing real and obfuscated class refs in signatures.**
   Signatures always use obfuscated refs (`Lbbbb;`, not
   `Lcom/example/app/IServiceCallback;`). The resolver handles the

@@ -79,18 +79,14 @@ The Java source is _designed_ to exercise every feature of the
 
 | Schema feature             | Java construct                                                                                                                                                                   |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind: aidl_stub`          | `RemoteService` (extends `IRemoteService.Stub`)                                                                                                                                  |
-| `kind: aidl_callback`      | `IServiceCallback`                                                                                                                                                               |
-| `kind: class`              | `BlobCache`, `Config`, `Ticket`, `RemoteServiceClient`, `RemoteService`                                                                                                          |
-| `kind: interface`          | `PromiseCallback`                                                                                                                                                                |
+| `kind: class`              | `BlobCache`, `Config`, `Ticket`, `RemoteServiceClient`, `RemoteService`, `IRemoteService$Stub` / `IServiceCallback$Stub` (AIDL stubs are plain classes in the map)               |
+| `kind: interface`          | `PromiseCallback`, `IRemoteService`, `IServiceCallback` (AIDL callback interfaces are plain interfaces in the map)                                                               |
 | `kind: enum`               | `ErrorCode`                                                                                                                                                                      |
 | `kind: synthetic`          | `Ticket$Companion` plus javac-emitted `access$NNN` accessors from `Ticket$Reader`                                                                                                |
 | `kind: anonymous`          | `RemoteService$1`, `AbstractServiceClient$1`                                                                                                                                     |
 | Multi-overload methods     | `BlobCache.put` (2 overloads), `Ticket.<init>` (2 ctors) — AIDL interfaces forbid overloading, so the overload-array form is exercised by plain classes, not by `IRemoteService` |
 | Static fields              | `Config.MAX_RETRIES` (final), `Config.currentDebugLevel` (mutable), `BlobCache.MAX_SIZE`                                                                                         |
 | Instance fields            | `BlobCache.buffer` (private), `BlobCache.lastEvictedKey` (public), `RemoteServiceClient.sessionId` / `.flags`                                                                    |
-| `aidl_descriptor`          | `IRemoteService.Stub.DESCRIPTOR` (AIDL-generated)                                                                                                                                |
-| `anchors` (stable strings) | `ROSETTA_ANCHOR` constants on `Config`, `BlobCache`, `RemoteService`                                                                                                             |
 | `extends` chain            | `RemoteServiceClient extends AbstractServiceClient extends Object`                                                                                                               |
 | Cross-class signature refs | `IRemoteService.requestTicket(Bundle, IServiceCallback)`, `Ticket$Companion.create(...) → Ticket`                                                                                |
 
@@ -197,13 +193,16 @@ tests/fixtures/test-app/
   installing it on a device produces a manifest-validated APK that
   Android can parse, but no `am start` target.
 - The AIDL `*.Stub` classes are `-keep`-protected because the binder
-  runtime resolves them by descriptor string; rosetta-frida treats
-  these as schema-mandated anchors (the schema field is
-  `aidl_descriptor`).
+  runtime resolves them by descriptor string; the descriptor is
+  finding-evidence the sigmatcher signatures source uses to locate
+  them. The emitted `schema_version: 4` map is a pure real→obfuscated
+  mapping, so it carries no `aidl_descriptor` field — the stub is just
+  `kind: class`.
 - The `ROSETTA_ANCHOR` string constants on `Config`, `BlobCache`, and
   `RemoteService` survive R8 because they're `static final String`
   initializers reached by live code; sigmatcher uses them as discovery
-  anchors per the schema's `anchors` array.
+  anchors in the SIGNATURES source. They are authoring input only — the
+  schema-4 map no longer carries an `anchors` array.
 - `PromiseCallback`'s anchor is deliberately named `PROMISE_ANCHOR`, not
   `ROSETTA_ANCHOR`. `RemoteServiceClient` implements the interface and
   declares its own `ROSETTA_ANCHOR` field; a same-named static field

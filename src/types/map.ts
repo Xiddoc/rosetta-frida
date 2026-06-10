@@ -55,14 +55,7 @@ export interface GeneratedFrom {
  */
 export type MapStatus = 'active' | 'superseded' | 'retracted';
 
-export type ClassKind =
-    | 'class'
-    | 'interface'
-    | 'enum'
-    | 'aidl_stub'
-    | 'aidl_callback'
-    | 'synthetic'
-    | 'anonymous';
+export type ClassKind = 'class' | 'interface' | 'enum' | 'synthetic' | 'anonymous';
 
 /** One method overload. */
 export interface MethodEntry {
@@ -74,8 +67,6 @@ export interface MethodEntry {
      * The resolver builds a reverse index for cross-class translation.
      */
     signature: string;
-    /** AIDL transaction code, if this is a binder dispatch target. */
-    aidl_txn?: number;
     /** Whether the method is static. */
     static?: boolean;
     /** Whether the method is synthetic (compiler-generated). */
@@ -132,13 +123,6 @@ export interface ClassEntry {
     kind?: ClassKind;
     /** DEX shard (optional debugging metadata). */
     dex?: string;
-    /**
-     * AIDL interface descriptor — the stable cross-version anchor.
-     * Set on aidl_stub / aidl_callback entries.
-     */
-    aidl_descriptor?: string;
-    /** Stable string literals contained in this class, for V2+ discovery. */
-    anchors?: string[];
     /** Methods keyed by real name. */
     methods?: MethodMap;
     /** Fields keyed by real name. */
@@ -177,21 +161,32 @@ export type ClassMapInput = Record<string, ClassEntryInput>;
  * kept in sync by `scripts/check-schema-version.mjs` (run via
  * `npm run schema-version:fix`; `:check` is wired into `npm run verify`).
  *
- * Declared `const` so its type narrows to the numeric literal (e.g. `3`),
+ * Declared `const` so its type narrows to the numeric literal (e.g. `4`),
  * which is what `RosettaMap.schema_version` and `z.literal` need.
  */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 /** The top-level mapping file. */
 export interface RosettaMap {
     /**
      * Mandatory. Bumped on breaking schema changes.
      *
-     * `3` (current): removes the `confidence` field (from `sources` and
-     * class entries); tightens `captured_at` to an ISO `YYYY-MM-DD` date;
-     * lets `signer_sha256` be a single hash OR a non-empty array of hashes
-     * (match-any); adds the optional `generated_from` provenance pointer and
-     * the optional `status` / `superseded_by` lifecycle fields.
+     * `4` (current): makes the published map a PURE real→obfuscated mapping.
+     * Removes every finding-evidence / AIDL field that no resolver read —
+     * `methodEntry.aidl_txn`, `classEntry.aidl_descriptor`, the
+     * `classEntry.anchors` array, and the `aidl_stub` / `aidl_callback` values
+     * from the class `kind` enum (so `kind` is now only
+     * `class | interface | enum | synthetic | anonymous`). Those belong in the
+     * signatures authoring source, never the emitted map. The generic
+     * structural fields (`extends`, the remaining `kind` values, `dex`) are
+     * retained.
+     *
+     * `3` (previous): removed the `confidence` field (from `sources` and class
+     * entries); tightened `captured_at` to an ISO `YYYY-MM-DD` date; let
+     * `signer_sha256` be a single hash OR a non-empty array of hashes
+     * (match-any); added the optional `generated_from` provenance pointer and
+     * the optional `status` / `superseded_by` lifecycle fields. A
+     * `schema_version: 3` map is now rejected and must be re-emitted at `4`.
      */
     schema_version: typeof CURRENT_SCHEMA_VERSION;
     /**

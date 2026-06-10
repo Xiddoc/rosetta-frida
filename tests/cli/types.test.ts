@@ -10,7 +10,7 @@ import { makeCaptured, makeFakeFs, makeFsLike, makeIo } from './helpers.js';
 
 function baseMap(overrides: Partial<RosettaMap> = {}): RosettaMap {
     return {
-        schema_version: 3,
+        schema_version: 4,
         app: 'com.example.app',
         version: '1.0.0',
         version_code: 100,

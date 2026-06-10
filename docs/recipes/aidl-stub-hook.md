@@ -5,8 +5,16 @@ a [stable string literal](string-anchored-class.md) or a
 [stable framework parent](superclass-anchored-method.md) — because that
 is all the obfuscator leaves you. AIDL stubs are the exception: they hand
 you an unusually strong anchor for free (a stable `DESCRIPTOR` string and
-transaction codes), so when a class *is* a stub, lean into it. Just don't
-assume a class is AIDL — most are not.
+transaction codes), so when a class *is* a stub, lean into it *while
+authoring the signatures*. Just don't assume a class is AIDL — most are not.
+
+> **The AIDL evidence lives in the signatures source, not the map.** As of
+> `schema_version: 4` the published map is a pure real→obfuscated mapping:
+> a stub is just `kind: class` and a callback `kind: interface`, with no
+> `aidl_descriptor` / `aidl_txn` / `anchors` fields. You still *hook the
+> stub by its real name* exactly as below — the descriptor and transaction
+> codes simply guided sigmatcher to the class; they are no longer carried
+> in the emitted artifact.
 
 AIDL stubs are the binder dispatch surface between processes — when one
 Android process wants to call into a service running in another, that
@@ -24,23 +32,16 @@ In the sample map at `maps/com.example.app/30405.json`:
 "com.example.app.IRemoteService$Stub": {
     "obfuscated": "aaaa",
     "extends": "android.os.Binder",
-    "kind": "aidl_stub",
-    "aidl_descriptor": "com.example.app.IRemoteService",
-    "anchors": [
-        "com.example.app.IRemoteService",
-        "Transaction failed"
-    ],
+    "kind": "class",
     "methods": {
         "requestTicket": [
             {
                 "obfuscated": "c",
-                "signature": "(Landroid/os/Bundle;Lbbbb;)V",
-                "aidl_txn": 2
+                "signature": "(Landroid/os/Bundle;Lbbbb;)V"
             },
             {
                 "obfuscated": "d",
-                "signature": "(Landroid/os/Bundle;Ljava/lang/String;Lbbbb;)V",
-                "aidl_txn": 4
+                "signature": "(Landroid/os/Bundle;Ljava/lang/String;Lbbbb;)V"
             }
         ]
     }
@@ -48,8 +49,10 @@ In the sample map at `maps/com.example.app/30405.json`:
 ```
 
 Two overloads of `requestTicket` — one with two args, one with three.
-The two-arg overload (txn code 2) is the common call path; the
-three-arg form (txn 4) takes an opaque tag string.
+The two-arg overload is the common call path; the three-arg form takes an
+opaque tag string. (The AIDL transaction codes that distinguish them are
+authoring evidence in the signatures source, not map fields — at hook time
+you disambiguate by argument types, below.)
 
 ## The hook
 
@@ -165,7 +168,7 @@ With `trace: true`, attaching prints:
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=4 classes=15
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.IRemoteService$Stub ← aaaa (map)
 [rosetta] com.example.app.IRemoteService$Stub.requestTicket ← c (map) (Landroid/os/Bundle;Lbbbb;)V
@@ -231,10 +234,10 @@ rosetta.hook(
 `(Landroid/os/Bundle;)V`), so the string form works directly — no
 disambiguation needed.
 
-### Hook by AIDL transaction code (tier 3)
+### Hook `onTransact` directly (tier 3)
 
-For low-level inspection — hooking `onTransact` directly and
-dispatching on the transaction code — drop to tier 3:
+For low-level inspection — hooking `onTransact` directly and logging
+every transaction code the binder dispatches — drop to tier 3:
 
 ```typescript
 const stub = rosetta.map.resolveClass('com.example.app.IRemoteService$Stub');
@@ -244,18 +247,17 @@ const stubWrapper = Java.use(stub.obfName) as { onTransact: unknown };
     .onTransact
     .overload('int', 'android.os.Parcel', 'android.os.Parcel', 'int')
     .implementation = function (txn: number, data: unknown, reply: unknown, flags: number) {
-        const handler = stub.entry.methods?.requestTicket;
-        const overloads = Array.isArray(handler) ? handler : handler ? [handler] : [];
-        const matched = overloads.find((o) => o.aidl_txn === txn);
-        if (matched) {
-            send({ stage: 'onTransact', method: 'requestTicket', txn, signature: matched.signature });
-        }
+        send({ stage: 'onTransact', class: 'com.example.app.IRemoteService$Stub', txn });
         return (this as { onTransact: (...a: unknown[]) => unknown }).onTransact(txn, data, reply, flags);
     };
 ```
 
-This is rarely necessary — hooking the method directly is cleaner —
-but illustrates how tier 3 stays available for advanced needs.
+The map no longer carries `aidl_txn` codes (they were authoring evidence,
+not a resolver input), so map → transaction-code dispatch is no longer a
+built-in. If you need it, keep a small txn→method table in your hook
+script. This is rarely necessary — hooking the method directly by real
+name is cleaner — but illustrates how tier 3 stays available for advanced
+needs.
 
 ## Common gotchas
 
@@ -269,9 +271,10 @@ but illustrates how tier 3 stays available for advanced needs.
   on the service side; hook the proxy if you want to see outgoing
   calls on the client side. They have different obfuscated names —
   both should be in your map.
-- **Missing `aidl_descriptor`.** Without it, the health check can't
-  verify the class is actually the stub you think it is. Always set
-  `kind: aidl_stub` and `aidl_descriptor` on stub entries.
+- **Expecting AIDL metadata in the map.** As of `schema_version: 4` the
+  map carries no `aidl_descriptor` / `aidl_txn` / `aidl_stub` fields — a
+  stub is `kind: class`. Anchor on the descriptor while authoring the
+  *signatures*; the map only records the resolved names.
 
 ## See also
 

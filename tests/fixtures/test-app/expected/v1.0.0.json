@@ -1,5 +1,5 @@
 {
-    "schema_version": 3,
+    "schema_version": 4,
     "app": "com.example.testapp",
     "version": "1.0.0",
     "version_code": 1,
@@ -12,17 +12,17 @@
         "com.example.testapp.IRemoteService$Stub": {
             "obfuscated": "IRemoteService$Stub",
             "source": "sigmatcher",
-            "kind": "aidl_stub"
+            "kind": "class"
         },
         "com.example.testapp.IServiceCallback": {
             "obfuscated": "IServiceCallback",
             "source": "sigmatcher",
-            "kind": "aidl_callback"
+            "kind": "interface"
         },
         "com.example.testapp.IServiceCallback$Stub": {
             "obfuscated": "IServiceCallback$Stub",
             "source": "sigmatcher",
-            "kind": "aidl_stub"
+            "kind": "class"
         },
         "com.example.testapp.Config": {
             "obfuscated": "dddd",

@@ -18,7 +18,7 @@ import { ROSETTA_META, type ProxyMeta } from '../types/proxy.js';
 import { makeInstanceProxy } from './instance-proxy.js';
 
 const map: RosettaMap = {
-    schema_version: 3,
+    schema_version: 4,
     version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
@@ -116,7 +116,7 @@ describe('makeInstanceProxy', () => {
 
     it('does not let a map field named $native shadow metadata; ROSETTA_META is collision-proof', () => {
         const collidingMap: RosettaMap = {
-            schema_version: 3,
+            schema_version: 4,
             version_code: 1,
             app: 'com.example.app',
             version: '1.0.0',

@@ -105,7 +105,7 @@ translation for one `(app, version)` pair. The on-disk format:
 
 ```json
 {
-    "schema_version": 3,
+    "schema_version": 4,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -113,7 +113,7 @@ translation for one `(app, version)` pair. The on-disk format:
     "classes": {
         "com.example.app.IRemoteService$Stub": {
             "obfuscated": "aaaa",
-            "kind": "aidl_stub",
+            "kind": "class",
             "methods": {
                 "requestTicket": {
                     "obfuscated": "c",
@@ -126,9 +126,11 @@ translation for one `(app, version)` pair. The on-disk format:
 ```
 
 Each class is keyed by its **real fully-qualified name** and carries
-the obfuscated short name plus methods, fields, and optional metadata
-(parent class, AIDL descriptor, DEX shard, anchor strings,
-provenance).
+the obfuscated short name plus methods, fields, and optional structural
+metadata (parent class via `extends`, `kind`, DEX shard, provenance). The
+map is a *pure* real→obfuscated mapping (`schema_version: 4`): the
+finding-evidence you anchor on — stable strings, AIDL descriptors,
+transaction codes — lives in the signatures source, not the emitted map.
 
 YAML is supported as an authoring input via the
 [`rosetta convert`](../cli/convert.md) CLI; TS/JS inputs are not
@@ -142,8 +144,9 @@ A map entry says "real name `X` is obfuscated as `aaaa` in this
 version." But `aaaa` is a moving target: next release it might name a
 completely different class. An **anchor** is the obfuscation-stable
 property that ties the entry back to the *right* class even as the short
-name rotates — and it's what the [health check](#sessions) verifies at
-attach time.
+name rotates. Anchoring happens when you **author the signatures** that
+produce the map — it is a sigmatcher concern. The emitted map records
+only the resolved real→obfuscated names; it does not carry the anchors.
 
 The reason anchoring works at all: an obfuscator rewrites **names**, but
 it leaves **data** and **framework bindings** alone. So the durable
@@ -151,22 +154,24 @@ anchors are the things that are *not* names:
 
 - **A stable string literal the class embeds.** An algorithm name like
   `"AES/GCM/NoPadding"`, a log tag, a JSON key, a URL path — the
-  developer wrote it as data, so it rides through rotation untouched. Set
-  it in the entry's `anchors`. This is the **default, most broadly
-  applicable** anchor: it works even for a deep internal class that
-  exposes no public API at all. See
+  developer wrote it as data, so it rides through rotation untouched.
+  Match on it in the signatures source. This is the **default, most
+  broadly applicable** anchor: it works even for a deep internal class
+  that exposes no public API at all. See
   [Recipe — string-anchored class](../recipes/string-anchored-class.md).
 - **A stable framework parent.** A class that extends
   `android.app.JobService` or implements `java.lang.Runnable` keeps that
   parent across rotations, because the framework type is not part of the
-  app and is not obfuscated. Pin the subclass by its parent via
-  `extends`. See
+  app and is not obfuscated. Pin the subclass by its parent (this *does*
+  surface in the map as `extends`). See
   [Recipe — superclass-anchored method](../recipes/superclass-anchored-method.md).
 - **An AIDL descriptor — the lucky special case.** *If* the class is an
   AIDL stub, it carries a stable `DESCRIPTOR` string and transaction
-  codes that make a particularly strong anchor (`kind: aidl_stub`,
-  `aidl_descriptor`, `aidl_txn`). But most classes are not AIDL stubs, so
-  this is a bonus when it applies — not the plan you start from. See
+  codes that make a particularly strong signature anchor. But most
+  classes are not AIDL stubs, so this is a bonus when it applies — not
+  the plan you start from. In the map the stub is just `kind: class`
+  (callbacks are `kind: interface`); the descriptor and txn codes stay in
+  the signatures. See
   [Recipe — AIDL stub hooks](../recipes/aidl-stub-hook.md).
 
 Think generic first (string / superclass), and reach for AIDL only when
@@ -179,9 +184,9 @@ block:
 
 ```js
 /*! -----BEGIN ROSETTA MAP----- */
-/*! app: com.example.app | version: 3.4.5 | schema: 3 | classes: 15 */
+/*! app: com.example.app | version: 3.4.5 | schema: 4 | classes: 15 */
 const __rosetta_map = {
-    "schema_version": 3,
+    "schema_version": 4,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,

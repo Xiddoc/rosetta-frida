@@ -10,14 +10,14 @@ function makeMap(): RosettaMap {
     // Sessions consume already-validated (normalised) maps; author in the
     // terser single-overload form and normalise via validateMap.
     return validateMap({
-        schema_version: 3,
+        schema_version: 4,
         version_code: 1,
         app: 'com.example.app',
         version: '3.4.5',
         classes: {
             'com.example.app.IFoo$Stub': {
                 obfuscated: 'aaaa',
-                kind: 'aidl_stub',
+                kind: 'class',
                 methods: {
                     requestTicket: {
                         obfuscated: 'c',
@@ -80,7 +80,7 @@ describe('rosetta ambient namespace', () => {
         });
         expect(s.app).toBe('com.example.app');
         expect(s.version).toBe('3.4.5');
-        expect(s.map.schema_version).toBe(3);
+        expect(s.map.schema_version).toBe(4);
     });
 
     it('getCurrentSession returns the latest session set via session()', () => {
@@ -485,7 +485,7 @@ describe('rosetta — target-namespace guard end-to-end (RFC 0001 C1)', () => {
 
     function maliciousMap(): RosettaMap {
         return {
-            schema_version: 3,
+            schema_version: 4,
             version_code: 1,
             app: 'com.example.app',
             version: '3.4.5',

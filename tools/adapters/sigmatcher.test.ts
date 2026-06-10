@@ -44,7 +44,7 @@ describe('sigmatcherRawToRosettaMap — single class', () => {
 
         const map = sigmatcherRawToRosettaMap(raw, BASE_OPTIONS);
 
-        expect(map.schema_version).toBe(3);
+        expect(map.schema_version).toBe(4);
         expect(map.app).toBe('com.example.testapp');
         expect(map.version).toBe('1.0.0');
         expect(map.version_code).toBe(100);
@@ -363,10 +363,10 @@ describe('sigmatcherRawToRosettaMap — options propagation', () => {
         const map = sigmatcherRawToRosettaMap(raw, {
             ...BASE_OPTIONS,
             classKindMap: {
-                'com.example.testapp.IRemoteService$Stub': 'aidl_stub',
+                'com.example.testapp.IRemoteService$Stub': 'class',
             },
         });
-        expect(map.classes['com.example.testapp.IRemoteService$Stub']!.kind).toBe('aidl_stub');
+        expect(map.classes['com.example.testapp.IRemoteService$Stub']!.kind).toBe('class');
         expect(map.classes['com.example.testapp.BlobCache']!.kind).toBeUndefined();
     });
 });

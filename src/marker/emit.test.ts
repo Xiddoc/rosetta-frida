@@ -17,7 +17,7 @@ import { BEGIN_MARKER, BEGIN_REGISTRY, END_MARKER, END_REGISTRY } from './format
 /** A minimal well-formed map. */
 function minimalMap(): RosettaMap {
     return {
-        schema_version: 3,
+        schema_version: 4,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
@@ -28,7 +28,7 @@ function minimalMap(): RosettaMap {
 /** A richly-populated map covering optional fields and multiple classes. */
 function richMap(): RosettaMap {
     return {
-        schema_version: 3,
+        schema_version: 4,
         version_code: 1,
         app: 'com.example.app',
         version: '3.4.5',
@@ -46,15 +46,12 @@ function richMap(): RosettaMap {
             'com.example.app.IRemoteService$Stub': {
                 obfuscated: 'aaaa',
                 extends: 'zzzz',
-                kind: 'aidl_stub',
+                kind: 'class',
                 dex: 'classes6.dex',
-                aidl_descriptor: 'com.example.app.IRemoteService',
-                anchors: ['unique-marker'],
                 methods: {
                     requestTicket: {
                         obfuscated: 'c',
                         signature: '(Landroid/os/Bundle;Lbbbb;)V',
-                        aidl_txn: 2,
                     },
                     overloaded: [
                         { obfuscated: 'd', signature: '()V' },
@@ -68,7 +65,7 @@ function richMap(): RosettaMap {
             },
             IServiceCallback: {
                 obfuscated: 'bbbb',
-                kind: 'aidl_callback',
+                kind: 'interface',
             },
             EnumKlass: {
                 obfuscated: 'cccc',
@@ -90,7 +87,7 @@ describe('emitMarkerBlock', () => {
         const out = emitMarkerBlock(richMap());
         // header order: app | version | schema | classes
         expect(out).toMatch(
-            /\/\*! app: com\.example\.app \| version: 3\.4\.5 \| schema: 3 \| classes: 3 \*\//,
+            /\/\*! app: com\.example\.app \| version: 3\.4\.5 \| schema: 4 | classes: 3 \*\//,
         );
     });
 
@@ -106,7 +103,7 @@ describe('emitMarkerBlock', () => {
     it('uses 4-space indent in the embedded JSON', () => {
         const out = emitMarkerBlock(richMap());
         // The first indented line should start with exactly 4 spaces.
-        expect(out).toMatch(/\n {4}"schema_version": 3,/);
+        expect(out).toMatch(/\n {4}"schema_version": 4,/);
         // A doubly-nested key should start with 8 spaces.
         expect(out).toMatch(/\n {8}"com\.example\.app\.IRemoteService\$Stub": \{/);
     });

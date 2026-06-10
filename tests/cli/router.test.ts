@@ -18,7 +18,7 @@ import type { RosettaMap } from '../../src/types/map.js';
 import { makeCaptured, makeFakeFs, makeIo } from './helpers.js';
 
 const map = (version = '1.0.0'): RosettaMap => ({
-    schema_version: 3,
+    schema_version: 4,
     version_code: 1,
     app: 'com.example.app',
     version,
@@ -140,7 +140,7 @@ describe('route — dispatch happy paths', () => {
 
     it('routes convert and exits 0', async () => {
         const yaml =
-            'schema_version: 3\napp: com.example.app\nversion: "1.0.0"\nversion_code: 1\nclasses:\n  IFoo:\n    obfuscated: aaaa\n';
+            'schema_version: 4\napp: com.example.app\nversion: "1.0.0"\nversion_code: 1\nclasses:\n  IFoo:\n    obfuscated: aaaa\n';
         const fs = makeFakeFs({ 'in.yaml': yaml });
         const captured = makeCaptured();
         const code = await route(['convert', 'in.yaml', '-o', 'out.json'], makeIo(fs, captured));
@@ -220,7 +220,7 @@ describe('route — dispatch happy paths (pull)', () => {
         // We import the command directly and wrap it the same way the router does.
         const { runPull } = await import('../../cli/commands/pull.js');
         const VALID_MAP = JSON.stringify({
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.example.app',
             version: '3.4.5',
             version_code: 30405,
@@ -331,7 +331,7 @@ describe('route — unified failure formatting', () => {
     it('folds validate issue list into stderr under one prefix, exit 1', async () => {
         const fs = makeFakeFs({
             'm.json':
-                '{"schema_version": 3, "version_code": 1, "app": "x", "classes": {"IFoo": {}}}',
+                '{"schema_version": 4, "version_code": 1, "app": "x", "classes": {"IFoo": {}}}',
         });
         const captured = makeCaptured();
         const code = await route(['validate', 'm.json'], makeIo(fs, captured));

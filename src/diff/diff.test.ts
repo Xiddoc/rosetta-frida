@@ -10,7 +10,7 @@ import type { RosettaMap } from '../types/map.js';
 /** A minimal valid in-memory map for direct diffMaps tests. */
 function baseMap(overrides: Partial<RosettaMap> = {}): RosettaMap {
     return {
-        schema_version: 3,
+        schema_version: 4,
         app: 'com.example.app',
         version: '1.0.0',
         version_code: 100,

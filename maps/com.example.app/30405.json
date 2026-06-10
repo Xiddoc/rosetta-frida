@@ -1,5 +1,5 @@
 {
-    "schema_version": 3,
+    "schema_version": 4,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -25,31 +25,23 @@
         "com.example.app.IRemoteService$Stub": {
             "obfuscated": "aaaa",
             "extends": "android.os.Binder",
-            "kind": "aidl_stub",
+            "kind": "class",
             "dex": "classes6.dex",
-            "aidl_descriptor": "com.example.app.IRemoteService",
-            "anchors": [
-                "com.example.app.IRemoteService",
-                "Transaction failed"
-            ],
             "source": "sigmatcher",
             "methods": {
                 "requestTicket": [
                     {
                         "obfuscated": "c",
-                        "signature": "(Landroid/os/Bundle;Lbbbb;)V",
-                        "aidl_txn": 2
+                        "signature": "(Landroid/os/Bundle;Lbbbb;)V"
                     },
                     {
                         "obfuscated": "d",
-                        "signature": "(Landroid/os/Bundle;Ljava/lang/String;Lbbbb;)V",
-                        "aidl_txn": 4
+                        "signature": "(Landroid/os/Bundle;Ljava/lang/String;Lbbbb;)V"
                     }
                 ],
                 "requestPrompt": {
                     "obfuscated": "f",
-                    "signature": "(Landroid/os/Bundle;Lcccc;)V",
-                    "aidl_txn": 3
+                    "signature": "(Landroid/os/Bundle;Lcccc;)V"
                 },
                 "onTransact": {
                     "obfuscated": "onTransact",
@@ -66,32 +58,27 @@
         },
         "com.example.app.IServiceCallback": {
             "obfuscated": "bbbb",
-            "kind": "aidl_callback",
-            "aidl_descriptor": "com.example.app.IServiceCallback",
+            "kind": "interface",
             "source": "sigmatcher",
             "methods": {
                 "onResult": {
                     "obfuscated": "a",
-                    "signature": "(Landroid/os/Bundle;)V",
-                    "aidl_txn": 1
+                    "signature": "(Landroid/os/Bundle;)V"
                 },
                 "onError": {
                     "obfuscated": "b",
-                    "signature": "(ILjava/lang/String;)V",
-                    "aidl_txn": 2
+                    "signature": "(ILjava/lang/String;)V"
                 }
             }
         },
         "com.example.app.IDialogCallback": {
             "obfuscated": "cccc",
-            "kind": "aidl_callback",
-            "aidl_descriptor": "com.example.app.IDialogCallback",
+            "kind": "interface",
             "source": "sigmatcher",
             "methods": {
                 "onDismiss": {
                     "obfuscated": "a",
-                    "signature": "(I)V",
-                    "aidl_txn": 1
+                    "signature": "(I)V"
                 }
             }
         },
@@ -192,9 +179,6 @@
             "obfuscated": "hhhh",
             "kind": "class",
             "source": "hand-authored",
-            "anchors": [
-                "BlobCache:evict"
-            ],
             "methods": {
                 "get": {
                     "obfuscated": "c",
@@ -388,9 +372,6 @@
             "extends": "java.lang.Object",
             "kind": "class",
             "source": "hand-authored",
-            "anchors": [
-                "SessionManager initialized"
-            ],
             "methods": {
                 "startSession": {
                     "obfuscated": "a",

@@ -16,7 +16,7 @@ import {
 
 function buildMap(classes: RosettaMap['classes']): RosettaMap {
     return {
-        schema_version: 3,
+        schema_version: 4,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
@@ -57,52 +57,6 @@ describe('runHealthCheck', () => {
         expect(result.rate).toBe(0.5);
         expect(result.failedEntries).toEqual(['com.example.app.Bar']);
         expect(result.passed).toBe(false);
-    });
-
-    it('verifies AIDL descriptor when the map specifies one', () => {
-        installFridaMock();
-        MockFrida.registerClass('aaaa', { aidlDescriptor: 'com.example.IFoo' });
-        MockFrida.registerClass('bbbb', { aidlDescriptor: 'com.example.WrongDescriptor' });
-        const map = buildMap({
-            'com.example.app.IFooStub': {
-                obfuscated: 'aaaa',
-                kind: 'aidl_stub',
-                aidl_descriptor: 'com.example.IFoo',
-            },
-            'com.example.app.IBarStub': {
-                obfuscated: 'bbbb',
-                kind: 'aidl_stub',
-                aidl_descriptor: 'com.example.IBar',
-            },
-        });
-        const result = runHealthCheck({ map, threshold: 0.99 });
-        expect(result.failedEntries).toEqual(['com.example.app.IBarStub']);
-        expect(result.passed).toBe(false);
-    });
-
-    it('verifies anchor strings when the map specifies them', () => {
-        installFridaMock();
-        MockFrida.registerClass('aaaa', {
-            anchorStrings: ['must-have', 'optional-extra'],
-        });
-        MockFrida.registerClass('bbbb', { anchorStrings: ['something-else'] });
-        const map = buildMap({
-            'com.example.app.Foo': { obfuscated: 'aaaa', anchors: ['must-have'] },
-            'com.example.app.Bar': { obfuscated: 'bbbb', anchors: ['must-have'] },
-        });
-        const result = runHealthCheck({ map, threshold: 0.99 });
-        expect(result.failedEntries).toEqual(['com.example.app.Bar']);
-    });
-
-    it('passes when anchors are an empty array (no constraints)', () => {
-        installFridaMock();
-        MockFrida.registerClass('aaaa', { anchorStrings: [] });
-        const map = buildMap({
-            'com.example.app.Foo': { obfuscated: 'aaaa', anchors: [] },
-        });
-        const result = runHealthCheck({ map });
-        expect(result.passed).toBe(true);
-        expect(result.rate).toBe(1);
     });
 
     it('respects an explicit threshold below the rate', () => {
@@ -177,47 +131,17 @@ describe('runHealthCheck', () => {
     it('accepts an injected Java API', () => {
         const javaApi: HealthCheckJavaApi = {
             use: (name) => {
-                if (name === 'aaaa') return { $aidlDescriptor: 'com.example.IFoo' };
+                if (name === 'aaaa') return {};
                 throw new Error('not registered: ' + name);
             },
         };
         const map = buildMap({
-            'com.example.app.Foo': {
-                obfuscated: 'aaaa',
-                aidl_descriptor: 'com.example.IFoo',
-            },
+            'com.example.app.Foo': { obfuscated: 'aaaa' },
             'com.example.app.Bar': { obfuscated: 'bbbb' },
         });
         const result = runHealthCheck({ map, javaApi, threshold: 0.5 });
         expect(result.passed).toBe(true);
         expect(result.failedEntries).toEqual(['com.example.app.Bar']);
-    });
-
-    it('treats a null $aidlDescriptor as a mismatch when expected', () => {
-        const javaApi: HealthCheckJavaApi = {
-            use: () => ({ $aidlDescriptor: null }),
-        };
-        const map = buildMap({
-            'com.example.app.Foo': {
-                obfuscated: 'aaaa',
-                aidl_descriptor: 'com.example.IFoo',
-            },
-        });
-        const result = runHealthCheck({ map, javaApi });
-        expect(result.passed).toBe(false);
-        expect(result.failedEntries).toEqual(['com.example.app.Foo']);
-    });
-
-    it('handles missing $anchorStrings on the wrapper gracefully', () => {
-        // Wrapper without $anchorStrings → treated as empty.
-        const javaApi: HealthCheckJavaApi = {
-            use: () => ({}),
-        };
-        const map = buildMap({
-            'com.example.app.Foo': { obfuscated: 'aaaa', anchors: ['marker'] },
-        });
-        const result = runHealthCheck({ map, javaApi });
-        expect(result.failedEntries).toEqual(['com.example.app.Foo']);
     });
 
     it('does NOT call Java.use for a guard-denied obfuscated name', () => {

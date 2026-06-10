@@ -29,7 +29,7 @@ Commands:
 |---|---|---|
 | [`init`](init.md) | Scaffold a strict-JSON skeleton for a new `(app, version)` pair (`--version-code` required). | The filesystem — writes `maps/<app>/<version_code>.json` by default. |
 | [`pull`](pull.md) | Fetch the verified map for an `(app, version_code)` from the community rosetta-maps repo, validate it, and write it into the project. Build-time only. | The network (read) + the filesystem (write). |
-| [`validate`](validate.md) | Run the schema + sanity check against a map (auto-detects format). `--deep` adds semantic checks (dangling `extends`, duplicate obfuscated names per dex, un-translated arg types, `aidl_txn` collisions); `--json` for CI. | One map file (JSON / YAML). |
+| [`validate`](validate.md) | Run the schema + sanity check against a map (auto-detects format). `--deep` adds semantic checks (dangling `extends`, duplicate obfuscated names per dex, un-translated arg types, unparseable signatures); `--json` for CI. | One map file (JSON / YAML). |
 | [`convert`](convert.md) | Convert a YAML map to canonical JSON. | One map file. |
 | [`patch`](patch.md) | Replace the embedded map in a compiled bundle with a fresh one. In-place by default. | A compiled bundle + a new map. |
 | [`extract`](extract.md) | Pull the embedded map back out of a compiled bundle into a standalone JSON file. | A compiled bundle. |

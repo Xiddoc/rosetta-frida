@@ -11,10 +11,12 @@
  *      load through the guard).
  *   1. For every allowed mapped class, attempt `Java.use(obfName)`.
  *      Failed lookups mark the class as a failure.
- *   2. For AIDL stubs/callbacks with `aidl_descriptor`, additionally
- *      check `Klass.$aidlDescriptor` matches.
- *   3. For classes carrying `anchors`, verify each appears in
- *      `Klass.$anchorStrings`.
+ *
+ * The map is a pure real→obfuscated mapping (schema_version 4), so there
+ * is nothing further to assert against a loaded class — the
+ * finding-evidence (AIDL descriptors, anchor string literals) that earlier
+ * schema versions carried lived only in the signatures authoring source and
+ * was never emitted into the map.
  *
  * The success rate (passing classes / total) is compared against a
  * configurable threshold (default 0.8). On failure, the session
@@ -32,10 +34,7 @@ import type { TargetPolicy } from '../types/session.js';
 
 /** Minimal Frida-shaped Java API used by the health check. */
 export interface HealthCheckJavaApi {
-    use(obfName: string): {
-        readonly $aidlDescriptor?: string | null;
-        readonly $anchorStrings?: readonly string[];
-    };
+    use(obfName: string): unknown;
 }
 
 /** Health-check input. */
@@ -79,7 +78,7 @@ export interface HealthCheckResult {
     rate: number;
     /** Configured threshold. */
     threshold: number;
-    /** Real names that failed (Java.use error, descriptor mismatch, missing anchor). */
+    /** Real names that failed (target-namespace guard denial or Java.use error). */
     failedEntries: readonly string[];
     /** Total mapped classes considered. */
     total: number;
@@ -101,10 +100,7 @@ export function runHealthCheck(options: RunHealthCheckOptions): HealthCheckResul
     const threshold = options.threshold ?? DEFAULT_HEALTH_CHECK_THRESHOLD;
     const bridge = options.bridge ?? defaultJavaBridge;
     const javaApi: HealthCheckJavaApi | null =
-        options.javaApi ??
-        (bridge.available
-            ? { use: (obfName) => bridge.use(obfName) as ReturnType<HealthCheckJavaApi['use']> }
-            : null);
+        options.javaApi ?? (bridge.available ? { use: (obfName) => bridge.use(obfName) } : null);
     const targetPolicy = options.targetPolicy ?? {};
     const appPrefix = options.appPrefix ?? '';
 
@@ -134,11 +130,8 @@ export function runHealthCheck(options: RunHealthCheckOptions): HealthCheckResul
         }
         let ok: boolean;
         try {
-            const klass = javaApi.use(entry.obfuscated);
-            ok = checkDescriptor(entry.aidl_descriptor, klass.$aidlDescriptor);
-            if (ok) {
-                ok = checkAnchors(entry.anchors, klass.$anchorStrings);
-            }
+            javaApi.use(entry.obfuscated);
+            ok = true;
         } catch {
             ok = false;
         }
@@ -168,23 +161,4 @@ export function runHealthCheck(options: RunHealthCheckOptions): HealthCheckResul
         failedEntries,
         total: entries.length,
     };
-}
-
-/** Verify the AIDL descriptor matches, if the map specifies one. */
-function checkDescriptor(expected: string | undefined, actual: string | null | undefined): boolean {
-    if (expected === undefined) return true;
-    return actual === expected;
-}
-
-/** Verify every anchor string is present on the class. */
-function checkAnchors(
-    expected: readonly string[] | undefined,
-    actual: readonly string[] | undefined,
-): boolean {
-    if (expected === undefined || expected.length === 0) return true;
-    const actualSet = new Set(actual ?? []);
-    for (const anchor of expected) {
-        if (!actualSet.has(anchor)) return false;
-    }
-    return true;
 }

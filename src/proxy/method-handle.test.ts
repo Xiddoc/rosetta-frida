@@ -26,7 +26,7 @@ import { makeMethodHandle } from './method-handle.js';
 // only at the real-name side, so we name them `single` and `multi` at
 // the real level.
 const baseMap: RosettaMap = validateMap({
-    schema_version: 3,
+    schema_version: 4,
     version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
