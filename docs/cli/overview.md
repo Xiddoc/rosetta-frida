@@ -14,7 +14,7 @@ Usage: rosetta <command> [options]
 
 Commands:
   init <app> <version> [options]            Scaffold a new map skeleton (--version-code required)
-  pull <app>@<version_code> [options]       Fetch + verify map from rosetta-maps repo (--require-sidecar)
+  pull <app>@<version_code> [options]       Fetch + validate a map from the rosetta-maps repo
   validate <map> [--deep]                   Schema check (+ --deep semantic checks; --json)
   convert <in> -o <out>                     Convert YAML map to canonical JSON
   patch <bundle.js> --map <new.json>        Replace embedded map in bundle
@@ -23,7 +23,6 @@ Commands:
   diff <from> <to> [--json] [--exit-code]   Structural diff between two maps (what rotated)
   merge <a> <b> [...] -o <out> [--strict]   Combine partial maps for one (app, version_code)
   types <map> -o <out.d.ts>                 Emit .d.ts real-name stubs for autocompletion
-  freshness <map...> --signatures <sigs.yaml>  Flag vendored maps stale vs current signatures (advisory)
 ```
 
 | Command | What it does | Operates on |
@@ -38,16 +37,15 @@ Commands:
 | [`diff`](diff.md) | Report what rotated (classes/methods/fields/signatures) between two maps. Human report + `--json`; `--exit-code` gates CI on drift. | Two map files. |
 | [`merge`](merge.md) | Combine several partial maps for one `(app, version_code)` into one (sources unioned, entries merged; `--strict` errors on conflicting obfuscated names). | Two or more map files. |
 | [`types`](types.md) | Emit a `.d.ts` of the map's real names so hook authors get autocompletion. | One map file. |
-| [`freshness`](freshness.md) | Flag which vendored maps omit a class the current signatures define a rule for (completeness drift). Read-only and advisory — never fails on staleness; the maps-repo CI is authoritative. `--json` for tooling. | One or more map files + a `signatures.yaml`. |
 
 ## Two command shapes
 
 Internally the CLI has two flavors of command:
 
-- **Map authoring** — `init`, `pull`, `validate`, `convert`. These take
-  an optional `fsImpl` parameter under the hood (and, for `pull`, an
-  injected `fetch` seam), return a result value, and surface
-  `RosettaError`s with exit code 1.
+- **Map authoring** — `init`, `pull`, `validate`, `convert`. These
+  take an optional `fsImpl` parameter under the hood (and, for `pull`, an
+  injected `fetch` seam), return a result value, and surface `RosettaError`s
+  with exit code 1.
 - **Bundle manipulation** — `patch`, `extract`, `inspect`. These
   operate against a compiled bundle via the marker block and use a
   shared `CommandIo` injection so the same logic can run under tests

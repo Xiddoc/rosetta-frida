@@ -12,6 +12,21 @@ public surface may still shift before 1.0.0.
 
 ## Unreleased
 
+### Removed the `.sha256` byte-hash sidecar from `rosetta pull` (#21)
+
+`rosetta pull` no longer fetches or verifies a detached
+`<version_code>.json.sha256` byte-hash sidecar, and the `--require-sidecar`
+flag (and `PullConfig.requireSidecar`) are gone. A map is **pure data** the
+resolver only reads to point at a member that already exists in the running
+app — nothing in a map is executed — so a tampered map is at worst a
+*correctness* bug, never code execution. Transport integrity already comes
+for free from the channel: maps are pulled over git-over-HTTPS from a
+content-addressed (SHA-named) store. The sidecar restated that guarantee
+without strengthening it (maps#37). `signer_sha256` is unaffected — it is an
+unrelated in-map *version* guard, not a transport-integrity control. The
+single source of truth for the safety model is the rosetta-maps
+`docs/reference/integrity.md`.
+
 ### Map schema `2` → `3` (breaking)
 
 The map format moved to `schema_version: 3`. The hard literal gate

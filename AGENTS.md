@@ -216,11 +216,15 @@ Two repos at maturity:
   schema** (`schema/rosetta-map.schema.json`, the source of truth for the
   `schema_version: 3` format) plus contributed maps and the sigmatcher
   signatures they're generated from. PR-gated by automated schema
-  validation (which reuses this repo's `rosetta validate`, whose Zod
-  schema tracks the canonical one); no code review required. Each PR
-  adds or updates a single `maps/<app>/<version_code>.json` (authored in
-  YAML/TS, rendered via `rosetta convert`). rosetta-frida is the
-  first-class **client** of that schema, not its home.
+  validation that runs a language-neutral JSON Schema checker
+  (check-jsonschema) directly against the canonical
+  `schema/rosetta-map.schema.json` — no JS toolchain, no cross-repo
+  checkout; no code review required. rosetta-frida's Zod validator
+  (`src/validate/schema.ts`) is a CLIENT that TRACKS that canonical schema,
+  not the thing the maps CI runs. Each PR adds or updates a single
+  `maps/<app>/<version_code>.json` (authored in YAML/TS, rendered via
+  `rosetta convert`). rosetta-frida is the first-class **client** of that
+  schema, not its home.
 
 **Maps are acquired and bundled at build/author time — never fetched
 from the cloud on the device.** The map for a given `(app,
