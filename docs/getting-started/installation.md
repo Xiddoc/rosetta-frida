@@ -5,13 +5,17 @@ JavaScript and compiled with
 [`frida-compile`](https://github.com/frida/frida-compile)) and provides
 a CLI, `rosetta`, for map authoring and bundle manipulation.
 
-!!! warning "Not on npm yet"
+## Install (npm)
 
-    rosetta-frida is **not published to npm yet** — publishing is
-    deliberately deferred. For now you **clone and build from source**
-    (below). An npm package is planned for a later phase; once it lands,
-    `npm install rosetta-frida` and a published `rosetta` binary will be
-    documented here.
+```sh
+npm install rosetta-frida
+```
+
+This pulls the runtime library and the `rosetta` CLI (run it with
+`npx rosetta <command>`). Releases are **tag-driven**: pushing a `v*`
+version tag triggers the release workflow, which rebuilds, re-runs the
+100% coverage gate, and publishes with npm provenance, so a published
+version always corresponds to a green build.
 
 ## Requirements
 
@@ -32,7 +36,8 @@ that loads inside Frida's Quickjs / V8 sandbox.
 
 ## Install (clone & build from source)
 
-Until the npm package ships, clone the repo and build it:
+Prefer to work against the source tree (e.g. to contribute)? Clone the
+repo and build it:
 
 ```sh
 git clone https://github.com/Xiddoc/rosetta-frida

@@ -40,8 +40,21 @@ disappears. Full walkthrough in the
 
 ## Install
 
-rosetta-frida is **not published to npm yet** (publishing is
-deliberately deferred). For now, clone and build from source:
+```sh
+npm install rosetta-frida
+```
+
+```ts
+import { rosetta } from 'rosetta-frida';
+```
+
+This gives you the runtime library and the `rosetta` CLI (run it with
+`npx rosetta <command>`). Publishing is **tag-driven**: a `v*` version
+tag triggers the release workflow, which rebuilds, re-runs the 100%
+coverage gate, and publishes with npm provenance — so a release can
+only ship a green build.
+
+Prefer to build from source?
 
 ```sh
 git clone https://github.com/Xiddoc/rosetta-frida
@@ -50,8 +63,7 @@ npm install
 npm run build
 ```
 
-This gives you the runtime library and the `rosetta` CLI (run it with
-`npm run cli -- <command>`). An npm package is coming later. See the
+See the
 [installation guide](https://xiddoc.github.io/rosetta-frida/getting-started/installation/)
 for requirements and details.
 
