@@ -429,11 +429,13 @@ The theme: turn rosetta-frida from a library into an ecosystem.
   `reference/design.md`, "Lookup chain").
 - **Benefit.** Hooks survive a rotation **before** anyone publishes an
   updated map — the runtime degrades gracefully instead of failing. This
-  is the long-term robustness story and the reason the schema carries
-  `kind`, `aidl_descriptor`, and `anchors` metadata today.
+  is the long-term robustness story. The discovery evidence (AIDL
+  descriptors, anchor strings) lives in the **signatures source**, not the
+  `schema_version: 4` map (which is a pure name mapping); a V2 runtime
+  strategy would consult that signatures-side evidence, not the map.
 - **Scope / dependencies.** A pluggable strategy registry invoked at the
-  resolver's failure slot; needs the metadata the schema already
-  captures plus runtime class enumeration. Largest V2 runtime item.
+  resolver's failure slot; needs the signatures-side discovery evidence
+  plus runtime class enumeration. Largest V2 runtime item.
 - **Status.** planned.
 
 ---

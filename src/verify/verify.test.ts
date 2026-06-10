@@ -9,7 +9,7 @@ import type { RosettaMap } from '../types/map.js';
 
 function baseMap(overrides: Partial<RosettaMap> = {}): RosettaMap {
     return {
-        schema_version: 3,
+        schema_version: 4,
         app: 'com.example.app',
         version: '1.0.0',
         version_code: 100,
@@ -187,41 +187,6 @@ describe('verifyMap', () => {
         expect(issues).toHaveLength(1);
         expect(issues[0]?.message).toMatch(/unparseable signature/);
         expect(issues[0]?.severity).toBe('error');
-    });
-
-    it('flags an aidl_txn collision on one class as a HARD error', () => {
-        const m = baseMap({
-            classes: {
-                'com.example.app.Stub': {
-                    obfuscated: 'a',
-                    methods: {
-                        first: [{ obfuscated: 'c', signature: '()V', aidl_txn: 2 }],
-                        second: [{ obfuscated: 'e', signature: '()V', aidl_txn: 2 }],
-                    },
-                },
-            },
-        });
-        const issues = verifyMap(m);
-        expect(issues).toHaveLength(1);
-        expect(issues[0]?.path).toBe('classes.com.example.app.Stub.methods.second.aidl_txn');
-        expect(issues[0]?.message).toMatch(/collides with method 'first'/);
-        expect(issues[0]?.severity).toBe('error');
-    });
-
-    it('does not flag distinct aidl_txn codes or absent ones', () => {
-        const m = baseMap({
-            classes: {
-                'com.example.app.Stub': {
-                    obfuscated: 'a',
-                    methods: {
-                        first: [{ obfuscated: 'c', signature: '()V', aidl_txn: 2 }],
-                        second: [{ obfuscated: 'e', signature: '()V', aidl_txn: 3 }],
-                        third: [{ obfuscated: 'f', signature: '()V' }],
-                    },
-                },
-            },
-        });
-        expect(verifyMap(m)).toEqual([]);
     });
 
     it('handles classes with no methods', () => {

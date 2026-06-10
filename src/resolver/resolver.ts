@@ -375,7 +375,6 @@ export class ResolverImpl implements Resolver {
             obfName: picked.obfuscated,
             className: cls.obfName,
             signature: picked.signature,
-            aidlTxn: picked.aidl_txn,
             static: picked.static === true,
             // Selected entry first so consumers can do allOverloads[0] safely.
             allOverloads: [picked, ...overloads.filter((o) => o !== picked)],

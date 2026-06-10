@@ -186,7 +186,7 @@ as a single readable line:
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15 select=exact
+[rosetta] map-load com.example.app@3.4.5 schema=4 classes=15 select=exact
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.IRemoteService$Stub ← aaaa (map)
 [rosetta] com.example.app.IRemoteService$Stub.requestTicket ← c (map) (Landroid/os/Bundle;Lbbbb;)V
@@ -427,10 +427,10 @@ try {
 ## Attach-time health check
 
 Before any user hook runs, the session iterates the loaded map's
-classes and verifies each one resolves via `Java.use(obfName)`. For
-classes with `aidl_descriptor`, it additionally checks
-`klass.$aidlDescriptor` matches. For classes with `anchors`, it
-checks each anchor string is in `klass.$anchorStrings`.
+classes and verifies each one resolves via `Java.use(obfName)` (after the
+target-namespace guard). Since the `schema_version: 4` map is a pure
+real→obfuscated mapping, a successful load is the whole check — there is
+no descriptor or anchor metadata in the map to assert against.
 
 The fraction `passing / total` is compared against
 `healthCheckThreshold` (default `0.8`):

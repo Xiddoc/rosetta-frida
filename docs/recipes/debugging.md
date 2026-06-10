@@ -19,7 +19,7 @@ line:
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=4 classes=15
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.IRemoteService$Stub ← aaaa (map)
 [rosetta] com.example.app.IRemoteService$Stub.requestTicket ← c (map) (Landroid/os/Bundle;Lbbbb;)V
@@ -244,7 +244,7 @@ Before running a bundle, audit it:
 
 ```sh
 $ npx rosetta inspect hook.bundle.js
-com.example.app@3.4.5, schema_version 3, 15 classes
+com.example.app@3.4.5, schema_version 4, 15 classes
 
 $ npx rosetta extract hook.bundle.js -o snapshot.json
 $ jq '.classes | keys' snapshot.json
@@ -284,7 +284,7 @@ for (const name of failed) {
         name,
         obf: entry?.obfuscated,
         kind: entry?.kind,
-        descriptor: entry?.aidl_descriptor,
+        extends: entry?.extends,
     });
 }
 ```

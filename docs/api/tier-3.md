@@ -40,12 +40,12 @@ interface MapApi {
 const cls = rosetta.map.resolveClass('com.example.app.IRemoteService$Stub');
 // → { realName: 'com.example.app.IRemoteService$Stub',
 //     obfName: 'aaaa',
-//     entry: { obfuscated: 'aaaa', kind: 'aidl_stub', methods: { ... }, ... } }
+//     entry: { obfuscated: 'aaaa', kind: 'class', methods: { ... }, ... } }
 ```
 
 `ResolvedClass` carries the full `ClassEntry` from the map, so you
-can introspect kind, AIDL descriptor, anchors, methods, fields, and
-source provenance.
+can introspect `kind`, `extends`, `dex`, methods, fields, and source
+provenance.
 
 Useful for adaptive logic that branches on whether a real name is
 in the map this release:
@@ -139,7 +139,7 @@ automatically for the overridden name.
 ```typescript
 rosetta.map.override('com.example.app.IRemoteService$Stub', {
     obfuscated: 'xyz',
-    kind: 'aidl_stub',
+    kind: 'class',
     methods: {
         requestTicket: { obfuscated: 'a', signature: '(Landroid/os/Bundle;Lbbbb;)V' },
     },

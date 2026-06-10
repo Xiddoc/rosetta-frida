@@ -34,7 +34,6 @@ import type { ResolverImpl } from '../../src/resolver/index.js';
 import { pickMapForVersion } from '../../src/session/version-match.js';
 import type { RosettaMapRegistry } from '../../src/types/map.js';
 import {
-    MAX_ANCHORS,
     MAX_APP_LEN,
     MAX_CLASSES,
     MAX_FIELDS_PER_CLASS,
@@ -61,7 +60,6 @@ const BOUNDS: Readonly<Record<string, number>> = {
     MAX_METHODS_PER_CLASS,
     MAX_FIELDS_PER_CLASS,
     MAX_METHOD_OVERLOADS,
-    MAX_ANCHORS,
     MAX_SOURCES,
     MAX_SHORT_NAME_LEN,
     MAX_SIGNATURE_LEN,
@@ -122,7 +120,6 @@ interface ConformanceCase {
     readonly expectSignature?: string;
     readonly expectClassName?: string;
     readonly expectStatic?: boolean;
-    readonly expectAidlTxn?: number;
     readonly expectOverloadCount?: number;
     readonly expectType?: string;
     readonly expectExtends?: string | null;
@@ -225,7 +222,6 @@ function assertSuccess(resolver: ResolverImpl | null, c: ConformanceCase): void 
             // verbatim from the class entry's `obfuscated` token (NOT an FQN).
             if ('expectClassName' in c) expect(result.className).toBe(c.expectClassName);
             if ('expectStatic' in c) expect(result.static).toBe(c.expectStatic);
-            if ('expectAidlTxn' in c) expect(result.aidlTxn).toBe(c.expectAidlTxn);
             if ('expectOverloadCount' in c) {
                 expect((result.allOverloads as unknown[]).length).toBe(c.expectOverloadCount);
             }
@@ -339,7 +335,7 @@ function runFuzzySelectCase(c: ConformanceCase): void {
         // index never collapses two labels; the codes are otherwise irrelevant
         // (fuzzy selection ranks on the version LABEL, not the code).
         registry[label] = {
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.example.app',
             version: label,
             version_code: i + 1,
@@ -368,7 +364,7 @@ function runCodeSelectCase(c: ConformanceCase): void {
     const registry: RosettaMapRegistry = {};
     codes.forEach((code) => {
         registry[String(code)] = {
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.example.app',
             version: String(code),
             version_code: code,
@@ -406,7 +402,7 @@ function runCodeCollisionCase(c: ConformanceCase): void {
     // FIRST map for the shared code — exactly what the policy asserts.
     entries.forEach((e) => {
         registry[e.version] = {
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.example.app',
             version: e.version,
             version_code: e.versionCode,

@@ -19,7 +19,7 @@ import { makeCaptured, makeFakeFs, makeFsLike, makeIo } from './helpers.js';
 import * as realFs from 'node:fs/promises';
 
 const VALID_JSON = `{
-    "schema_version": 3,
+    "schema_version": 4,
     "app": "com.example.app",
     "version": "1.0.0",
     "version_code": 100,
@@ -29,7 +29,7 @@ const VALID_JSON = `{
 }`;
 
 const VALID_YAML = `
-schema_version: 3
+schema_version: 4
 app: com.example.app
 version: "1.0.0"
 version_code: 100
@@ -137,7 +137,7 @@ describe('runValidate', () => {
     it('throws a MapValidationError (with issues) for a malformed map', async () => {
         const fake = makeFakeFs({
             '/m.json':
-                '{"schema_version": 3, "version_code": 1, "app": "x", "classes": {"IFoo": {}}}',
+                '{"schema_version": 4, "version_code": 1, "app": "x", "classes": {"IFoo": {}}}',
         });
         const captured = makeCaptured();
         await expect(runValidate(['/m.json'], makeIo(fake, captured))).rejects.toThrow(
@@ -205,7 +205,7 @@ describe('runValidate --deep (folded-in semantic checks)', () => {
     // verb contract: deep mode runs the checks, hard errors fail (throw), and
     // warnings are reported in the success message without failing the build.
     const consistent = JSON.stringify({
-        schema_version: 3,
+        schema_version: 4,
         app: 'com.example.app',
         version: '1.0.0',
         version_code: 100,
@@ -221,7 +221,7 @@ describe('runValidate --deep (folded-in semantic checks)', () => {
 
     it('throws a MapValidationError on a HARD semantic error (duplicate obfuscated)', async () => {
         const map = JSON.stringify({
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.example.app',
             version: '1.0.0',
             version_code: 100,
@@ -238,7 +238,7 @@ describe('runValidate --deep (folded-in semantic checks)', () => {
 
     it('reports a WARNING (dangling extends) in the message WITHOUT failing', async () => {
         const map = JSON.stringify({
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.example.app',
             version: '1.0.0',
             version_code: 100,
@@ -257,7 +257,7 @@ describe('runValidate --deep (folded-in semantic checks)', () => {
         // MAJOR E: a Google-family app referencing gms/material it never maps
         // must not exit 1. With the full-prefix heuristic there are no findings.
         const map = JSON.stringify({
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.google.android.apps.foo',
             version: '1.0.0',
             version_code: 100,
@@ -275,7 +275,7 @@ describe('runValidate --deep (folded-in semantic checks)', () => {
 
     it('reports a PLURAL warning count and lists each warning', async () => {
         const map = JSON.stringify({
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.example.app',
             version: '1.0.0',
             version_code: 100,
@@ -293,7 +293,7 @@ describe('runValidate --deep (folded-in semantic checks)', () => {
 
     it('reports a PLURAL error count on multiple hard errors', async () => {
         const map = JSON.stringify({
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.example.app',
             version: '1.0.0',
             version_code: 100,
@@ -312,7 +312,7 @@ describe('runValidate --deep (folded-in semantic checks)', () => {
 
     it('--json emits the structured VerifyIssue[] (warnings included) when no hard error', async () => {
         const map = JSON.stringify({
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.example.app',
             version: '1.0.0',
             version_code: 100,
@@ -332,7 +332,7 @@ describe('runValidate --deep (folded-in semantic checks)', () => {
 
     it('--json still throws on a hard error so the exit code stays honest', async () => {
         const map = JSON.stringify({
-            schema_version: 3,
+            schema_version: 4,
             app: 'com.example.app',
             version: '1.0.0',
             version_code: 100,

@@ -63,10 +63,6 @@ export interface MockClassSpec {
     superclass?: string;
     /** Interfaces this class implements (obfuscated names). */
     interfaces?: string[];
-    /** AIDL descriptor for aidl_stub / aidl_callback classes. */
-    aidlDescriptor?: string;
-    /** Arbitrary string contents searchable by string-anchor strategies. */
-    anchorStrings?: string[];
 }
 
 // ===========================================================================
@@ -174,8 +170,6 @@ function makeClassWrapper(obfName: string, spec: MockClassSpec): JavaWrapper {
         $isWrapper: true,
         $super: spec.superclass ?? null,
         $superHierarchy: collectSuperHierarchy(spec.superclass),
-        $aidlDescriptor: spec.aidlDescriptor ?? null,
-        $anchorStrings: spec.anchorStrings ?? [],
         $new(...args: unknown[]): JavaInstance {
             return makeInstance(obfName, instanceFieldSpecs, methods, args);
         },
@@ -254,8 +248,6 @@ export interface JavaWrapper {
     readonly $isWrapper: true;
     readonly $super: string | null;
     readonly $superHierarchy: readonly string[];
-    readonly $aidlDescriptor: string | null;
-    readonly $anchorStrings: readonly string[];
     $new(...args: unknown[]): JavaInstance;
     readonly class: {
         getName(): string;

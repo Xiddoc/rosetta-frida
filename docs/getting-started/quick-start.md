@@ -28,7 +28,7 @@ For this tutorial, use the ready-made sample map at
 
 ```json
 {
-    "schema_version": 3,
+    "schema_version": 4,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -36,14 +36,12 @@ For this tutorial, use the ready-made sample map at
     "classes": {
         "com.example.app.IRemoteService$Stub": {
             "obfuscated": "aaaa",
-            "kind": "aidl_stub",
-            "aidl_descriptor": "com.example.app.IRemoteService",
+            "kind": "class",
             "methods": {
                 "requestTicket": [
                     {
                         "obfuscated": "c",
-                        "signature": "(Landroid/os/Bundle;Lbbbb;)V",
-                        "aidl_txn": 2
+                        "signature": "(Landroid/os/Bundle;Lbbbb;)V"
                     }
                 ]
             }
@@ -127,7 +125,7 @@ stderr like:
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=4 classes=15
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.IRemoteService$Stub ← aaaa (map)
 [rosetta] com.example.app.IRemoteService$Stub.requestTicket ← c (map) (Landroid/os/Bundle;Lbbbb;)V
@@ -145,7 +143,7 @@ your bundle becomes self-describing:
 
 ```sh
 $ npx rosetta inspect hook.bundle.js
-com.example.app@3.4.5, schema_version 3, 15 classes
+com.example.app@3.4.5, schema_version 4, 15 classes
 ```
 
 And you can swap maps without recompiling:
@@ -155,7 +153,7 @@ $ npx rosetta patch hook.bundle.js --map maps/com.example.app/3.5.0.json
 patch: wrote hook.bundle.js (in place)
 
 $ npx rosetta inspect hook.bundle.js
-com.example.app@3.5.0, schema_version 3, 15 classes
+com.example.app@3.5.0, schema_version 4, 15 classes
 ```
 
 The hook source did not change. The user-visible class names did not

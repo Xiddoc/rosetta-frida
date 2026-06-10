@@ -28,14 +28,14 @@ import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/i
 
 function buildMap(): RosettaMap {
     return {
-        schema_version: 3,
+        schema_version: 4,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
         classes: {
             'com.example.app.IRemoteService$Stub': {
                 obfuscated: 'aaaa',
-                kind: 'aidl_stub',
+                kind: 'class',
                 methods: {
                     // Single overload — string form must pick this.
                     onConnect: { obfuscated: 'a', signature: '()V' },
@@ -44,12 +44,10 @@ function buildMap(): RosettaMap {
                         {
                             obfuscated: 'c',
                             signature: '(Landroid/os/Bundle;Lbbbb;)V',
-                            aidl_txn: 2,
                         },
                         {
                             obfuscated: 'd',
                             signature: '(Landroid/os/Bundle;Ljava/lang/String;Lbbbb;)V',
-                            aidl_txn: 4,
                         },
                     ],
                     // For primitive-args coverage.
@@ -58,7 +56,7 @@ function buildMap(): RosettaMap {
             },
             IServiceCallback: {
                 obfuscated: 'bbbb',
-                kind: 'aidl_callback',
+                kind: 'interface',
             },
         },
     };
@@ -547,7 +545,7 @@ describe('hook — descriptor parser edge cases', () => {
         installHook: () => HookHandle;
     } {
         const map: RosettaMap = {
-            schema_version: 3,
+            schema_version: 4,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',

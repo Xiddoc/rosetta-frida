@@ -15,7 +15,7 @@ import { createMapApi } from './map.js';
 
 function buildMap(): RosettaMap {
     return validateMap({
-        schema_version: 3,
+        schema_version: 4,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',

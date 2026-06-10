@@ -8,7 +8,6 @@
  *   - Map / app / version mismatch → MapVersionMismatchError.
  *   - Health-check pass / fail (strict vs. warn).
  *   - skipHealthCheck.
- *   - AIDL descriptor + anchor verification in the health check.
  *   - trace mode propagates to the bus.
  *   - Resolver is wired to the session bus.
  */
@@ -38,7 +37,7 @@ import {
 
 function buildMap(version: string, app = 'com.example.app', versionCode = 1): RosettaMap {
     return {
-        schema_version: 3,
+        schema_version: 4,
         version_code: versionCode,
         app,
         version,
@@ -74,17 +73,10 @@ function makeAutoDetectJavaApi(
 }
 
 /** Helper: build a health-check Java api that resolves a given set of obf names. */
-function makeHealthJavaApi(
-    knownObfNames: Iterable<string>,
-    extras: Record<
-        string,
-        { $aidlDescriptor?: string | null; $anchorStrings?: readonly string[] }
-    > = {},
-): HealthCheckJavaApi {
+function makeHealthJavaApi(knownObfNames: Iterable<string>): HealthCheckJavaApi {
     const known = new Set(knownObfNames);
     return {
         use: (name) => {
-            if (extras[name] !== undefined) return extras[name];
             if (known.has(name)) return {};
             throw new Error(`not registered: ${name}`);
         },
@@ -167,7 +159,7 @@ describe('createSession — explicit app/version', () => {
         expect(mapLoad).toBeDefined();
         if (mapLoad?.type === 'map-load') {
             expect(mapLoad.classCount).toBe(2);
-            expect(mapLoad.schemaVersion).toBe(3);
+            expect(mapLoad.schemaVersion).toBe(4);
             // A single-map input is an exact selection.
             expect(mapLoad.selectionKind).toBe('exact');
         }
@@ -733,79 +725,6 @@ describe('createSession — health check', () => {
     });
 });
 
-describe('createSession — health check with AIDL descriptors and anchors', () => {
-    const map: RosettaMap = {
-        schema_version: 3,
-        version_code: 1,
-        app: 'com.example.app',
-        version: '1.2.3',
-        classes: {
-            'com.example.app.IFooStub': {
-                obfuscated: 'aaaa',
-                kind: 'aidl_stub',
-                aidl_descriptor: 'com.example.IFoo',
-            },
-            'com.example.app.WithAnchor': {
-                obfuscated: 'bbbb',
-                anchors: ['marker-string'],
-            },
-        },
-    };
-
-    it('passes when aidl_descriptor matches', () => {
-        const session = createSession({
-            map,
-            app: 'com.example.app',
-            version: '1.2.3',
-            healthCheckJavaApi: makeHealthJavaApi(['bbbb'], {
-                aaaa: { $aidlDescriptor: 'com.example.IFoo' },
-                bbbb: { $anchorStrings: ['marker-string'] },
-            }),
-        });
-        expect(session.healthy).toBe(true);
-    });
-
-    it('fails when aidl_descriptor differs', () => {
-        const events = new EventBus();
-        const captured = captureEvents(events);
-        const session = createSession({
-            map,
-            app: 'com.example.app',
-            version: '1.2.3',
-            events,
-            healthCheckJavaApi: makeHealthJavaApi(['bbbb'], {
-                aaaa: { $aidlDescriptor: 'wrong-descriptor' },
-                bbbb: { $anchorStrings: ['marker-string'] },
-            }),
-        });
-        expect(session.healthy).toBe(false);
-        const hc = captured.find((e) => e.type === 'health-check');
-        if (hc?.type === 'health-check') {
-            expect(hc.failedEntries).toContain('com.example.app.IFooStub');
-        }
-    });
-
-    it('fails when anchor string is missing', () => {
-        const events = new EventBus();
-        const captured = captureEvents(events);
-        const session = createSession({
-            map,
-            app: 'com.example.app',
-            version: '1.2.3',
-            events,
-            healthCheckJavaApi: makeHealthJavaApi([], {
-                aaaa: { $aidlDescriptor: 'com.example.IFoo' },
-                bbbb: { $anchorStrings: ['other-string'] },
-            }),
-        });
-        expect(session.healthy).toBe(false);
-        const hc = captured.find((e) => e.type === 'health-check');
-        if (hc?.type === 'health-check') {
-            expect(hc.failedEntries).toContain('com.example.app.WithAnchor');
-        }
-    });
-});
-
 describe('createSession — trace + bus + resolver', () => {
     it('enables trace mode on the bus when trace=true', () => {
         const events = new EventBus();
@@ -1144,7 +1063,7 @@ describe('createSession — health check honours the target-namespace guard', ()
     /** A map whose single class points at a forbidden framework FQN. */
     function maliciousMap(): RosettaMap {
         return {
-            schema_version: 3,
+            schema_version: 4,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',

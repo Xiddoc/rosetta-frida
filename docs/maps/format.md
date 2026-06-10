@@ -11,7 +11,7 @@ the field-by-field reference. For the authoring workflow, see
     The canonical, language-neutral map schema is owned by the separate
     [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo
     (`schema/rosetta-map.schema.json` — the source of truth for the
-    `schema_version: 3` format). rosetta-frida is a **client** of that
+    `schema_version: 4` format). rosetta-frida is a **client** of that
     schema: its Zod validator (`src/validate/schema.ts`) tracks the
     canonical schema. This page documents the same format as consumed by
     the Frida client. `rosetta-xposed` (Kotlin) is the other client.
@@ -25,7 +25,7 @@ objects, an enum, a synthetic Companion, an anonymous inner class.
 
 ```typescript
 interface RosettaMap {
-    schema_version: 3;
+    schema_version: 4;
     app: string;
     version: string;
     version_code: number;
@@ -47,7 +47,7 @@ interface RosettaMap {
 
 | Field | Type | Description |
 |---|---|---|
-| `schema_version` | `3` | The schema version. Must be `3`. Bumped on breaking schema changes; old maps will fail to load against newer libraries until in-tree migrators are added. (`3` removed `confidence`, tightened `captured_at` to an ISO date, let `signer_sha256` be an array, and added `generated_from` / `status` / `superseded_by`.) |
+| `schema_version` | `4` | The schema version. Must be `4`. Bumped on breaking schema changes; old maps will fail to load against newer libraries until in-tree migrators are added. (`4` made the map a pure real→obfuscated mapping: it removed the finding-evidence / AIDL fields no resolver read — `methodEntry.aidl_txn`, `classEntry.aidl_descriptor`, the `classEntry.anchors` array, and the `aidl_stub` / `aidl_callback` class kinds. `3` removed `confidence`, tightened `captured_at` to an ISO date, let `signer_sha256` be an array, and added `generated_from` / `status` / `superseded_by`.) |
 | `app` | string | Android package name (`com.example.app`). Cross-checked against the auto-detected app at session start. |
 | `version` | string | App version *label* (`PackageInfo.versionName`, e.g. `3.4.5`). A human display label only — NOT authoritative for selection (labels can repeat across builds). Used as the fuzzy-match fallback key. |
 | `version_code` | integer | **The authoritative app-identity key** — the full Android `longVersionCode` (`(versionCodeMajor << 32) | versionCode`), never masked. The runtime selects maps by this first (O(1), monotonic per build); the `version` label is only a fallback. Capped at Number.MAX_SAFE_INTEGER (2^53 − 1) so the Frida JS client can represent it exactly. |
@@ -114,10 +114,8 @@ A class entry is keyed by its real fully-qualified name:
     "com.example.app.IRemoteService$Stub": {
         "obfuscated": "aaaa",
         "extends": "android.os.Binder",
-        "kind": "aidl_stub",
+        "kind": "class",
         "dex": "classes6.dex",
-        "aidl_descriptor": "com.example.app.IRemoteService",
-        "anchors": ["com.example.app.IRemoteService", "Transaction failed"],
         "source": "sigmatcher",
         "methods": { /* ... */ },
         "fields": { /* ... */ }
@@ -133,21 +131,12 @@ interface ClassEntry {
     extends?: string;
     kind?: ClassKind;
     dex?: string;
-    aidl_descriptor?: string;
-    anchors?: string[];
     methods?: MethodMap;
     fields?: FieldMap;
     source?: string;
 }
 
-type ClassKind =
-    | 'class'
-    | 'interface'
-    | 'enum'
-    | 'aidl_stub'
-    | 'aidl_callback'
-    | 'synthetic'
-    | 'anonymous';
+type ClassKind = 'class' | 'interface' | 'enum' | 'synthetic' | 'anonymous';
 ```
 
 | Field | Description |
@@ -156,8 +145,6 @@ type ClassKind =
 | `extends` | Parent class. Either a real name (must also be a key in `classes`) or an obfuscated name (for parents like `java.lang.Object` or framework helpers we don't have a real-name mapping for). |
 | `kind` | What kind of class this is. Drives V2+ runtime discovery — e.g. `synthetic` classes get skipped by adaptive strategies. |
 | `dex` | DEX shard the class lives in (`classes6.dex`). Optional debugging metadata. |
-| `aidl_descriptor` | The stable AIDL interface descriptor (`com.example.app.IRemoteService`). Cross-version anchor for `aidl_stub` and `aidl_callback` kinds. Checked at attach time by the health check. |
-| `anchors` | Stable string literals contained in the class. Checked at attach time against `klass.$anchorStrings`. Used by V2+ discovery strategies. |
 | `methods` | Methods keyed by real name. See [Methods](#methods). |
 | `fields` | Fields keyed by real name. See [Fields](#fields). |
 | `source` | Cross-reference into top-level `sources` — which tool contributed this entry. |
@@ -174,8 +161,7 @@ multiple overloads).
 "methods": {
     "requestPrompt": {
         "obfuscated": "f",
-        "signature": "(Landroid/os/Bundle;Lcccc;)V",
-        "aidl_txn": 3
+        "signature": "(Landroid/os/Bundle;Lcccc;)V"
     },
     "isComplete": {
         "obfuscated": "e",
@@ -191,13 +177,11 @@ multiple overloads).
     "requestTicket": [
         {
             "obfuscated": "c",
-            "signature": "(Landroid/os/Bundle;Lbbbb;)V",
-            "aidl_txn": 2
+            "signature": "(Landroid/os/Bundle;Lbbbb;)V"
         },
         {
             "obfuscated": "d",
-            "signature": "(Landroid/os/Bundle;Ljava/lang/String;Lbbbb;)V",
-            "aidl_txn": 4
+            "signature": "(Landroid/os/Bundle;Ljava/lang/String;Lbbbb;)V"
         }
     ]
 }
@@ -209,7 +193,6 @@ multiple overloads).
 interface MethodEntry {
     obfuscated: string;
     signature: string;
-    aidl_txn?: number;
     static?: boolean;
     synthetic?: boolean;
     is_constructor?: boolean;
@@ -222,7 +205,6 @@ type MethodMap = Record<string, MethodEntry | MethodEntry[]>;
 |---|---|
 | `obfuscated` | Obfuscated method name (`c`, `f`). Some methods keep their real names (`onTransact`, `values`, `valueOf`) — that's fine, just use the same string. |
 | `signature` | JVM descriptor with obfuscated class refs in `L...;` positions. Example: `(Landroid/os/Bundle;Lbbbb;)V`. The resolver parses this to translate `.overload(...)` calls. |
-| `aidl_txn` | AIDL transaction code, if this is a binder dispatch target. Stable per AIDL descriptor by aidl-compiler's assignment. |
 | `static` | Whether the method is static. |
 | `synthetic` | Whether the method is compiler-generated (e.g. bridge methods). |
 | `is_constructor` | `true` for `<init>` entries — constructors. |
@@ -305,14 +287,14 @@ type RosettaMapRegistry = Record<string, RosettaMap>;
 ```json
 {
     "3.4.5": {
-        "schema_version": 3,
+        "schema_version": 4,
         "app": "com.example.app",
         "version": "3.4.5",
         "version_code": 30405,
         "classes": {}
     },
     "3.4.6": {
-        "schema_version": 3,
+        "schema_version": 4,
         "app": "com.example.app",
         "version": "3.4.6",
         "version_code": 30406,
@@ -401,7 +383,6 @@ validation up front rather than at attach time.
 | `methods` per class         | 5 000                                            |
 | `fields` per class          | 5 000                                            |
 | method overloads (array)    | 200 (min 1)                                      |
-| `anchors` per class         | 1 000                                            |
 | `sources`                   | 100                                              |
 | `version_code`              | 9 007 199 254 740 991 (Number.MAX_SAFE_INTEGER, 2^53 − 1 — the full longVersionCode) |
 | obfuscated / short names    | 512 chars                                        |
@@ -440,13 +421,15 @@ New optional fields are additive: old maps continue to load against
 newer libraries (the library just sees `undefined` for the new
 fields).
 
-Breaking changes bump `schema_version`. The current schema is `3`
-(it removed `confidence`, tightened `captured_at` to an ISO date, let
-`signer_sha256` be an array of hashes, and added the optional
-`generated_from`, `status`, and `superseded_by` fields); `schema_version: 2`
-(and `1`) maps fail to load and must be re-emitted at version `3`. Future
-breaking changes will ship in-tree migrators (`3 → 4`, ...) so old
-maps keep loading after migration.
+Breaking changes bump `schema_version`. The current schema is `4`
+(it made the map a pure real→obfuscated mapping by removing the
+finding-evidence / AIDL fields no resolver read — `methodEntry.aidl_txn`,
+`classEntry.aidl_descriptor`, the `classEntry.anchors` array, and the
+`aidl_stub` / `aidl_callback` class kinds — which now live only in the
+signatures authoring source); `schema_version: 3` (and `2` / `1`) maps fail
+to load and must be re-emitted at version `4`. Future breaking changes will
+ship in-tree migrators (`4 → 5`, ...) so old maps keep loading after
+migration.
 
 !!! note "Bumping the schema version (maintainers)"
 

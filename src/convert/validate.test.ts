@@ -7,7 +7,7 @@ import { validateStructure } from './validate.js';
 import { MapValidationError } from '../errors.js';
 
 const MINIMAL = {
-    schema_version: 3,
+    schema_version: 4,
     version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
@@ -52,10 +52,8 @@ describe('validateStructure', () => {
                 IFoo: {
                     obfuscated: 'aaaa',
                     extends: 'java.lang.Object',
-                    kind: 'aidl_stub',
+                    kind: 'class',
                     dex: 'classes.dex',
-                    aidl_descriptor: 'com.example.app.IFoo',
-                    anchors: ['anchor-string'],
                     source: 'sigmatcher',
                     methods: {
                         bar: { obfuscated: 'a', signature: '()V' },
@@ -63,7 +61,6 @@ describe('validateStructure', () => {
                             {
                                 obfuscated: 'b',
                                 signature: '()V',
-                                aidl_txn: 1,
                                 static: false,
                                 synthetic: false,
                                 is_constructor: false,
@@ -78,12 +75,12 @@ describe('validateStructure', () => {
             },
         };
         const map = validateStructure(full);
-        expect(map.classes.IFoo?.kind).toBe('aidl_stub');
+        expect(map.classes.IFoo?.kind).toBe('class');
     });
 
     it('throws MapValidationError with issues on a bad map', () => {
         try {
-            validateStructure({ schema_version: 3, version_code: 1, app: 'x' });
+            validateStructure({ schema_version: 4, version_code: 1, app: 'x' });
             throw new Error('expected throw');
         } catch (e) {
             expect(e).toBeInstanceOf(MapValidationError);
@@ -95,7 +92,7 @@ describe('validateStructure', () => {
     it('formats a single-issue error count correctly', () => {
         try {
             validateStructure({
-                schema_version: 3,
+                schema_version: 4,
                 version_code: 1,
                 app: 'x',
                 version: '1.0',

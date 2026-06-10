@@ -23,7 +23,7 @@ import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import { makeCaptured, makeFakeFs, makeIo } from './helpers.js';
 
 const map = (version = '1.0.0'): RosettaMap => ({
-    schema_version: 3,
+    schema_version: 4,
     version_code: 1,
     app: 'com.example.app',
     version,
@@ -192,7 +192,7 @@ describe('runPatch', () => {
             'm.json':
                 '// canonical map with comments\n' +
                 '{\n' +
-                '    "schema_version": 3,\n' +
+                '    "schema_version": 4,\n' +
                 '    "version_code": 1,\n' +
                 '    "app": "com.example.app",\n' +
                 '    "version": "3.5.0",\n' +
@@ -210,7 +210,7 @@ describe('runPatch', () => {
             'b.js': emitMarkerBlock(map()),
             'm.json':
                 '{\n' +
-                '    "schema_version": 3,\n' +
+                '    "schema_version": 4,\n' +
                 '    "version_code": 1,\n' +
                 '    "app": "com.example.app",\n' +
                 '    "version": "3.5.0",\n' +
@@ -240,7 +240,7 @@ describe('runPatch', () => {
         // would have hit a bare TypeError in emit (exit 2); now a clean error.
         const fs = makeFakeFs({
             'b.js': emitMarkerBlock(map()),
-            'noclasses.json': '{"schema_version": 3, "app": "x", "version": "y"}',
+            'noclasses.json': '{"schema_version": 4, "app": "x", "version": "y"}',
         });
         const captured = makeCaptured();
         await expect(
@@ -251,7 +251,7 @@ describe('runPatch', () => {
     it('throws (minimal pre-emit validation) when a registry entry lacks `classes`', async () => {
         const fs = makeFakeFs({
             'b.js': emitMarkerBlock(map()),
-            'reg.json': JSON.stringify({ '1.0.0': { schema_version: 3, app: 'x', version: 'y' } }),
+            'reg.json': JSON.stringify({ '1.0.0': { schema_version: 4, app: 'x', version: 'y' } }),
         });
         const captured = makeCaptured();
         await expect(runPatch(['b.js', '--map', 'reg.json'], makeIo(fs, captured))).rejects.toThrow(

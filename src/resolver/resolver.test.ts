@@ -32,14 +32,14 @@ import { validateMap } from '../validate/schema.js';
 // exactly as production does.
 function buildMap(): RosettaMap {
     return {
-        schema_version: 3,
+        schema_version: 4,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
         classes: {
             'com.example.app.IRemoteService$Stub': {
                 obfuscated: 'aaaa',
-                kind: 'aidl_stub',
+                kind: 'class',
                 methods: {
                     // Single-overload form.
                     init: {
@@ -52,12 +52,10 @@ function buildMap(): RosettaMap {
                         {
                             obfuscated: 'c',
                             signature: '(Landroid/os/Bundle;Lbbbb;)V',
-                            aidl_txn: 2,
                         },
                         {
                             obfuscated: 'd',
                             signature: '(Landroid/os/Bundle;Ljava/lang/String;Lbbbb;)V',
-                            aidl_txn: 4,
                             static: true,
                         },
                     ],
@@ -69,7 +67,7 @@ function buildMap(): RosettaMap {
             },
             IServiceCallback: {
                 obfuscated: 'bbbb',
-                kind: 'aidl_callback',
+                kind: 'interface',
             },
             'com.example.app.PlainClass': {
                 obfuscated: 'cccc',
@@ -111,7 +109,7 @@ describe('ResolverImpl.resolveClass', () => {
         const r = h.resolver.resolveClass('com.example.app.IRemoteService$Stub');
         expect(r.realName).toBe('com.example.app.IRemoteService$Stub');
         expect(r.obfName).toBe('aaaa');
-        expect(r.entry.kind).toBe('aidl_stub');
+        expect(r.entry.kind).toBe('class');
         const last = h.events.at(-1);
         expect(last).toMatchObject({ source: 'map', obfName: 'aaaa' });
     });
@@ -183,7 +181,6 @@ describe('ResolverImpl.resolveMethod', () => {
             'IServiceCallback',
         ]);
         expect(m.obfName).toBe('c');
-        expect(m.aidlTxn).toBe(2);
         expect(m.signature).toBe('(Landroid/os/Bundle;Lbbbb;)V');
         expect(m.static).toBe(false);
         expect(m.allOverloads).toHaveLength(2);
@@ -198,7 +195,6 @@ describe('ResolverImpl.resolveMethod', () => {
             'IServiceCallback',
         ]);
         expect(m.obfName).toBe('d');
-        expect(m.aidlTxn).toBe(4);
         expect(m.static).toBe(true);
         expect(m.allOverloads[0]?.obfuscated).toBe('d');
     });
@@ -563,7 +559,7 @@ describe('ResolverImpl.reverseLookup', () => {
         // matching the Kotlin twin's putIfAbsent. (Object.entries preserves
         // insertion order for string keys, so 'com.example.app.First' wins.)
         const map = validateMap({
-            schema_version: 3,
+            schema_version: 4,
             version_code: 1,
             app: 'com.example.app',
             version: '1.0.0',
@@ -819,7 +815,7 @@ describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
     /** A map whose obfuscated targets point at framework classes. */
     function maliciousMap(): RosettaMap {
         return {
-            schema_version: 3,
+            schema_version: 4,
             version_code: 1,
             app: 'com.example.app',
             version: '1.0.0',
@@ -933,7 +929,7 @@ describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
 
     it('uses appPackage override to derive the app prefix when supplied', () => {
         const map: RosettaMap = {
-            schema_version: 3,
+            schema_version: 4,
             version_code: 1,
             app: 'com.example.app',
             version: '1.0.0',

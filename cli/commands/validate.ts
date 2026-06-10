@@ -10,8 +10,8 @@
  * (the old standalone `verify` verb, folded in here because it took the same
  * input, same output shape, and same exit codes as `validate` and differed
  * only by check depth). Semantic findings are classified by severity:
- *   - HARD errors (duplicate obfuscated names per dex, `aidl_txn` collisions,
- *     unparseable signatures) fail the build (exit 1).
+ *   - HARD errors (duplicate obfuscated names per dex, unparseable
+ *     signatures) fail the build (exit 1).
  *   - WARNINGS (heuristic cross-references: dangling `extends`, un-translated
  *     arg types) are reported but never fail the build.
  * `--json` emits the structured `VerifyIssue[]` for CI consumption.

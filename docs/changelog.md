@@ -12,6 +12,29 @@ public surface may still shift before 1.0.0.
 
 ## Unreleased
 
+### Map schema `3` → `4` (breaking)
+
+The published map is now a **pure real→obfuscated mapping**. The hard
+literal gate (`z.literal(4)`) rejects `schema_version: 3` (and `2`/`1`)
+maps — re-emit at version 4. Changes (tracking the canonical rosetta-maps
+schema):
+
+- **Removed every finding-evidence / AIDL field no resolver read:**
+  `methodEntry.aidl_txn`, `classEntry.aidl_descriptor`, the
+  `classEntry.anchors` array, and the `aidl_stub` / `aidl_callback` values
+  from the class `kind` enum (so `kind` is now only
+  `class | interface | enum | synthetic | anonymous`). An AIDL stub is
+  `kind: class`; a callback interface is `kind: interface`. These belong in
+  the signatures authoring source, never the emitted map.
+- **Health check simplified** to the target-namespace guard plus a
+  `Java.use(obfName)` load — there is no longer descriptor/anchor metadata
+  in the map to assert against.
+- **`rosetta validate --deep`** dropped the `aidl_txn`-collision semantic
+  check (the field is gone); it still flags duplicate obfuscated names per
+  dex and unparseable signatures.
+- The retained structural fields (`extends`, the remaining `kind` values,
+  `dex`) are unchanged.
+
 ### Removed the `.sha256` byte-hash sidecar from `rosetta pull` (#21)
 
 `rosetta pull` no longer fetches or verifies a detached
@@ -93,7 +116,7 @@ New public surface: `MapStatusEvent`, `MapRetractedError`, the
   cross-namespace false positives on real vendor apps (e.g. a
   `com.google.android.apps.*` app referencing `com.google.android.gms.*`). The
   semantic findings are classified by severity: duplicate obfuscated names per
-  dex, `aidl_txn` collisions, and unparseable signatures are HARD errors (exit
+  dex and unparseable signatures are HARD errors (exit
   1); the heuristic cross-references are WARNINGS that are reported but never
   fail the build (`VerifyIssue` gained a `severity` field).
 

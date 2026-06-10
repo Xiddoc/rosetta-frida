@@ -30,7 +30,7 @@ in [Maps — format](../maps/format.md)) with:
 
 ```json
 {
-    "schema_version": 3,
+    "schema_version": 4,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -45,13 +45,11 @@ in [Maps — format](../maps/format.md)) with:
     "classes": {
         "com.example.app.IRemoteService$Stub": {
             "obfuscated": "aaaa",
-            "kind": "aidl_stub",
-            "aidl_descriptor": "com.example.app.IRemoteService",
+            "kind": "class",
             "methods": {
                 "requestTicket": {
                     "obfuscated": "c",
-                    "signature": "(Landroid/os/Bundle;Lbbbb;)V",
-                    "aidl_txn": 2
+                    "signature": "(Landroid/os/Bundle;Lbbbb;)V"
                 }
             },
             "fields": {

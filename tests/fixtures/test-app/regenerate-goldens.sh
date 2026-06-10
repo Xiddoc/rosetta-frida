@@ -89,10 +89,10 @@ EOF
 
 cat >"$CLASS_KIND_MAP_FILE" <<'EOF'
 {
-    "com.example.testapp.IRemoteService$Stub": "aidl_stub",
+    "com.example.testapp.IRemoteService$Stub": "class",
     "com.example.testapp.IRemoteService": "interface",
-    "com.example.testapp.IServiceCallback$Stub": "aidl_stub",
-    "com.example.testapp.IServiceCallback": "aidl_callback",
+    "com.example.testapp.IServiceCallback$Stub": "class",
+    "com.example.testapp.IServiceCallback": "interface",
     "com.example.testapp.Config": "class",
     "com.example.testapp.BlobCache": "class",
     "com.example.testapp.RemoteService": "class",

@@ -38,7 +38,7 @@ import { parseJson } from 'rosetta-frida';
 
 const source = `
 {
-    "schema_version": 3,
+    "schema_version": 4,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -55,20 +55,18 @@ YAML conversion uses the [`yaml`](https://eemeli.org/yaml/) package
 
 ```yaml
 # rosetta-frida map — com.example.app @ 3.4.5
-schema_version: 3
+schema_version: 4
 app: com.example.app
 version: "3.4.5"
 version_code: 30405
 classes:
   com.example.app.IRemoteService$Stub:
     obfuscated: aaaa
-    kind: aidl_stub
-    aidl_descriptor: com.example.app.IRemoteService
+    kind: class
     methods:
       requestTicket:
         obfuscated: c
         signature: "(Landroid/os/Bundle;Lbbbb;)V"
-        aidl_txn: 2
 ```
 
 Convert to the canonical JSON artifact:

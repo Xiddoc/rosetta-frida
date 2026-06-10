@@ -70,8 +70,6 @@ export const MAX_METHODS_PER_CLASS = 5_000;
 export const MAX_FIELDS_PER_CLASS = 5_000;
 /** Max number of overloads in a single method-map value array. */
 export const MAX_METHOD_OVERLOADS = 200;
-/** Max number of anchors on a single class. */
-export const MAX_ANCHORS = 1_000;
 /** Max number of provenance sources on a map. */
 export const MAX_SOURCES = 100;
 /** Max length for obfuscated / short-name strings. */
@@ -184,8 +182,6 @@ export const classKindSchema: z.ZodType<ClassKind> = z.union([
     z.literal('class'),
     z.literal('interface'),
     z.literal('enum'),
-    z.literal('aidl_stub'),
-    z.literal('aidl_callback'),
     z.literal('synthetic'),
     z.literal('anonymous'),
 ]);
@@ -210,7 +206,6 @@ export const methodEntrySchema: z.ZodType<MethodEntry> = z
     .object({
         obfuscated: z.string().min(1).max(MAX_SHORT_NAME_LEN),
         signature: z.string().min(1).max(MAX_SIGNATURE_LEN),
-        aidl_txn: z.number().int().optional(),
         static: z.boolean().optional(),
         synthetic: z.boolean().optional(),
         is_constructor: z.boolean().optional(),
@@ -259,8 +254,6 @@ export const classEntrySchema = z
         extends: z.string().max(MAX_FREE_STRING_LEN).optional(),
         kind: classKindSchema.optional(),
         dex: z.string().max(MAX_FREE_STRING_LEN).optional(),
-        aidl_descriptor: z.string().max(MAX_FREE_STRING_LEN).optional(),
-        anchors: z.array(z.string().max(MAX_FREE_STRING_LEN)).max(MAX_ANCHORS).optional(),
         methods: methodMapSchema.optional(),
         fields: fieldMapSchema.optional(),
         source: z.string().max(MAX_FREE_STRING_LEN).optional(),

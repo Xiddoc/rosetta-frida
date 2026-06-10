@@ -123,7 +123,7 @@ framework base type, that base type is your anchor.
 
 ```text
 [rosetta] detect auto: com.example.app@3.4.5
-[rosetta] map-load com.example.app@3.4.5 schema=2 classes=15
+[rosetta] map-load com.example.app@3.4.5 schema=4 classes=15
 [rosetta] health-check PASS rate=100.0% threshold=80.0% failures=0
 [rosetta] com.example.app.sync.UploadJobService ← q3 (map)
 [rosetta] com.example.app.sync.UploadJobService.onStartJob ← onStartJob (map) (Landroid/app/job/JobParameters;)Z
