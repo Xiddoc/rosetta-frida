@@ -107,20 +107,7 @@ jobs:
             # `npm pack --dry-run --json` lists the exact files without
             # producing an artifact.
             - name: Tarball contains dist/ + maps/, excludes src/ + tests
-              run: |
-                  files="$(npm pack --dry-run --json | node -e '
-                      const pkgs = JSON.parse(require("fs").readFileSync(0, "utf8"));
-                      for (const f of pkgs[0].files) console.log(f.path);
-                  ')"
-                  echo "::group::packed files"
-                  echo "$files"
-                  echo "::endgroup::"
-                  echo "$files" | grep -q "^dist/" || { echo "::error::tarball missing dist/"; exit 1; }
-                  echo "$files" | grep -q "^maps/" || { echo "::error::tarball missing maps/"; exit 1; }
-                  if echo "$files" | grep -qE "^src/|(^|/)tests/|\.test\.ts$"; then
-                      echo "::error::tarball leaks source or tests"; exit 1
-                  fi
-                  echo "package contents OK"
+              run: bash scripts/check-pack.sh
 
     cli-smoke:
         name: cli smoke test

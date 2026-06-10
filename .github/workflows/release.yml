@@ -34,6 +34,7 @@ jobs:
     publish:
         name: build, verify & publish to npm
         runs-on: ubuntu-latest
+        timeout-minutes: 15
 
         steps:
             - uses: actions/checkout@v4
@@ -78,18 +79,7 @@ jobs:
             # `src/` or tests. `npm pack --dry-run --json` lists the exact
             # files without producing an artifact.
             - name: Verify package contents (files allowlist)
-              run: |
-                  files="$(npm pack --dry-run --json | node -e '
-                      const pkgs = JSON.parse(require("fs").readFileSync(0, "utf8"));
-                      for (const f of pkgs[0].files) console.log(f.path);
-                  ')"
-                  echo "$files"
-                  echo "$files" | grep -q "^dist/"  || { echo "::error::tarball missing dist/"; exit 1; }
-                  echo "$files" | grep -q "^maps/"  || { echo "::error::tarball missing maps/"; exit 1; }
-                  if echo "$files" | grep -qE "^src/|(^|/)tests/|\.test\.ts$"; then
-                      echo "::error::tarball leaks source or tests"; exit 1
-                  fi
-                  echo "package contents OK"
+              run: bash scripts/check-pack.sh
 
             # Publish with OIDC provenance. `prepublishOnly` re-runs
             # build + verify as a final belt-and-suspenders gate.
