@@ -1,10 +1,10 @@
 # CLI overview
 
-The `rosetta` CLI lives in this repo. Until the npm package ships, run
-it from a source checkout with `npm run cli -- <command>` (the examples
-below show `rosetta <command>` for brevity). Once the npm package is
-published, `npx rosetta <command>` and a `node_modules/.bin/rosetta`
-binary will be available.
+The `rosetta` CLI ships with the npm package: after
+`npm install rosetta-frida`, run `npx rosetta <command>` (or the
+`node_modules/.bin/rosetta` binary). From a source checkout, run it with
+`npm run cli -- <command>` instead (the examples below show
+`rosetta <command>` for brevity).
 
 ## Commands
 
