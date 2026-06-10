@@ -191,8 +191,9 @@ compiled bundle unchanged).
 ## Status
 
 V1.0 is functionally complete and exercised by a full test suite at
-100% line/branch/function/statement coverage. Install it from npm
-(`npm install rosetta-frida`) or clone and build from source — see
+100% line/branch/function/statement coverage. Today, install it by
+cloning and building from source; once the first release is tagged it
+will also be available from npm (`npm install rosetta-frida`) — see
 [Installation](getting-started/installation.md). Publishing is
 tag-driven: a `v*` version tag triggers a release that rebuilds,
 re-runs the coverage gate, and publishes with npm provenance. For the

@@ -7,6 +7,12 @@ a CLI, `rosetta`, for map authoring and bundle manipulation.
 
 ## Install (npm)
 
+> **Availability:** the npm package becomes available with the first
+> tagged release (`v*`). Until that lands, install by building from
+> source (see below) — that is the working path today.
+
+Once the first release is published, install it from npm:
+
 ```sh
 npm install rosetta-frida
 ```
