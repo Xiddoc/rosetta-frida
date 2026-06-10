@@ -82,6 +82,46 @@ jobs:
                   path: coverage/
                   retention-days: 14
 
+    pack-smoke:
+        name: pack smoke test (files allowlist)
+        runs-on: ubuntu-latest
+        needs: verify
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: npm
+
+            - run: npm ci
+
+            - name: Build
+              run: npm run build
+
+            # Assert the publish tarball ships the right thing: the `files`
+            # allowlist in package.json must include `dist/` and `maps/` and
+            # must NOT leak `src/` or tests. This catches an allowlist
+            # regression on every PR, long before a release tag is pushed.
+            # `npm pack --dry-run --json` lists the exact files without
+            # producing an artifact.
+            - name: Tarball contains dist/ + maps/, excludes src/ + tests
+              run: |
+                  files="$(npm pack --dry-run --json | node -e '
+                      const pkgs = JSON.parse(require("fs").readFileSync(0, "utf8"));
+                      for (const f of pkgs[0].files) console.log(f.path);
+                  ')"
+                  echo "::group::packed files"
+                  echo "$files"
+                  echo "::endgroup::"
+                  echo "$files" | grep -q "^dist/" || { echo "::error::tarball missing dist/"; exit 1; }
+                  echo "$files" | grep -q "^maps/" || { echo "::error::tarball missing maps/"; exit 1; }
+                  if echo "$files" | grep -qE "^src/|(^|/)tests/|\.test\.ts$"; then
+                      echo "::error::tarball leaks source or tests"; exit 1
+                  fi
+                  echo "package contents OK"
+
     cli-smoke:
         name: cli smoke test
         runs-on: ubuntu-latest
