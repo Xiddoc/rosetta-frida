@@ -82,6 +82,33 @@ jobs:
                   path: coverage/
                   retention-days: 14
 
+    pack-smoke:
+        name: pack smoke test (files allowlist)
+        runs-on: ubuntu-latest
+        needs: verify
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: npm
+
+            - run: npm ci
+
+            - name: Build
+              run: npm run build
+
+            # Assert the publish tarball ships the right thing: the `files`
+            # allowlist in package.json must include `dist/` and `maps/` and
+            # must NOT leak `src/` or tests. This catches an allowlist
+            # regression on every PR, long before a release tag is pushed.
+            # `npm pack --dry-run --json` lists the exact files without
+            # producing an artifact.
+            - name: Tarball contains dist/ + maps/, excludes src/ + tests
+              run: bash scripts/check-pack.sh
+
     cli-smoke:
         name: cli smoke test
         runs-on: ubuntu-latest

@@ -191,8 +191,10 @@ compiled bundle unchanged).
 ## Status
 
 V1.0 is functionally complete and exercised by a full test suite at
-100% line/branch/function/statement coverage. The library has not yet
-been published to npm (publishing is deliberately deferred); clone and
-build from source to try it now — see
-[Installation](getting-started/installation.md). For the milestone
-overview, see the [Roadmap](roadmap.md).
+100% line/branch/function/statement coverage. Today, install it by
+cloning and building from source; once the first release is tagged it
+will also be available from npm (`npm install rosetta-frida`) — see
+[Installation](getting-started/installation.md). Publishing is
+tag-driven: a `v*` version tag triggers a release that rebuilds,
+re-runs the coverage gate, and publishes with npm provenance. For the
+milestone overview, see the [Roadmap](roadmap.md).
