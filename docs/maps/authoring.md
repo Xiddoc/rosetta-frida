@@ -114,7 +114,7 @@ Open the file and replace the example with real classes:
 
 ```json
 {
-    "schema_version": 4,
+    "schema_version": 5,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -177,7 +177,7 @@ npx rosetta validate maps/com.example.app/30405.json
 Success:
 
 ```text
-OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=4
+OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=5
 ```
 
 Failure surfaces specific issues:

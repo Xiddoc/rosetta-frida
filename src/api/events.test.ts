@@ -14,7 +14,7 @@ import { createEventsApi } from './events.js';
 
 function buildMap(): RosettaMap {
     return {
-        schema_version: 4,
+        schema_version: 5,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',

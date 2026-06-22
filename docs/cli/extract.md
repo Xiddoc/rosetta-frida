@@ -37,7 +37,7 @@ extract: wrote extracted.json (single)
 
 $ head -3 extracted.json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "app": "com.example.app",
 ```
 

@@ -7,7 +7,7 @@ import { validateStructure } from './validate.js';
 import { MapValidationError } from '../errors.js';
 
 const MINIMAL = {
-    schema_version: 4,
+    schema_version: 5,
     version_code: 1,
     app: 'com.example.app',
     version: '1.0.0',
@@ -36,7 +36,6 @@ describe('validateStructure', () => {
                     tool: 'sigmatcher',
                     config: 'sig.json',
                     classes: 1,
-                    notes: 'ok',
                 },
             ],
         };
@@ -80,7 +79,7 @@ describe('validateStructure', () => {
 
     it('throws MapValidationError with issues on a bad map', () => {
         try {
-            validateStructure({ schema_version: 4, version_code: 1, app: 'x' });
+            validateStructure({ schema_version: 5, version_code: 1, app: 'x' });
             throw new Error('expected throw');
         } catch (e) {
             expect(e).toBeInstanceOf(MapValidationError);
@@ -92,7 +91,7 @@ describe('validateStructure', () => {
     it('formats a single-issue error count correctly', () => {
         try {
             validateStructure({
-                schema_version: 4,
+                schema_version: 5,
                 version_code: 1,
                 app: 'x',
                 version: '1.0',

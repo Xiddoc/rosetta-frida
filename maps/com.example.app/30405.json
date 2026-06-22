@@ -1,5 +1,5 @@
 {
-    "schema_version": 4,
+    "schema_version": 5,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -17,8 +17,7 @@
         },
         {
             "tool": "hand-authored",
-            "classes": 5,
-            "notes": "verified via Frida runtime trace on emulator"
+            "classes": 5
         }
     ],
     "classes": {

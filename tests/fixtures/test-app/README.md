@@ -195,14 +195,14 @@ tests/fixtures/test-app/
 - The AIDL `*.Stub` classes are `-keep`-protected because the binder
   runtime resolves them by descriptor string; the descriptor is
   finding-evidence the sigmatcher signatures source uses to locate
-  them. The emitted `schema_version: 4` map is a pure real→obfuscated
+  them. The emitted `schema_version: 5` map is a pure real→obfuscated
   mapping, so it carries no `aidl_descriptor` field — the stub is just
   `kind: class`.
 - The `ROSETTA_ANCHOR` string constants on `Config`, `BlobCache`, and
   `RemoteService` survive R8 because they're `static final String`
   initializers reached by live code; sigmatcher uses them as discovery
   anchors in the SIGNATURES source. They are authoring input only — the
-  schema-4 map no longer carries an `anchors` array.
+  schema-5 map no longer carries an `anchors` array.
 - `PromiseCallback`'s anchor is deliberately named `PROMISE_ANCHOR`, not
   `ROSETTA_ANCHOR`. `RemoteServiceClient` implements the interface and
   declares its own `ROSETTA_ANCHOR` field; a same-named static field

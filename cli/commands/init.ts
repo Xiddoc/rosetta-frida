@@ -104,7 +104,6 @@ export function renderSkeleton(app: string, version: string, version_code: numbe
             {
                 tool: 'hand-authored',
                 classes: 1,
-                notes: 'initial scaffold',
             },
         ],
         classes: {

@@ -6,7 +6,7 @@ A library that lets you write Frida hooks against **real (unobfuscated)
 class and method names**, with a translation layer that resolves them
 to the obfuscated names that actually exist at runtime in the target
 app. The translation tables are **per-app, per-version** JSON maps
-(`schema_version: 3`) that the library loads at attach time.
+(`schema_version: 5`) that the library loads at attach time.
 
 Write once, hook many versions.
 
@@ -126,7 +126,7 @@ the same way. See `docs/api/` for the full surface.
 schema now lives in the separate
 [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo
 (`schema/rosetta-map.schema.json` — the source of truth for the
-`schema_version: 3` format). rosetta-frida is the **first-class
+`schema_version: 5` format). rosetta-frida is the **first-class
 client** of that schema: its Zod validator (`src/validate/schema.ts`)
 _tracks_ the canonical schema rather than defining it.
 `rosetta-xposed` (Kotlin) is the other client. (There is no cross-repo
@@ -134,7 +134,7 @@ or git-URL dependency yet — that waits for an npm phase; the Zod
 validator simply mirrors the canonical shape.)
 
 **Resolved (post-RFC-0001):** the canonical on-disk artifact is
-**strict JSON** (`schema_version: 3`), one file per
+**strict JSON** (`schema_version: 5`), one file per
 `(app, version_code)`, stored under a maps directory loaded at attach
 time. YAML and TS modules remain _authoring inputs_ converted to JSON
 via `rosetta convert` — the YAML below is shown for authoring
@@ -214,7 +214,7 @@ Two repos at maturity:
 - **[`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps)** (separate
   repo, **scaffolded**) — **owns the canonical, language-neutral map
   schema** (`schema/rosetta-map.schema.json`, the source of truth for the
-  `schema_version: 3` format) plus contributed maps and the sigmatcher
+  `schema_version: 5` format) plus contributed maps and the sigmatcher
   signatures they're generated from. PR-gated by automated schema
   validation that runs a language-neutral JSON Schema checker
   (check-jsonschema) directly against the canonical
@@ -304,13 +304,18 @@ map's authoritative `version_code` key.
 
 ### 7. Versioning the mapping file format itself
 
-Current schema is **`3`**. Schema 2 (the RFC-0001 app-identity refinement)
+Current schema is **`5`**. Schema 2 (the RFC-0001 app-identity refinement)
 made `version_code` required, added the optional `signer_sha256` guard, and
 dropped `apk_sha256`; schema 3 then removed `confidence`, tightened
 `captured_at` to an ISO date, let `signer_sha256` be a match-any array, and
-added the optional `generated_from` / `status` / `superseded_by` fields. The
-literal is a hard gate (`z.literal(3)`); `schema_version: 1` and `2` maps are
-rejected and must be re-emitted at version `3`.
+added the optional `generated_from` / `status` / `superseded_by` fields;
+schema 4 dropped the AIDL/Binder-specific fields (`aidl_descriptor`,
+`aidl_txn`, the `aidl_stub` / `aidl_callback` kinds) and the descriptive
+`anchors[]` array; schema 5 removed the free-form `sources[].notes` string
+(human provenance prose has no reader in the resolved artifact — it belongs
+in a `signatures/<app>/signatures.yaml` comment). The literal is a hard gate
+(`z.literal(5)`); `schema_version: 1`–`4` maps are rejected and must be
+re-emitted at version `5`.
 
 ## When to NOT use rosetta-frida (anti-scope)
 
@@ -342,7 +347,7 @@ V2 roadmap (`docs/reference/design.md`). When picking up work here:
 2. **Honour the locked type contracts in `src/types/`** — downstream
    code depends on those shapes; sketch the contract first when adding
    a subsystem.
-3. **Keep maps strict JSON, `schema_version: 3`, with a `version_code`.**
+3. **Keep maps strict JSON, `schema_version: 5`, with a `version_code`.**
    YAML/TS are authoring inputs converted via `rosetta convert`.
 4. **Maintain the 100% coverage gate** (`npm run verify`); co-locate
    tests with source and use the Frida mock under `tests/mocks/`.

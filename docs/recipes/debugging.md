@@ -244,7 +244,7 @@ Before running a bundle, audit it:
 
 ```sh
 $ npx rosetta inspect hook.bundle.js
-com.example.app@3.4.5, schema_version 4, 15 classes
+com.example.app@3.4.5, schema_version 5, 15 classes
 
 $ npx rosetta extract hook.bundle.js -o snapshot.json
 $ jq '.classes | keys' snapshot.json

@@ -25,7 +25,7 @@ objects, an enum, a synthetic Companion, an anonymous inner class.
 
 ```typescript
 interface RosettaMap {
-    schema_version: 4;
+    schema_version: 5;
     app: string;
     version: string;
     version_code: number;
@@ -287,14 +287,14 @@ type RosettaMapRegistry = Record<string, RosettaMap>;
 ```json
 {
     "3.4.5": {
-        "schema_version": 4,
+        "schema_version": 5,
         "app": "com.example.app",
         "version": "3.4.5",
         "version_code": 30405,
         "classes": {}
     },
     "3.4.6": {
-        "schema_version": 4,
+        "schema_version": 5,
         "app": "com.example.app",
         "version": "3.4.6",
         "version_code": 30406,

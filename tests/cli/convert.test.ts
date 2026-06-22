@@ -9,7 +9,7 @@ import type { FsLike } from '../../cli/commands/io.js';
 import { makeCaptured, makeFakeFs, makeFsLike, makeIo, type FakeFs } from './helpers.js';
 
 const VALID_YAML = `
-schema_version: 4
+schema_version: 5
 app: com.example.app
 version: "1.0.0"
 version_code: 100
