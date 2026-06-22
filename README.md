@@ -5,7 +5,7 @@
 > actually exist at runtime. Write once, hook many versions.
 
 [![CI](https://github.com/Xiddoc/rosetta-frida/actions/workflows/ci.yml/badge.svg)](https://github.com/Xiddoc/rosetta-frida/actions/workflows/ci.yml)
-[![Docs](https://github.com/Xiddoc/rosetta-frida/actions/workflows/pages.yml/badge.svg)](https://xiddoc.github.io/rosetta-frida/)
+[![Docs](https://github.com/Xiddoc/rosetta-frida/actions/workflows/pages.yml/badge.svg)](https://iliketo.party/rosetta-frida/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ## What it is
@@ -36,7 +36,7 @@ Java.perform(() => {
 
 Same source, any version that has a map. The rotation problem
 disappears. Full walkthrough in the
-[quick start](https://xiddoc.github.io/rosetta-frida/getting-started/quick-start/).
+[quick start](https://iliketo.party/rosetta-frida/getting-started/quick-start/).
 
 ## Install
 
@@ -70,21 +70,21 @@ npm run build
 ```
 
 See the
-[installation guide](https://xiddoc.github.io/rosetta-frida/getting-started/installation/)
+[installation guide](https://iliketo.party/rosetta-frida/getting-started/installation/)
 for requirements and details.
 
 ## Documentation
 
-Full docs are published to **[GitHub Pages](https://xiddoc.github.io/rosetta-frida/)**
+Full docs are published to **[GitHub Pages](https://iliketo.party/rosetta-frida/)**
 (source under [`docs/`](docs/index.md)):
 
-- [Getting started](https://xiddoc.github.io/rosetta-frida/getting-started/quick-start/) — install, quick start, concepts
-- [API reference](https://xiddoc.github.io/rosetta-frida/api/overview/) — the three-tier hook API + session
-- [Map format & authoring](https://xiddoc.github.io/rosetta-frida/maps/format/) — schema 3, `version_code`, authoring
-- [CLI reference](https://xiddoc.github.io/rosetta-frida/cli/overview/) — `init`, `pull`, `validate`, `convert`, `patch`, `extract`, `inspect`
-- [Recipes](https://xiddoc.github.io/rosetta-frida/recipes/aidl-stub-hook/) — common hook patterns
-- [Design](https://xiddoc.github.io/rosetta-frida/reference/design/) and [Roadmap](https://xiddoc.github.io/rosetta-frida/roadmap/) — architecture and what's next
-- [Contributing](https://xiddoc.github.io/rosetta-frida/contributing/) — dev setup, the verify pipeline, conventions
+- [Getting started](https://iliketo.party/rosetta-frida/getting-started/quick-start/) — install, quick start, concepts
+- [API reference](https://iliketo.party/rosetta-frida/api/overview/) — the three-tier hook API + session
+- [Map format & authoring](https://iliketo.party/rosetta-frida/maps/format/) — schema 3, `version_code`, authoring
+- [CLI reference](https://iliketo.party/rosetta-frida/cli/overview/) — `init`, `pull`, `validate`, `convert`, `patch`, `extract`, `inspect`
+- [Recipes](https://iliketo.party/rosetta-frida/recipes/aidl-stub-hook/) — common hook patterns
+- [Design](https://iliketo.party/rosetta-frida/reference/design/) and [Roadmap](https://iliketo.party/rosetta-frida/roadmap/) — architecture and what's next
+- [Contributing](https://iliketo.party/rosetta-frida/contributing/) — dev setup, the verify pipeline, conventions
 
 ## License
 
