@@ -6,7 +6,7 @@ site_description: >-
 site_author: rosetta-frida contributors
 # Canonical site URL — matches package.json `homepage`; fixes canonical
 # links / sitemap absolute URLs in the built site.
-site_url: https://xiddoc.github.io/rosetta-frida/
+site_url: https://iliketo.party/rosetta-frida/
 repo_url: https://github.com/Xiddoc/rosetta-frida
 repo_name: Xiddoc/rosetta-frida
 edit_uri: edit/master/docs/
