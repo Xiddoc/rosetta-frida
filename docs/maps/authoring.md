@@ -114,14 +114,14 @@ Open the file and replace the example with real classes:
 
 ```json
 {
-    "schema_version": 4,
+    "schema_version": 5,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
     "captured_at": "2026-05-13",
     "sources": [
         { "tool": "sigmatcher", "config": "signatures/example.json", "classes": 12 },
-        { "tool": "hand-authored", "classes": 3, "notes": "verified on emulator" }
+        { "tool": "hand-authored", "classes": 3 }
     ],
     "classes": {
         "com.example.app.IRemoteService$Stub": {
@@ -149,7 +149,7 @@ of classes — including deep internal ones with no exposed API. See the
 [superclass-anchored](../recipes/superclass-anchored-method.md) recipes.
 
 > **Anchors live in the signatures source, not the map.** As of
-> `schema_version: 4` the published map is a *pure* real→obfuscated
+> `schema_version: 5` the published map is a *pure* real→obfuscated
 > mapping: it carries no `anchors`, `aidl_descriptor`, or `aidl_txn`
 > fields, and no `aidl_stub` / `aidl_callback` class kinds (AIDL stubs are
 > just `kind: class`, callbacks `kind: interface`). The stable strings,
@@ -177,7 +177,7 @@ npx rosetta validate maps/com.example.app/30405.json
 Success:
 
 ```text
-OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=4
+OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=5
 ```
 
 Failure surfaces specific issues:

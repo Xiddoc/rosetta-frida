@@ -28,7 +28,7 @@ import { MockFrida, installFridaMock, resetFridaMock } from '../../tests/mocks/i
 
 function buildMap(): RosettaMap {
     return {
-        schema_version: 4,
+        schema_version: 5,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
@@ -545,7 +545,7 @@ describe('hook — descriptor parser edge cases', () => {
         installHook: () => HookHandle;
     } {
         const map: RosettaMap = {
-            schema_version: 4,
+            schema_version: 5,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',

@@ -44,7 +44,7 @@ describe('sigmatcherRawToRosettaMap — single class', () => {
 
         const map = sigmatcherRawToRosettaMap(raw, BASE_OPTIONS);
 
-        expect(map.schema_version).toBe(4);
+        expect(map.schema_version).toBe(5);
         expect(map.app).toBe('com.example.testapp');
         expect(map.version).toBe('1.0.0');
         expect(map.version_code).toBe(100);

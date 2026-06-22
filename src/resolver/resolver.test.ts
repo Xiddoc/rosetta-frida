@@ -32,7 +32,7 @@ import { validateMap } from '../validate/schema.js';
 // exactly as production does.
 function buildMap(): RosettaMap {
     return {
-        schema_version: 4,
+        schema_version: 5,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
@@ -559,7 +559,7 @@ describe('ResolverImpl.reverseLookup', () => {
         // matching the Kotlin twin's putIfAbsent. (Object.entries preserves
         // insertion order for string keys, so 'com.example.app.First' wins.)
         const map = validateMap({
-            schema_version: 4,
+            schema_version: 5,
             version_code: 1,
             app: 'com.example.app',
             version: '1.0.0',
@@ -815,7 +815,7 @@ describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
     /** A map whose obfuscated targets point at framework classes. */
     function maliciousMap(): RosettaMap {
         return {
-            schema_version: 4,
+            schema_version: 5,
             version_code: 1,
             app: 'com.example.app',
             version: '1.0.0',
@@ -929,7 +929,7 @@ describe('ResolverImpl — target-namespace guard (RFC 0001 C1)', () => {
 
     it('uses appPackage override to derive the app prefix when supplied', () => {
         const map: RosettaMap = {
-            schema_version: 4,
+            schema_version: 5,
             version_code: 1,
             app: 'com.example.app',
             version: '1.0.0',

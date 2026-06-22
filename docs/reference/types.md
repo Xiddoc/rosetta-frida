@@ -23,7 +23,7 @@ Defined in `src/types/map.ts`.
 
 ```typescript
 interface RosettaMap {
-    schema_version: 4;
+    schema_version: 5;
     app: string;
     version: string; // versionName label — fuzzy fallback only
     version_code: number; // authoritative selection key
@@ -62,7 +62,6 @@ interface MapSource {
     tool: string;
     config?: string;
     classes?: number;
-    notes?: string;
 }
 ```
 

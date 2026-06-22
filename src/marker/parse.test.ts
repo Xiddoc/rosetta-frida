@@ -19,7 +19,7 @@ import { parseMarkerBlock } from './parse.js';
 
 function minimalMap(): RosettaMap {
     return {
-        schema_version: 4,
+        schema_version: 5,
         version_code: 1,
         app: 'com.example.app',
         version: '1.2.3',
@@ -29,7 +29,7 @@ function minimalMap(): RosettaMap {
 
 function richishMap(version = '1.2.3'): RosettaMap {
     return {
-        schema_version: 4,
+        schema_version: 5,
         version_code: 1,
         app: 'com.example.app',
         version,
@@ -223,7 +223,7 @@ describe('parseMarkerBlock — failure modes', () => {
         const literal =
             'const __rosetta_map = ' +
             JSON.stringify({
-                schema_version: 4,
+                schema_version: 5,
                 version_code: 1,
                 app: 'x',
                 version: 'y',
@@ -248,7 +248,7 @@ describe('parseMarkerBlock — failure modes', () => {
         // hand-edited bundle might not. parse should still complete and
         // bound the range at the end of the marker text itself.
         const payload = JSON.stringify({
-            schema_version: 4,
+            schema_version: 5,
             version_code: 1,
             app: 'x',
             version: 'y',

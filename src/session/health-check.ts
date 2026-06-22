@@ -12,7 +12,7 @@
  *   1. For every allowed mapped class, attempt `Java.use(obfName)`.
  *      Failed lookups mark the class as a failure.
  *
- * The map is a pure real→obfuscated mapping (schema_version 4), so there
+ * The map is a pure real→obfuscated mapping (schema_version 5), so there
  * is nothing further to assert against a loaded class — the
  * finding-evidence (AIDL descriptors, anchor string literals) that earlier
  * schema versions carried lived only in the signatures authoring source and

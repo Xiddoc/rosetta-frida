@@ -18,7 +18,7 @@ const readFileMock = vi.mocked(readFile);
 // validates + normalises, and the array form round-trips unchanged, so
 // `resolves.toEqual(validMap)` holds.
 const validMap: RosettaMap = {
-    schema_version: 4,
+    schema_version: 5,
     version_code: 1,
     app: 'com.example.app',
     version: '1.2.3',
@@ -87,7 +87,7 @@ describe('loadMap — object input', () => {
     });
 
     it('throws MapValidationError on an invalid object', async () => {
-        const bad = { schema_version: 4, version_code: 1, app: 'a' } as unknown as RosettaMap;
+        const bad = { schema_version: 5, version_code: 1, app: 'a' } as unknown as RosettaMap;
         await expect(loadMap(bad)).rejects.toBeInstanceOf(MapValidationError);
     });
 

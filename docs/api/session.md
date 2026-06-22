@@ -428,7 +428,7 @@ try {
 
 Before any user hook runs, the session iterates the loaded map's
 classes and verifies each one resolves via `Java.use(obfName)` (after the
-target-namespace guard). Since the `schema_version: 4` map is a pure
+target-namespace guard). Since the `schema_version: 5` map is a pure
 real→obfuscated mapping, a successful load is the whole check — there is
 no descriptor or anchor metadata in the map to assert against.
 

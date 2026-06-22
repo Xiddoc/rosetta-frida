@@ -34,7 +34,7 @@ schema](../maps/format.md#validation) check, then prints either:
 **Pass:**
 
 ```text
-OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=4
+OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=5
 ```
 
 Exit code 0.
@@ -55,14 +55,14 @@ Exit code 1.
 
 ```sh
 $ npx rosetta validate maps/com.example.app/30405.json
-OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=4
+OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=5
 ```
 
 ### YAML
 
 ```sh
 $ npx rosetta validate maps/com.example.app/3.4.5.yaml
-OK: maps/com.example.app/3.4.5.yaml — com.example.app@3.4.5, 15 class(es), schema_version=4
+OK: maps/com.example.app/3.4.5.yaml — com.example.app@3.4.5, 15 class(es), schema_version=5
 ```
 
 ### TS/JS module → refused
@@ -145,11 +145,11 @@ that differed only by check depth. Findings are classified by severity:
 
 ```sh
 $ npx rosetta validate maps/com.example.app/30405.json --deep
-rosetta validate: OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=4, consistent
+rosetta validate: OK: maps/com.example.app/30405.json — com.example.app@3.4.5, 15 class(es), schema_version=5, consistent
 
 # a heuristic warning is reported but does NOT fail the build (exit 0):
 $ npx rosetta validate maps/com.example.app/partial.json --deep
-rosetta validate: OK: maps/com.example.app/partial.json — com.example.app@3.4.5, 12 class(es), schema_version=4 (1 warning)
+rosetta validate: OK: maps/com.example.app/partial.json — com.example.app@3.4.5, 12 class(es), schema_version=5 (1 warning)
   warning at classes.com.example.app.Child.extends: extends app class 'com.example.app.Base' which is not a key in classes
 
 # a hard error fails (exit 1):

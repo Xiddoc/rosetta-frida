@@ -30,7 +30,7 @@ in [Maps — format](../maps/format.md)) with:
 
 ```json
 {
-    "schema_version": 4,
+    "schema_version": 5,
     "app": "com.example.app",
     "version": "3.4.5",
     "version_code": 30405,
@@ -38,8 +38,7 @@ in [Maps — format](../maps/format.md)) with:
     "sources": [
         {
             "tool": "hand-authored",
-            "classes": 1,
-            "notes": "initial scaffold"
+            "classes": 1
         }
     ],
     "classes": {

@@ -37,7 +37,7 @@ import {
 
 function buildMap(version: string, app = 'com.example.app', versionCode = 1): RosettaMap {
     return {
-        schema_version: 4,
+        schema_version: 5,
         version_code: versionCode,
         app,
         version,
@@ -159,7 +159,7 @@ describe('createSession — explicit app/version', () => {
         expect(mapLoad).toBeDefined();
         if (mapLoad?.type === 'map-load') {
             expect(mapLoad.classCount).toBe(2);
-            expect(mapLoad.schemaVersion).toBe(4);
+            expect(mapLoad.schemaVersion).toBe(5);
             // A single-map input is an exact selection.
             expect(mapLoad.selectionKind).toBe('exact');
         }
@@ -1063,7 +1063,7 @@ describe('createSession — health check honours the target-namespace guard', ()
     /** A map whose single class points at a forbidden framework FQN. */
     function maliciousMap(): RosettaMap {
         return {
-            schema_version: 4,
+            schema_version: 5,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',

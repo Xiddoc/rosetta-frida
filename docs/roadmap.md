@@ -431,7 +431,7 @@ The theme: turn rosetta-frida from a library into an ecosystem.
   updated map — the runtime degrades gracefully instead of failing. This
   is the long-term robustness story. The discovery evidence (AIDL
   descriptors, anchor strings) lives in the **signatures source**, not the
-  `schema_version: 4` map (which is a pure name mapping); a V2 runtime
+  `schema_version: 5` map (which is a pure name mapping); a V2 runtime
   strategy would consult that signatures-side evidence, not the map.
 - **Scope / dependencies.** A pluggable strategy registry invoked at the
   resolver's failure slot; needs the signatures-side discovery evidence

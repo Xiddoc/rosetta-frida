@@ -16,7 +16,7 @@ import type { RosettaMap, RosettaMapRegistry } from '../../src/types/map.js';
 import { makeCaptured, makeFakeFs, makeIo } from './helpers.js';
 
 const minimalMap = (version = '1.2.3'): RosettaMap => ({
-    schema_version: 4,
+    schema_version: 5,
     version_code: 1,
     app: 'com.example.app',
     version,
@@ -24,7 +24,7 @@ const minimalMap = (version = '1.2.3'): RosettaMap => ({
 });
 
 const richMap = (): RosettaMap => ({
-    schema_version: 4,
+    schema_version: 5,
     version_code: 1,
     app: 'com.example.app',
     version: '2.0.0',
@@ -89,7 +89,7 @@ describe('runExtract', () => {
         const written = fs.files.get('out.json');
         expect(written).toBeDefined();
         // Pretty-printed with 2-space indent.
-        expect(written).toContain('\n  "schema_version": 4,');
+        expect(written).toContain('\n  "schema_version": 5,');
         expect(JSON.parse(written!)).toEqual(map);
         // Output ends with a trailing newline.
         expect(written!.endsWith('\n')).toBe(true);

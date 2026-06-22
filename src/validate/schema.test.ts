@@ -64,7 +64,6 @@ describe('mapSourceSchema', () => {
             tool: 'sigmatcher',
             config: 'sig.yaml',
             classes: 12,
-            notes: 'verified',
         };
         expect(mapSourceSchema.parse(src)).toEqual(src);
     });
@@ -73,6 +72,15 @@ describe('mapSourceSchema', () => {
         // `confidence` was dropped in schema_version 3 (#43); the strict
         // object now rejects it as an unknown key rather than carrying it.
         expect(() => mapSourceSchema.parse({ tool: 'sigmatcher', confidence: 'high' })).toThrow();
+    });
+
+    it('rejects the removed notes field on a source (schema 5, strict)', () => {
+        // The free-form `sources[].notes` string was dropped in
+        // schema_version 5: the published map is a pure real→obfuscated
+        // mapping and human provenance prose has no reader in the artifact
+        // (it belongs in a signatures.yaml comment). The strict object now
+        // rejects it as an unknown key rather than carrying it.
+        expect(() => mapSourceSchema.parse({ tool: 'sigmatcher', notes: 'verified' })).toThrow();
     });
 
     it('rejects a non-string tool', () => {
@@ -353,7 +361,7 @@ describe('SIGNATURES_REV_PATTERN', () => {
 describe('rosettaMapSchema', () => {
     it('accepts a minimal map', () => {
         const m = {
-            schema_version: 4 as const,
+            schema_version: 5 as const,
             app: 'com.example.app',
             version: '1.2.3',
             version_code: 10203,
@@ -364,7 +372,7 @@ describe('rosettaMapSchema', () => {
 
     it('accepts a fully-populated map', () => {
         const m = {
-            schema_version: 4 as const,
+            schema_version: 5 as const,
             app: 'com.example.app',
             version: '3.4.5',
             version_code: 30405,
@@ -376,7 +384,7 @@ describe('rosettaMapSchema', () => {
             },
             sources: [
                 { tool: 'sigmatcher', classes: 12 },
-                { tool: 'hand-authored', notes: 'verified' },
+                { tool: 'hand-authored', config: 'sig.yaml' },
             ],
             classes: {
                 IFoo: {
@@ -399,7 +407,7 @@ describe('rosettaMapSchema', () => {
         });
     });
 
-    it('rejects schema_version other than 4', () => {
+    it('rejects schema_version other than 5', () => {
         expect(() =>
             rosettaMapSchema.parse({
                 schema_version: 1,
@@ -411,10 +419,10 @@ describe('rosettaMapSchema', () => {
         ).toThrow();
     });
 
-    it('rejects a schema_version 3 map (the prior version is no longer accepted)', () => {
+    it('rejects a schema_version 4 map (the prior version is no longer accepted)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 3,
+                schema_version: 4,
                 app: 'com.example.app',
                 version: 'b',
                 version_code: 1,
@@ -426,7 +434,7 @@ describe('rosettaMapSchema', () => {
     it('accepts a map with an ISO captured_at date', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -439,7 +447,7 @@ describe('rosettaMapSchema', () => {
     it('rejects a non-date captured_at (schema 3 tightening, #39)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -454,7 +462,7 @@ describe('rosettaMapSchema', () => {
         (captured_at) => {
             expect(() =>
                 rosettaMapSchema.parse({
-                    schema_version: 4,
+                    schema_version: 5,
                     app: 'com.example.app',
                     version: 'v',
                     version_code: 1,
@@ -470,7 +478,7 @@ describe('rosettaMapSchema', () => {
         (captured_at) => {
             expect(() =>
                 rosettaMapSchema.parse({
-                    schema_version: 4,
+                    schema_version: 5,
                     app: 'com.example.app',
                     version: 'v',
                     version_code: 1,
@@ -484,7 +492,7 @@ describe('rosettaMapSchema', () => {
     it('accepts a signer_sha256 array (match-any, #38)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -502,7 +510,7 @@ describe('rosettaMapSchema', () => {
         );
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -515,7 +523,7 @@ describe('rosettaMapSchema', () => {
     it('rejects an empty signer_sha256 array (minItems:1, #38)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -528,7 +536,7 @@ describe('rosettaMapSchema', () => {
     it('rejects an uppercase signer_sha256 (bare lowercase only, #32)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -541,7 +549,7 @@ describe('rosettaMapSchema', () => {
     it('accepts a generated_from pointer (#36)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -554,7 +562,7 @@ describe('rosettaMapSchema', () => {
     it('rejects a generated_from with a bad rev (#36)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -567,7 +575,7 @@ describe('rosettaMapSchema', () => {
     it('accepts a status enum value and superseded_by (#40)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -581,7 +589,7 @@ describe('rosettaMapSchema', () => {
     it('rejects an unknown status value (#40)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -594,7 +602,7 @@ describe('rosettaMapSchema', () => {
     it('rejects a negative superseded_by (#40)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -608,7 +616,7 @@ describe('rosettaMapSchema', () => {
     it("rejects status: 'superseded' without superseded_by (#40 cross-field)", () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -621,7 +629,7 @@ describe('rosettaMapSchema', () => {
     it('rejects superseded_by on an active (status absent) map (#40 cross-field)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -634,7 +642,7 @@ describe('rosettaMapSchema', () => {
     it('rejects superseded_by on an explicitly active map (#40 cross-field)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -648,7 +656,7 @@ describe('rosettaMapSchema', () => {
     it('rejects superseded_by on a retracted map (#40 cross-field)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -662,7 +670,7 @@ describe('rosettaMapSchema', () => {
     it('accepts a retracted map with no superseded_by (#40 cross-field)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: 1,
@@ -675,7 +683,7 @@ describe('rosettaMapSchema', () => {
     it('rejects a missing version_code', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'a',
                 version: 'b',
                 classes: {},
@@ -686,7 +694,7 @@ describe('rosettaMapSchema', () => {
     it('rejects a non-integer version_code', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'a',
                 version: 'b',
                 version_code: 1.5,
@@ -698,7 +706,7 @@ describe('rosettaMapSchema', () => {
     it('rejects version_code above MAX_VERSION_CODE (2^53)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: MAX_VERSION_CODE + 1,
@@ -710,7 +718,7 @@ describe('rosettaMapSchema', () => {
     it('accepts version_code exactly at MAX_VERSION_CODE (2^53 − 1)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: MAX_VERSION_CODE,
@@ -726,7 +734,7 @@ describe('rosettaMapSchema', () => {
     ])('accepts a 64-bit longVersionCode: %s', (_label, code) => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: code,
@@ -738,7 +746,7 @@ describe('rosettaMapSchema', () => {
     it('rejects a negative version_code', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 app: 'com.example.app',
                 version: 'v',
                 version_code: -1,
@@ -750,7 +758,7 @@ describe('rosettaMapSchema', () => {
     it('rejects missing app', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 version_code: 1,
                 version: '1',
                 classes: {},
@@ -760,13 +768,13 @@ describe('rosettaMapSchema', () => {
 
     it('rejects missing version', () => {
         expect(() =>
-            rosettaMapSchema.parse({ schema_version: 4, version_code: 1, app: 'a', classes: {} }),
+            rosettaMapSchema.parse({ schema_version: 5, version_code: 1, app: 'a', classes: {} }),
         ).toThrow();
     });
 
     it('rejects missing classes', () => {
         expect(() =>
-            rosettaMapSchema.parse({ schema_version: 4, version_code: 1, app: 'a', version: '1' }),
+            rosettaMapSchema.parse({ schema_version: 5, version_code: 1, app: 'a', version: '1' }),
         ).toThrow();
     });
 
@@ -775,7 +783,7 @@ describe('rosettaMapSchema', () => {
         // fails loudly instead of being silently stripped (frida#17 M6).
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 version_code: 1,
                 app: 'com.example.app',
                 version: 'v',
@@ -788,7 +796,7 @@ describe('rosettaMapSchema', () => {
     it('rejects an unknown key on a class entry (strict)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 version_code: 1,
                 app: 'com.example.app',
                 version: 'v',
@@ -800,7 +808,7 @@ describe('rosettaMapSchema', () => {
     it('rejects a whitespace-only version (frida#17 M17)', () => {
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 4,
+                schema_version: 5,
                 version_code: 1,
                 app: 'com.example.app',
                 version: '   ',
@@ -813,7 +821,7 @@ describe('rosettaMapSchema', () => {
         // The check is "contains a non-whitespace character", not "is trimmed".
         // The original string is preserved (not mutated).
         const parsed = rosettaMapSchema.parse({
-            schema_version: 4,
+            schema_version: 5,
             version_code: 1,
             app: 'com.example.app',
             version: ' 1.2.3 ',
@@ -827,7 +835,7 @@ describe('rosettaMapSchema', () => {
         // rejected, not best-effort read. This is the reconciled story.
         expect(() =>
             rosettaMapSchema.parse({
-                schema_version: 5,
+                schema_version: 6,
                 version_code: 1,
                 app: 'com.example.app',
                 version: 'v',
@@ -880,7 +888,7 @@ describe('client_hints', () => {
 describe('validateMap', () => {
     it('returns the validated (normalised) map on success', () => {
         const data = {
-            schema_version: 4 as const,
+            schema_version: 5 as const,
             version_code: 1,
             app: 'com.example.app',
             version: '1.2.3',
@@ -902,7 +910,7 @@ describe('validateMap', () => {
     it('throws MapValidationError with structured issues on failure', () => {
         try {
             validateMap({
-                schema_version: 4,
+                schema_version: 5,
                 version_code: 1,
                 app: 'a',
                 version: 'v',
@@ -934,7 +942,7 @@ describe('validateMap', () => {
     it('summary message uses singular "1 issue" for a single problem', () => {
         try {
             validateMap({
-                schema_version: 4,
+                schema_version: 5,
                 version_code: 1,
                 app: 'com.example.app',
                 version: 'v',
@@ -985,10 +993,10 @@ describe('validateMap', () => {
             const err = e as MapValidationError;
             // Names the found version, the expected version, and the remedy.
             expect(err.message).toMatch(/schema_version 1/);
-            expect(err.message).toMatch(/supports schema_version 4/);
+            expect(err.message).toMatch(/supports schema_version 5/);
             // An older map is re-emitted at the current version (the
             // upgrade-the-library remedy is for NEWER maps only).
-            expect(err.message).toMatch(/re-emit the map at version 4/);
+            expect(err.message).toMatch(/re-emit the map at version 5/);
             // `rosetta migrate` is named only as a PLANNED command.
             expect(err.message).toMatch(/rosetta migrate/);
             expect(err.message).toMatch(/planned/i);
@@ -1001,7 +1009,7 @@ describe('validateMap', () => {
     it('tells a newer schema_version to UPGRADE the library (cannot downgrade)', () => {
         try {
             validateMap({
-                schema_version: 5,
+                schema_version: 6,
                 app: 'com.example.app',
                 version: '1.0.0',
                 version_code: 1,
@@ -1012,8 +1020,8 @@ describe('validateMap', () => {
             expect(e).toBeInstanceOf(MapValidationError);
             const err = e as MapValidationError;
             // Names the found version and the supported version.
-            expect(err.message).toMatch(/schema_version 5/);
-            expect(err.message).toMatch(/supports schema_version 4/);
+            expect(err.message).toMatch(/schema_version 6/);
+            expect(err.message).toMatch(/supports schema_version 5/);
             // A newer map cannot be downgraded — the remedy is to upgrade the
             // install, NOT to re-emit at the current version.
             expect(err.message).toMatch(/upgrade rosetta-frida/i);
@@ -1095,7 +1103,7 @@ describe('zodPathToString', () => {
 /** A valid baseline map; tests mutate a clone to exercise one bound at a time. */
 function baseMap(): Record<string, unknown> {
     return {
-        schema_version: 4,
+        schema_version: 5,
         app: 'com.example.app',
         version: '1.2.3',
         version_code: 10203,
@@ -1212,9 +1220,9 @@ describe('string length caps', () => {
         ).toThrow();
     });
 
-    it('rejects an over-length free-form source note', () => {
+    it('rejects an over-length free-form source config', () => {
         expect(() =>
-            mapSourceSchema.parse({ tool: 't', notes: 'x'.repeat(MAX_FREE_STRING_LEN + 1) }),
+            mapSourceSchema.parse({ tool: 't', config: 'x'.repeat(MAX_FREE_STRING_LEN + 1) }),
         ).toThrow();
     });
 

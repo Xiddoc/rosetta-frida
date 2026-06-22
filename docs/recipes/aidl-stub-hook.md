@@ -9,7 +9,7 @@ transaction codes), so when a class *is* a stub, lean into it *while
 authoring the signatures*. Just don't assume a class is AIDL — most are not.
 
 > **The AIDL evidence lives in the signatures source, not the map.** As of
-> `schema_version: 4` the published map is a pure real→obfuscated mapping:
+> `schema_version: 5` the published map is a pure real→obfuscated mapping:
 > a stub is just `kind: class` and a callback `kind: interface`, with no
 > `aidl_descriptor` / `aidl_txn` / `anchors` fields. You still *hook the
 > stub by its real name* exactly as below — the descriptor and transaction
@@ -271,7 +271,7 @@ needs.
   on the service side; hook the proxy if you want to see outgoing
   calls on the client side. They have different obfuscated names —
   both should be in your map.
-- **Expecting AIDL metadata in the map.** As of `schema_version: 4` the
+- **Expecting AIDL metadata in the map.** As of `schema_version: 5` the
   map carries no `aidl_descriptor` / `aidl_txn` / `aidl_stub` fields — a
   stub is `kind: class`. Anchor on the descriptor while authoring the
   *signatures*; the map only records the resolved names.

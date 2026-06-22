@@ -198,7 +198,6 @@ export const mapSourceSchema: z.ZodType<MapSource> = z
         tool: z.string().min(1).max(MAX_FREE_STRING_LEN),
         config: z.string().max(MAX_FREE_STRING_LEN).optional(),
         classes: z.number().int().optional(),
-        notes: z.string().max(MAX_FREE_STRING_LEN).optional(),
     })
     .strict();
 

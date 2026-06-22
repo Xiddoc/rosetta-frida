@@ -17,8 +17,6 @@ export interface MapSource {
     config?: string;
     /** Optional count of classes attributed to this source. */
     classes?: number;
-    /** Free-form notes (e.g. "verified via runtime trace"). */
-    notes?: string;
 }
 
 /**
@@ -161,10 +159,10 @@ export type ClassMapInput = Record<string, ClassEntryInput>;
  * kept in sync by `scripts/check-schema-version.mjs` (run via
  * `npm run schema-version:fix`; `:check` is wired into `npm run verify`).
  *
- * Declared `const` so its type narrows to the numeric literal (e.g. `4`),
+ * Declared `const` so its type narrows to the numeric literal (e.g. `5`),
  * which is what `RosettaMap.schema_version` and `z.literal` need.
  */
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 /** The top-level mapping file. */
 export interface RosettaMap {
