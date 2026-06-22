@@ -128,7 +128,7 @@ translation for one `(app, version)` pair. The on-disk format:
 Each class is keyed by its **real fully-qualified name** and carries
 the obfuscated short name plus methods, fields, and optional structural
 metadata (parent class via `extends`, `kind`, DEX shard, provenance). The
-map is a *pure* real→obfuscated mapping (`schema_version: 4`): the
+map is a *pure* real→obfuscated mapping (`schema_version: 5`): the
 finding-evidence you anchor on — stable strings, AIDL descriptors,
 transaction codes — lives in the signatures source, not the emitted map.
 

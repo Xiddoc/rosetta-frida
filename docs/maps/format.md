@@ -11,7 +11,7 @@ the field-by-field reference. For the authoring workflow, see
     The canonical, language-neutral map schema is owned by the separate
     [`rosetta-maps`](https://github.com/Xiddoc/rosetta-maps) repo
     (`schema/rosetta-map.schema.json` — the source of truth for the
-    `schema_version: 4` format). rosetta-frida is a **client** of that
+    `schema_version: 5` format). rosetta-frida is a **client** of that
     schema: its Zod validator (`src/validate/schema.ts`) tracks the
     canonical schema. This page documents the same format as consumed by
     the Frida client. `rosetta-xposed` (Kotlin) is the other client.
@@ -79,8 +79,7 @@ tracks which entries came from where:
     },
     {
         "tool": "hand-authored",
-        "classes": 5,
-        "notes": "verified via Frida runtime trace on emulator"
+        "classes": 5
     }
 ]
 ```
@@ -90,7 +89,6 @@ interface MapSource {
     tool: string;
     config?: string;
     classes?: number;
-    notes?: string;
 }
 ```
 

@@ -38,8 +38,7 @@ in [Maps — format](../maps/format.md)) with:
     "sources": [
         {
             "tool": "hand-authored",
-            "classes": 1,
-            "notes": "initial scaffold"
+            "classes": 1
         }
     ],
     "classes": {

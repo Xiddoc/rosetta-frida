@@ -22,7 +22,7 @@ and the class name rotates every release — but the literal
 
 You pin the class on that literal **in the sigmatcher signatures source**
 (a regex-over-smali match for `AES/GCM/NoPadding`). The signatures resolve
-the class, and the emitted `schema_version: 4` map records only the
+the class, and the emitted `schema_version: 5` map records only the
 resolved real→obfuscated names — a pure mapping, no anchor field:
 
 ```json
@@ -43,7 +43,7 @@ is the name *you* type in hooks; `obfuscated: "f0a"` is what the class is
 called in this version. The stable string `"AES/GCM/NoPadding"` is what
 *located* `f0a` during signature authoring — it is finding evidence that
 lives in the signatures YAML, not a field in the map. (Earlier schema
-versions carried an `anchors` array on the entry; `schema_version: 4`
+versions carried an `anchors` array on the entry; `schema_version: 5`
 dropped it, because no resolver ever read it.)
 
 ## Finding the class

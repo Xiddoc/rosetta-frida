@@ -62,7 +62,6 @@ interface MapSource {
     tool: string;
     config?: string;
     classes?: number;
-    notes?: string;
 }
 ```
 
